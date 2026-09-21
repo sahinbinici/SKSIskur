@@ -35,4 +35,10 @@ public class KayitListesi {
 
     @Column(name = "onaylayan_admin", length = 80)
     private String onaylayanAdmin;
+
+    @Column(name = "kesin_liste_yukleme_tarihi")
+    private Instant kesinListeYuklemeTarihi;
+
+    @Column(name = "kesin_liste_yukleyen_admin", length = 80)
+    private String kesinListeYukleyenAdmin;
 }

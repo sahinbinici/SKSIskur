@@ -74,7 +74,7 @@ public class AssignmentService {
         BasvuruDonemi donem = basvuruDonemiService.requireActive();
         if (!kesinListeOnayli(donem)) {
             throw new ApiException(HttpStatus.CONFLICT,
-                    "Birim dağıtımı ancak kesin liste onaylandıktan sonra yapılabilir.");
+                    "Birim dağıtımı ancak İŞKUR kesin listesi yüklenip karşılaştırma onaylandıktan sonra yapılabilir.");
         }
         List<Basvuru> approved = new ArrayList<>(kesinOgrenciler(donem));
         if (approved.isEmpty()) {
@@ -117,6 +117,7 @@ public class AssignmentService {
             basvuru.setAtananBirimAdi(placement.birimAdi());
             basvuru.setAtamaTuru(placement.tur());
             basvuru.setAtamaTarihi(now);
+            basvuru.setAtamaBildirimiOkundu(false);
         }
         basvuruRepository.saveAll(targets);
         return toResponse(kesinOgrenciler(donem), now, donem);
@@ -150,6 +151,7 @@ public class AssignmentService {
         basvuru.setAtananBirimAdi(target.unit().displayName());
         basvuru.setAtamaTuru("MANUEL");
         basvuru.setAtamaTarihi(Instant.now());
+        basvuru.setAtamaBildirimiOkundu(false);
         basvuruRepository.save(basvuru);
         return toResponse(kesinOgrenciler(donem), Instant.now(), donem);
     }

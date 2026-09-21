@@ -14,6 +14,26 @@ export type BasvuruDonemi = {
   ogrenciBitisTarihi: string | null;
   ogrenciGirisiAcik: boolean;
   aylikGelirLimiti: number;
+  iskurListeYuklendi: boolean;
+  iskurListeKayitSayisi: number;
+  iskurListeYuklemeTarihi: string | null;
+};
+
+export type IskurListe = {
+  donemId: number;
+  donemAd: string;
+  yuklendi: boolean;
+  kayitSayisi: number;
+  yuklemeTarihi: string | null;
+  onizleme: { tcKimlikNo: string | null; ad: string; soyad: string; ogrenciNo: string | null }[];
+};
+
+export type IskurListeUpload = {
+  donemId: number;
+  kayitSayisi: number;
+  atlananTekrar: number;
+  yuklemeTarihi: string;
+  yukleyenAdmin: string;
 };
 
 export type DocumentType = "IKAMETGAH" | "SGK_DOKUMU" | "ADLI_SICIL" | "OGRENCI_BELGESI" | "KIMLIK_BELGESI" | "HALKBANK_IBAN" | "HANE_SGK_DOKUMU";
@@ -33,6 +53,7 @@ export type DemoInfo = {
   adminPassword: string | null;
   ogrenciSifre: string | null;
   birimSifre: string | null;
+  ogrenciSayisi: number;
   ogrenciler: { ogrenciNo: string; adSoyad: string; durum: string }[];
   birimler: { kod: string; ad: string }[];
 };
@@ -110,6 +131,8 @@ export type Basvuru = {
   locked: boolean;
   kayitTuru: KayitTuru | null;
   kayitTarihi: string | null;
+  kesinListede: boolean | null;
+  atamaBildirimiOkundu: boolean;
   atananBirimKodu: string | null;
   atananBirimAdi: string | null;
   atamaTuru: string | null;
@@ -200,6 +223,13 @@ export const KAYIT_LABEL: Record<KayitTuru, string> = {
   KESIN: "Kesin kayıt",
   YEDEK: "Yedek"
 };
+
+export function kesinListeDurumLabel(kesinListede: boolean | null, status?: ApplicationStatus) {
+  if (kesinListede === true) return "Kesin listede";
+  if (kesinListede === false) return "Kesin listede değil";
+  if (status === "APPROVED") return "Karşılaştırma bekliyor";
+  return "—";
+}
 
 export type PuantajDurum = "GELDI" | "GELMEDI" | "IZINLI" | "RAPORLU";
 export type TakipStatus = "DRAFT" | "SUBMITTED";
@@ -312,6 +342,8 @@ export type BirimKullanici = {
   olusturmaTarihi: string;
 };
 
+export type KayitListeFiltre = "TUMU" | "KESIN_LISTEDE" | "KESIN_LISTEDE_DEGIL" | "ONAYLI_BASVURU";
+
 export type KayitListesiSatir = {
   basvuruId: number;
   ogrenciNo: string;
@@ -322,19 +354,37 @@ export type KayitListesiSatir = {
   fakulte: string | null;
   program: string | null;
   bolum: string | null;
+  kesinListede: boolean | null;
   kayitTuru: KayitTuru | null;
   atananBirimAdi: string | null;
 };
 
+export type KesinListeUpload = {
+  donemId: number;
+  kayitSayisi: number;
+  atlananTekrar: number;
+  eslesen: number;
+  kesinListedeDegil: number;
+  listedeBasvuruEslesmedi: number;
+  yuklemeTarihi: string;
+  yukleyenAdmin: string;
+};
+
 export type KayitListesi = {
+  kesinListeYuklendi: boolean;
+  kesinListeYuklemeTarihi: string | null;
+  kesinListeYukleyenAdmin: string | null;
+  onayliBasvuru: number;
+  kesinListede: number;
+  kesinListedeDegil: number;
+  kesinKarsilastirmaBekleyen: number;
+  listedeBasvuruEslesmedi: number;
   kesinOnaylandi: boolean;
   onayTarihi: string | null;
   onaylayanAdmin: string | null;
-  bekleyen: number;
-  kesin: number;
-  yedek: number;
   dagitimAcik: boolean;
   ogrenciler: KayitListesiSatir[];
+  listedeEslesmeyenler: { tcKimlikNo: string | null; ad: string; soyad: string; ogrenciNo: string | null }[];
 };
 
 export type AdminTakipSatir = {

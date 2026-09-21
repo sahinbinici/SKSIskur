@@ -43,6 +43,7 @@ public class StudentApplicationService {
     private final SgkOcrService sgkOcrService;
     private final BelgeOcrService belgeOcrService;
     private final SozlesmeService sozlesmeService;
+    private final IskurListeService iskurListeService;
 
     public StudentApplicationService(
             StudentRepository studentRepository,
@@ -54,7 +55,8 @@ public class StudentApplicationService {
             AdminAssignmentService adminAssignmentService,
             SgkOcrService sgkOcrService,
             BelgeOcrService belgeOcrService,
-            SozlesmeService sozlesmeService
+            SozlesmeService sozlesmeService,
+            IskurListeService iskurListeService
     ) {
         this.studentRepository = studentRepository;
         this.basvuruRepository = basvuruRepository;
@@ -66,6 +68,7 @@ public class StudentApplicationService {
         this.sgkOcrService = sgkOcrService;
         this.belgeOcrService = belgeOcrService;
         this.sozlesmeService = sozlesmeService;
+        this.iskurListeService = iskurListeService;
     }
 
     @Transactional(readOnly = true)
@@ -218,8 +221,18 @@ public class StudentApplicationService {
     }
 
     private Student requireStudent(String ogrenciNo) {
-        return studentRepository.findByOgrenciNo(ogrenciNo)
+        Student student = studentRepository.findByOgrenciNo(ogrenciNo)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Öğrenci kaydı bulunamadı."));
+        iskurListeService.assertEligible(student);
+        return student;
+    }
+
+    @Transactional
+    public BasvuruResponse markAtamaBildirimiOkundu(String ogrenciNo) {
+        Basvuru basvuru = basvuruRepository.findByStudentOgrenciNoAndBasvuruDonemiAktifTrue(ogrenciNo)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Başvuru bulunamadı."));
+        basvuru.setAtamaBildirimiOkundu(true);
+        return mapper.toBasvuru(basvuruRepository.save(basvuru));
     }
 
     private void assertEditable(Basvuru basvuru) {

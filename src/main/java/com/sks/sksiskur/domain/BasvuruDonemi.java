@@ -45,6 +45,9 @@ public class BasvuruDonemi {
     @Column(name = "aylik_gelir_limiti", nullable = false, precision = 12, scale = 2)
     private BigDecimal aylikGelirLimiti;
 
+    @Column(name = "iskur_liste_yukleme_tarihi")
+    private Instant iskurListeYuklemeTarihi;
+
     @PrePersist
     void onCreate() {
         olusturmaTarihi = Instant.now();

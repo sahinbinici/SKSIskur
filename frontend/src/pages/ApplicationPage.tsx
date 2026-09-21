@@ -146,14 +146,30 @@ export function ApplicationPage() {
       {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
       {!agreements && !error && <div className="card" style={{ padding: 22 }}>Sözleşmeler yükleniyor…</div>}
-      {basvuru?.status === "APPROVED" && (
+      {basvuru?.atananBirimAdi && !basvuru.atamaBildirimiOkundu && (
         <div className="alert alert-ok">
-          {basvuru.kayitTuru === "KESIN"
-            ? "Kesin kayda alındınız. Başvuru değiştirilemez."
-            : basvuru.kayitTuru === "YEDEK"
-              ? "Yedek listeye alındınız. Başvuru değiştirilemez."
-              : "Evrakınız onaylandı. Kesin kayıt listesi henüz kesinleşmedi."}
+          <strong>Birim atamanız yapıldı.</strong> {basvuru.atananBirimAdi} birimine atandınız.
+          <button
+            type="button"
+            className="btn btn-secondary btn-compact"
+            style={{ marginLeft: 12 }}
+            onClick={() => void api.markAtamaBildirimiOkundu().then(setBasvuru).catch(() => undefined)}
+          >
+            Tamam
+          </button>
         </div>
+      )}
+      {basvuru?.status === "APPROVED" && basvuru.kesinListede === true && !basvuru.atananBirimAdi && (
+        <div className="alert alert-ok">İŞKUR kesin listesine alındınız. Birim ataması bekleniyor. Başvuru değiştirilemez.</div>
+      )}
+      {basvuru?.status === "APPROVED" && basvuru.kesinListede === false && (
+        <div className="alert alert-wait">Evrakınız onaylanmıştı ancak İŞKUR kesin kayıt listesinde yer almıyorsunuz. Başvuru değiştirilemez.</div>
+      )}
+      {basvuru?.status === "APPROVED" && basvuru.kesinListede == null && (
+        <div className="alert alert-ok">Evrakınız onaylandı. Başvurunuz İŞKUR incelemesi için gönderilecek; kesin kayıt listesi henüz açıklanmadı. Başvuru değiştirilemez.</div>
+      )}
+      {basvuru?.atananBirimAdi && basvuru.atamaBildirimiOkundu && (
+        <div className="alert alert-ok">Atandığı birim: {basvuru.atananBirimAdi}</div>
       )}
       {basvuru?.status === "SUBMITTED" && (
         <div className="alert alert-wait">Başvurunuz incelemede. Sonuçlanana kadar değişiklik yapılamaz.</div>

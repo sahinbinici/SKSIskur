@@ -106,7 +106,9 @@ export function LoginPage() {
               <span>Yönetici</span>
               <span>{demo.adminUsername} / {demo.adminPassword}</span>
             </button>
-            <p className="demo-accounts-label">Öğrenciler · şifre {demo.ogrenciSifre}</p>
+            <p className="demo-accounts-label">
+              Öğrenciler ({demo.ogrenciSayisi} adet, 99010001–99010100) · şifre {demo.ogrenciSifre}
+            </p>
             {demo.ogrenciler.map((ogrenci) => (
               <button
                 key={ogrenci.ogrenciNo}
@@ -118,6 +120,11 @@ export function LoginPage() {
                 <span>{ogrenci.durum}</span>
               </button>
             ))}
+            {demo.ogrenciSayisi > demo.ogrenciler.length && (
+              <p className="demo-accounts-hint" style={{ marginBottom: 0 }}>
+                Diğer demo öğrenciler: 99010007 – 9901{String(demo.ogrenciSayisi).padStart(4, "0")} (aynı şifre).
+              </p>
+            )}
             <p className="demo-accounts-label">Birimler · şifre {demo.birimSifre}</p>
             {demo.birimler.map((birim) => (
               <button

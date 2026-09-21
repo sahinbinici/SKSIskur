@@ -39,6 +39,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final SicilUnitCatalog sicilUnitCatalog;
     private final BasvuruDonemiService basvuruDonemiService;
+    private final IskurListeService iskurListeService;
     private final boolean demoEnabled;
 
     public AuthService(
@@ -50,6 +51,7 @@ public class AuthService {
             JwtService jwtService,
             SicilUnitCatalog sicilUnitCatalog,
             BasvuruDonemiService basvuruDonemiService,
+            IskurListeService iskurListeService,
             @Value("${app.demo.enabled:false}") boolean demoEnabled
     ) {
         this.prolizClient = prolizClient;
@@ -60,6 +62,7 @@ public class AuthService {
         this.jwtService = jwtService;
         this.sicilUnitCatalog = sicilUnitCatalog;
         this.basvuruDonemiService = basvuruDonemiService;
+        this.iskurListeService = iskurListeService;
         this.demoEnabled = demoEnabled;
     }
 
@@ -72,6 +75,7 @@ public class AuthService {
             if (!passwordEncoder.matches(request.sifre(), local.getDemoSifreHash())) {
                 throw new ApiException(HttpStatus.UNAUTHORIZED, "Öğrenci numarası veya şifre hatalı");
             }
+            iskurListeService.assertEligible(local);
             String token = jwtService.generateToken(local.getOgrenciNo(), Role.STUDENT.name(), local.getId());
             return new AuthResponse(token, Role.STUDENT, local.getAdSoyad(), local.getOgrenciNo(), null, null);
         }
@@ -86,6 +90,7 @@ public class AuthService {
         Student student = studentRepository.findByOgrenciNo(ogrenciNo).orElseGet(Student::new);
         applyStudent(student, remote);
         student = studentRepository.save(student);
+        iskurListeService.assertEligible(student);
 
         String token = jwtService.generateToken(student.getOgrenciNo(), Role.STUDENT.name(), student.getId());
         return new AuthResponse(token, Role.STUDENT, student.getAdSoyad(), student.getOgrenciNo(), null, null);
@@ -177,7 +182,7 @@ public class AuthService {
 
     public DemoInfoResponse demoInfo() {
         if (!demoEnabled) {
-            return new DemoInfoResponse(false, null, null, null, null, List.of(), List.of());
+            return new DemoInfoResponse(false, null, null, null, null, 0, List.of(), List.of());
         }
         return new DemoInfoResponse(
                 true,
@@ -185,12 +190,13 @@ public class AuthService {
                 "admin123",
                 DemoAccounts.STUDENT_PASSWORD,
                 DemoAccounts.UNIT_PASSWORD,
+                DemoAccounts.STUDENT_COUNT,
                 List.of(
                         new DemoInfoResponse.Ogrenci("99010001", "Ahmet Yılmaz", "Taslak başvuru"),
                         new DemoInfoResponse.Ogrenci("99010002", "Ayşe Demir", "İncelemede"),
                         new DemoInfoResponse.Ogrenci("99010003", "Mehmet Kaya", "Evrak onaylı, kayıt bekliyor"),
                         new DemoInfoResponse.Ogrenci("99010004", "Fatma Şahin", "Kesin kayıt, SKS birimine atanmış"),
-                        new DemoInfoResponse.Ogrenci("99010005", "Ali Çelik", "Yedek liste"),
+                        new DemoInfoResponse.Ogrenci("99010005", "Ali Çelik", "Evrak onaylı, kesin listede değil"),
                         new DemoInfoResponse.Ogrenci("99010006", "Elif Koç", "Reddedildi")
                 ),
                 DemoAccounts.units().stream()

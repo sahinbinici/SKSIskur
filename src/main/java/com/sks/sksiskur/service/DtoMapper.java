@@ -60,6 +60,8 @@ public class DtoMapper {
                 basvuru.getGonderimTarihi(),
                 basvuru.getIncelemeTarihi(),
                 basvuru.isLockedForStudent(),
+                basvuru.getKesinListede(),
+                basvuru.isAtamaBildirimiOkundu(),
                 basvuru.getAtananBirimKodu(),
                 basvuru.getAtananBirimAdi(),
                 basvuru.getAtamaTuru(),

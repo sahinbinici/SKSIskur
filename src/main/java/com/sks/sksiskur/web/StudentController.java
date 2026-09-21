@@ -93,6 +93,11 @@ public class StudentController {
         return fileResponse(download);
     }
 
+    @PostMapping("/basvuru/atama-bildirimi/okundu")
+    public BasvuruResponse markAssignmentNoticeRead(Authentication authentication) {
+        return studentApplicationService.markAtamaBildirimiOkundu(ogrenciNo(authentication));
+    }
+
     private String ogrenciNo(Authentication authentication) {
         return ((AuthPrincipal) authentication.getPrincipal()).getUsername();
     }

@@ -8,6 +8,7 @@ public record DemoInfoResponse(
         String adminPassword,
         String ogrenciSifre,
         String birimSifre,
+        int ogrenciSayisi,
         List<Ogrenci> ogrenciler,
         List<Birim> birimler
 ) {

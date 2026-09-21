@@ -25,6 +25,8 @@ public record BasvuruResponse(
         Instant gonderimTarihi,
         Instant incelemeTarihi,
         boolean locked,
+        Boolean kesinListede,
+        boolean atamaBildirimiOkundu,
         String atananBirimKodu,
         String atananBirimAdi,
         String atamaTuru,

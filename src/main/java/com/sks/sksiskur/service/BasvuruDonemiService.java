@@ -3,6 +3,7 @@ package com.sks.sksiskur.service;
 import com.sks.sksiskur.domain.BasvuruDonemi;
 import com.sks.sksiskur.exception.ApiException;
 import com.sks.sksiskur.repository.BasvuruDonemiRepository;
+import com.sks.sksiskur.repository.IskurBasvuruKaydiRepository;
 import com.sks.sksiskur.web.dto.BasvuruDonemiCreateRequest;
 import com.sks.sksiskur.web.dto.BasvuruDonemiResponse;
 import org.springframework.http.HttpStatus;
@@ -18,9 +19,14 @@ import java.util.List;
 public class BasvuruDonemiService {
 
     private final BasvuruDonemiRepository repository;
+    private final IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository;
 
-    public BasvuruDonemiService(BasvuruDonemiRepository repository) {
+    public BasvuruDonemiService(
+            BasvuruDonemiRepository repository,
+            IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository
+    ) {
         this.repository = repository;
+        this.iskurBasvuruKaydiRepository = iskurBasvuruKaydiRepository;
     }
 
     @Transactional(readOnly = true)
@@ -84,10 +90,14 @@ public class BasvuruDonemiService {
     }
 
     public BasvuruDonemiResponse toResponse(BasvuruDonemi donem) {
+        long iskurKayitSayisi = iskurBasvuruKaydiRepository.countByBasvuruDonemiId(donem.getId());
         return new BasvuruDonemiResponse(
                 donem.getId(), donem.getAd(), donem.isAktif(), donem.getOlusturmaTarihi(), donem.getKapanisTarihi(),
                 donem.getOgrenciBaslangicTarihi(), donem.getOgrenciBitisTarihi(), isStudentAccessOpen(donem),
-                donem.getAylikGelirLimiti()
+                donem.getAylikGelirLimiti(),
+                iskurKayitSayisi > 0,
+                iskurKayitSayisi,
+                donem.getIskurListeYuklemeTarihi()
         );
     }
 

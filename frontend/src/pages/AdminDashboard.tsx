@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, ApiError } from "../api";
+import { api, ApiError, downloadAuthenticatedFile } from "../api";
 import { Shell, StatusBadge, formatDate } from "../components/ui";
 import { ApplicationListSheet } from "./AdminListReports";
-import { KAYIT_LABEL, STATUS_LABEL, type AdminOzet, type ApplicationStatus, type Basvuru, type BasvuruDonemi } from "../types";
+import { STATUS_LABEL, kesinListeDurumLabel, type AdminOzet, type ApplicationStatus, type Basvuru, type BasvuruDonemi } from "../types";
 
 export function AdminDashboard() {
   const [ozet, setOzet] = useState<AdminOzet | null>(null);
@@ -109,7 +109,17 @@ export function AdminDashboard() {
           }}
         />
         <button className="btn btn-primary" onClick={() => load(status, query)}>Ara</button>
-        <button className="btn btn-gold" onClick={() => window.print()} disabled={items.length === 0}>
+        <button
+          className="btn btn-gold"
+          disabled={items.length === 0}
+          onClick={() => downloadAuthenticatedFile(
+            api.adminBasvurularExcelUrl(status, query, periodId, onlyMine),
+            "basvurular.xlsx"
+          ).catch((err) => setError(err instanceof ApiError ? err.message : "Excel indirilemedi."))}
+        >
+          Excel indir
+        </button>
+        <button className="btn btn-secondary" onClick={() => window.print()} disabled={items.length === 0}>
           Yazdır / PDF
         </button>
       </div>
@@ -122,7 +132,7 @@ export function AdminDashboard() {
               <th>Atanan birim</th>
               <th>İnceleme sorumlusu</th>
               <th>Durum</th>
-              <th>Kayıt</th>
+              <th>Kesin liste</th>
               <th>Gönderim</th>
               <th>Belgeler</th>
               <th><span className="sr-only">İşlem</span></th>
@@ -139,7 +149,7 @@ export function AdminDashboard() {
                 <td>{item.atananBirimAdi || "—"}</td>
                 <td>{item.atananAdmin || "Atama bekliyor"}</td>
                 <td><StatusBadge status={item.status} /></td>
-                <td>{item.kayitTuru ? KAYIT_LABEL[item.kayitTuru] : item.status === "APPROVED" ? "Bekliyor" : "—"}</td>
+                <td>{kesinListeDurumLabel(item.kesinListede, item.status)}</td>
                 <td>{formatDate(item.gonderimTarihi)}</td>
                 <td>{item.belgeler.length}/5</td>
                 <td><button className="btn btn-secondary btn-compact" onClick={() => navigate(`/admin/basvuru/${item.id}`)}>İncele</button></td>

@@ -1,4 +1,4 @@
-import type { AdminOzet, AdminTakipOzet, AdminUser, AgreementDocument, AgreementType, ApplicationStatus, AuthResponse, Basvuru, BasvuruDagitim, BasvuruDonemi, BirimAylikRapor, BirimKullanici, BirimOgrenci, DagitimBirimi, DagitimSonuc, DemoInfo, DocumentType, IzinRaporOgrenci, KayitListesi, KayitTuru, PuantajDurum, StudentAgreement, StudentProfile, TakipDonem, WorkUnit } from "./types";
+import type { AdminOzet, AdminTakipOzet, AdminUser, AgreementDocument, AgreementType, ApplicationStatus, AuthResponse, Basvuru, BasvuruDagitim, BasvuruDonemi, BirimAylikRapor, BirimKullanici, BirimOgrenci, DagitimBirimi, DagitimSonuc, DemoInfo, DocumentType, IskurListe, IskurListeUpload, IzinRaporOgrenci, KayitListeFiltre, KayitListesi, KesinListeUpload, PuantajDurum, StudentAgreement, StudentProfile, TakipDonem, WorkUnit } from "./types";
 
 const TOKEN_KEY = "sksiskur.token";
 
@@ -106,7 +106,23 @@ export const api = {
     method: "POST", body: JSON.stringify({ ad, ogrenciBaslangicTarihi, ogrenciBitisTarihi, aylikGelirLimiti })
   }),
   closeBasvuruDonemi: (id: number) => request<BasvuruDonemi>(`/api/admin/basvuru-donemleri/${id}/kapat`, { method: "POST" }),
+  iskurListesiExcelUrl: (donemId: number) => `/api/admin/basvuru-donemleri/${donemId}/iskur-listesi.xlsx`,
+  adminBasvurularExcelUrl: (status?: ApplicationStatus | "", q?: string, donemId?: number, banaAtanan = false) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (q) params.set("q", q);
+    if (donemId) params.set("donemId", String(donemId));
+    if (banaAtanan) params.set("banaAtanan", "true");
+    const query = params.toString();
+    return `/api/admin/basvurular.xlsx${query ? `?${query}` : ""}`;
+  },
   updateBasvuruDonemiGelirLimiti: (id: number, limit: number) => request<BasvuruDonemi>(`/api/admin/basvuru-donemleri/${id}/gelir-limiti?limit=${encodeURIComponent(String(limit))}`, { method: "PUT" }),
+  iskurListesi: (donemId: number) => request<IskurListe>(`/api/admin/basvuru-donemleri/${donemId}/iskur-listesi`),
+  uploadIskurListesi: async (donemId: number, file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return request<IskurListeUpload>(`/api/admin/basvuru-donemleri/${donemId}/iskur-listesi`, { method: "POST", body });
+  },
   adminAgreements: () => request<AgreementDocument[]>("/api/admin/sozlesmeler"),
   updateAdminAgreement: (type: AgreementType, payload: { baslik: string; icerik: string }) =>
     request<AgreementDocument>(`/api/admin/sozlesmeler/${type}`, { method: "PUT", body: JSON.stringify(payload) }),
@@ -181,12 +197,16 @@ export const api = {
     }),
   deleteBirimKullanici: (id: number) =>
     request<void>(`/api/admin/birim-kullanicilar/${id}`, { method: "DELETE" }),
-  kayitListesi: () => request<KayitListesi>("/api/admin/kayit-listesi"),
-  setKayitTuru: (id: number, tur: KayitTuru) =>
-    request<Basvuru>(`/api/admin/basvurular/${id}/kayit`, {
-      method: "PUT",
-      body: JSON.stringify({ tur })
-    }),
+  kayitListesi: (filtre?: KayitListeFiltre) =>
+    request<KayitListesi>(`/api/admin/kayit-listesi${filtre ? `?filtre=${filtre}` : ""}`),
+  kayitListesiExcelUrl: () => "/api/admin/kayit-listesi.xlsx",
+  uploadKesinListe: async (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return request<KesinListeUpload>("/api/admin/kayit-listesi/kesin-liste", { method: "POST", body });
+  },
+  markAtamaBildirimiOkundu: () =>
+    request<Basvuru>("/api/student/basvuru/atama-bildirimi/okundu", { method: "POST" }),
   onaylaKesinListe: () => request<KayitListesi>("/api/admin/kayit-listesi/onayla", { method: "POST" }),
   geriAlKesinListe: () => request<KayitListesi>("/api/admin/kayit-listesi/geri-al", { method: "POST" }),
   adminTakip: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
@@ -213,6 +233,24 @@ export const api = {
     if (donemId) params.set("donemId", String(donemId));
     return `/api/admin/takip/iliskisi-kesilenler.csv?${params}`;
   },
+  adminKesilenOgrencilerExcelUrl: (birimKodu?: string, donemId?: number) => {
+    const params = new URLSearchParams();
+    if (birimKodu) params.set("birimKodu", birimKodu);
+    if (donemId) params.set("donemId", String(donemId));
+    return `/api/admin/takip/iliskisi-kesilenler.xlsx?${params}`;
+  },
+  adminTakipExcelUrl: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
+    const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
+    if (birimKodu) params.set("birimKodu", birimKodu);
+    if (donemId) params.set("donemId", String(donemId));
+    return `/api/admin/takip.xlsx?${params}`;
+  },
+  adminTakipRaporExcelUrl: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
+    const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
+    if (birimKodu) params.set("birimKodu", birimKodu);
+    if (donemId) params.set("donemId", String(donemId));
+    return `/api/admin/takip/rapor.xlsx?${params}`;
+  },
   adminIzinRaporlular: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
     const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
     if (birimKodu) params.set("birimKodu", birimKodu);
@@ -224,6 +262,12 @@ export const api = {
     if (birimKodu) params.set("birimKodu", birimKodu);
     if (donemId) params.set("donemId", String(donemId));
     return `/api/admin/takip/izin-rapor.csv?${params}`;
+  },
+  adminIzinRaporExcelUrl: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
+    const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
+    if (birimKodu) params.set("birimKodu", birimKodu);
+    if (donemId) params.set("donemId", String(donemId));
+    return `/api/admin/takip/izin-rapor.xlsx?${params}`;
   },
   adminIzinRaporBelgeleriZipUrl: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
     const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });

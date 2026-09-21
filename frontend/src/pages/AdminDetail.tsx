@@ -88,7 +88,7 @@ export function AdminDetail() {
             <Field label="Doğum" value={[student?.dogumTarihi, student?.dogumYeri].filter(Boolean).join(" / ")} />
             <Field label="Fakülte" value={student?.fakulte} />
             <Field label="Atanan birim" value={basvuru?.atananBirimAdi} />
-            <Field label="Kayıt türü" value={basvuru?.kayitTuru === "KESIN" ? "Kesin kayıt" : basvuru?.kayitTuru === "YEDEK" ? "Yedek" : "Henüz işaretlenmedi"} />
+            <Field label="Kesin liste" value={basvuru ? (basvuru.kesinListede === true ? "Kesin listede" : basvuru.kesinListede === false ? "Kesin listede değil" : basvuru.status === "APPROVED" ? "Karşılaştırma bekliyor" : "—") : undefined} />
             <Field label="Program" value={student?.program} />
             <Field label="Sınıf" value={student?.sinif} />
             <Field label="İletişim" value={[student?.eposta, student?.gsm].filter(Boolean).join(" · ")} />

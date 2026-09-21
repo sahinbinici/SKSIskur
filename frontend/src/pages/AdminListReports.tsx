@@ -1,4 +1,4 @@
-import { KAYIT_LABEL, STATUS_LABEL, type Basvuru, type KayitListesi, type KayitListesiSatir } from "../types";
+import { STATUS_LABEL, kesinListeDurumLabel, type Basvuru, type KayitListesi, type KayitListesiSatir } from "../types";
 
 function upper(value?: string | null) {
   return (value || "").toLocaleUpperCase("tr-TR");
@@ -63,7 +63,7 @@ export function ApplicationListSheet({
             <th>SOYADI</th>
             <th>FAKÜLTE / BÖLÜM</th>
             <th>DURUM</th>
-            <th>KAYIT</th>
+            <th>KESİN LİSTE</th>
             <th>BELGE</th>
             <th>GÖNDERİM</th>
           </tr>
@@ -78,7 +78,7 @@ export function ApplicationListSheet({
               <td className="name">{upper(item.student.soyad)}</td>
               <td className="name">{upper(item.student.fakulte || item.student.program || item.student.bolum)}</td>
               <td>{STATUS_LABEL[item.status]}</td>
-              <td>{item.kayitTuru ? KAYIT_LABEL[item.kayitTuru] : item.status === "APPROVED" ? "Bekliyor" : "—"}</td>
+              <td>{kesinListeDurumLabel(item.kesinListede, item.status)}</td>
               <td>{item.belgeler.length}/5</td>
               <td>{dateLabel(item.gonderimTarihi) || "—"}</td>
             </tr>
@@ -132,11 +132,11 @@ function KayitTable({ rows, emptyText }: { rows: KayitListesiSatir[]; emptyText:
 }
 
 export function KayitListSheets({ data }: { data: KayitListesi }) {
-  const kesin = data.ogrenciler.filter((row) => row.kayitTuru === "KESIN");
-  const yedek = data.ogrenciler.filter((row) => row.kayitTuru === "YEDEK");
+  const kesin = data.ogrenciler.filter((row) => row.kesinListede === true);
+  const kesinDegil = data.ogrenciler.filter((row) => row.kesinListede === false);
   const durum = data.kesinOnaylandi
     ? `Onaylandı${data.onaylayanAdmin ? ` (${data.onaylayanAdmin})` : ""}${data.onayTarihi ? ` · ${dateLabel(data.onayTarihi)}` : ""}`
-    : "TASLAK — kesin liste henüz onaylanmadı";
+    : "TASLAK — karşılaştırma henüz onaylanmadı";
 
   return (
     <>
@@ -144,20 +144,20 @@ export function KayitListSheets({ data }: { data: KayitListesi }) {
         <header className="report-head">
           <h1>T.C. GAZİANTEP ÜNİVERSİTESİ</h1>
           <h2>SAĞLIK KÜLTÜR VE SPOR DAİRE BAŞKANLIĞI</h2>
-          <p>İŞKUR GENÇLİK PROGRAMI KESİN KAYIT LİSTESİ</p>
+          <p>İŞKUR GENÇLİK PROGRAMI KESİN LİSTE</p>
           <p className="report-note">{durum} · {kesin.length} öğrenci · {todayLabel()}</p>
         </header>
-        <KayitTable rows={kesin} emptyText="Kesin kayda alınan öğrenci yok." />
+        <KayitTable rows={kesin} emptyText="Kesin listede öğrenci yok." />
         <ListSignature onaylayan={data.onaylayanAdmin} />
       </article>
       <article className="report-sheet print-only report-break">
         <header className="report-head">
           <h1>T.C. GAZİANTEP ÜNİVERSİTESİ</h1>
           <h2>SAĞLIK KÜLTÜR VE SPOR DAİRE BAŞKANLIĞI</h2>
-          <p>İŞKUR GENÇLİK PROGRAMI YEDEK LİSTE</p>
-          <p className="report-note">{durum} · {yedek.length} öğrenci · {todayLabel()}</p>
+          <p>İŞKUR GENÇLİK PROGRAMI — KESİN LİSTEDE OLMAYAN ONAYLI BAŞVURULAR</p>
+          <p className="report-note">{durum} · {kesinDegil.length} öğrenci · {todayLabel()}</p>
         </header>
-        <KayitTable rows={yedek} emptyText="Yedek listede öğrenci yok." />
+        <KayitTable rows={kesinDegil} emptyText="Kesin listede olmayan onaylı başvuru yok." />
         <ListSignature onaylayan={data.onaylayanAdmin} />
       </article>
     </>

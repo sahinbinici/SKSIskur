@@ -13,6 +13,9 @@ public record BasvuruDonemiResponse(
         LocalDate ogrenciBaslangicTarihi,
         LocalDate ogrenciBitisTarihi,
         boolean ogrenciGirisiAcik,
-        BigDecimal aylikGelirLimiti
+        BigDecimal aylikGelirLimiti,
+        boolean iskurListeYuklendi,
+        long iskurListeKayitSayisi,
+        Instant iskurListeYuklemeTarihi
 ) {
 }

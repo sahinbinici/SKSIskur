@@ -19,9 +19,28 @@ export function StudentHome() {
       .catch((err) => setError(err instanceof ApiError ? err.message : "Aktif başvuru dönemi bulunmuyor."));
   }, []);
 
+  async function dismissAssignmentNotice() {
+    if (!basvuru) return;
+    try {
+      setBasvuru(await api.markAtamaBildirimiOkundu());
+    } catch {
+      // ignore
+    }
+  }
+
+  const yeniAtama = basvuru?.atananBirimAdi && !basvuru.atamaBildirimiOkundu;
+
   return (
     <Shell home="/panel">
       {error && <div className="alert alert-error">{error}</div>}
+      {yeniAtama && (
+        <div className="alert alert-ok">
+          <strong>Birim atamanız yapıldı.</strong> {basvuru.atananBirimAdi} birimine atandınız.
+          <button className="btn btn-secondary btn-compact" style={{ marginLeft: 12 }} onClick={dismissAssignmentNotice}>
+            Tamam
+          </button>
+        </div>
+      )}
       <div className="grid-2">
         <section className="card identity">
           {profile?.fotoUrl && !photoFailed ? (
@@ -51,23 +70,23 @@ export function StudentHome() {
           <h3 className="section">Başvuru durumu</h3>
           {basvuru && <StatusBadge status={basvuru.status} />}
           {!basvuru && !error && <div className="alert alert-wait">Aktif başvuru dönemi bekleniyor.</div>}
-          {basvuru?.status === "APPROVED" && !basvuru.kayitTuru && (
-            <div className="alert alert-wait">Evrakınız onaylandı. Kesin kayıt listesi henüz oluşturulmadı.</div>
+          {basvuru?.status === "APPROVED" && basvuru.kesinListede == null && (
+            <div className="alert alert-wait">Evrakınız onaylandı. Başvurunuz İŞKUR incelemesi için gönderilecek; kesin kayıt listesi henüz açıklanmadı.</div>
+          )}
+          {basvuru?.status === "APPROVED" && basvuru.kesinListede === false && (
+            <div className="alert alert-wait">Evrakınız onaylanmıştı ancak İŞKUR kesin kayıt listesinde yer almıyorsunuz.</div>
           )}
           {basvuru?.status === "RETURNED" && (
             <div className="alert alert-wait">Başvurunuz eksik evrak nedeniyle iade edildi. Yönetici notunu inceleyip eksiklerinizi tamamlayarak yeniden gönderin.</div>
           )}
-          {basvuru?.kayitTuru === "YEDEK" && (
-            <div className="alert alert-wait">Yedek listeye alındınız. Asil kontenjan açılırsa değerlendirilirsiniz.</div>
-          )}
           {basvuru?.kayitTuru === "KESIN" && !basvuru.atananBirimAdi && (
-            <div className="alert alert-ok">Kesin kayda alındınız. Birim ataması bekleniyor.</div>
+            <div className="alert alert-ok">İŞKUR kesin listesine alındınız. Birim ataması bekleniyor.</div>
           )}
           <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>
             İkametgah, SGK dökümü, adli sicil kaydı, öğrenci belgesi ve kimlik belgesini yükleyip başvurunuzu gönderebilirsiniz.
             Başvuru incelemedeyken kilitlidir; iade edilirse evraklarınızı tamamlayıp yeniden gönderebilirsiniz.
           </p>
-          {basvuru?.atananBirimAdi && (
+          {basvuru?.atananBirimAdi && !yeniAtama && (
             <div className="alert alert-ok">Atandığı birim: {basvuru.atananBirimAdi}</div>
           )}
           {basvuru?.adminNotu && (

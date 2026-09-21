@@ -100,8 +100,14 @@ public class Basvuru {
     @Column(name = "kayit_turu", length = 20)
     private KayitTuru kayitTuru;
 
+    @Column(name = "kesin_listede")
+    private Boolean kesinListede;
+
     @Column(name = "kayit_tarihi")
     private Instant kayitTarihi;
+
+    @Column(name = "atama_bildirimi_okundu", nullable = false)
+    private boolean atamaBildirimiOkundu = false;
 
     @OneToMany(mappedBy = "basvuru", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<BasvuruBelgesi> belgeler = new ArrayList<>();

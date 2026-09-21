@@ -89,16 +89,25 @@ export function AdminTakipPage() {
 
   function downloadTerminatedStudents() {
     void downloadAuthenticatedFile(
-      api.adminKesilenOgrencilerUrl(birimKodu || undefined, periodId),
-      "iliskisi-kesilen-ogrenciler.csv"
+      api.adminKesilenOgrencilerExcelUrl(birimKodu || undefined, periodId),
+      "iliskisi-kesilen-ogrenciler.xlsx"
     ).catch((err) => setError(err instanceof ApiError ? err.message : "Liste indirilemedi."));
   }
 
   function downloadLeaveReportList() {
     void downloadAuthenticatedFile(
-      api.adminIzinRaporCsvUrl(yil, ay, birimKodu || undefined, periodId),
-      "izinli-raporlu-ogrenciler.csv"
+      api.adminIzinRaporExcelUrl(yil, ay, birimKodu || undefined, periodId),
+      "izinli-raporlu-ogrenciler.xlsx"
     ).catch((err) => setError(err instanceof ApiError ? err.message : "Liste indirilemedi."));
+  }
+
+  function downloadCurrentReport() {
+    const url = kind === "ozet"
+      ? api.adminTakipExcelUrl(yil, ay, birimKodu || undefined, periodId)
+      : api.adminTakipRaporExcelUrl(yil, ay, birimKodu || undefined, periodId);
+    const filename = kind === "ozet" ? "takip-ozeti.xlsx" : "ek6-puantaj-raporu.xlsx";
+    void downloadAuthenticatedFile(url, filename)
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Excel indirilemedi."));
   }
 
   function downloadLeaveReportDocuments() {
@@ -142,11 +151,14 @@ export function AdminTakipPage() {
             <button type="button" className={kind === "ekuant" ? "active" : ""} onClick={() => setKind("ekuant")}>EK-6</button>
             <button type="button" className={kind === "puantaj" ? "active" : ""} onClick={() => setKind("puantaj")}>Puantaj</button>
           </div>
+          <button className="btn btn-gold" disabled={!selectedPeriod} onClick={downloadCurrentReport}>
+            Excel indir
+          </button>
           {kind !== "ozet" && (
-            <button className="btn btn-gold" onClick={() => window.print()}>Yazdır / PDF</button>
+            <button className="btn btn-secondary" onClick={() => window.print()}>Yazdır / PDF</button>
           )}
           <button className="btn btn-secondary" disabled={!selectedPeriod} onClick={downloadTerminatedStudents}>
-            İlişkisi kesilenleri indir
+            İlişkisi kesilenler (Excel)
           </button>
         </div>
       </div>
@@ -202,7 +214,7 @@ export function AdminTakipPage() {
             <p style={{ color: "var(--muted)", margin: "6px 0 0" }}>Seçili ay, dönem ve birim için izin/rapor günleri ile ekli belgeler.</p>
           </div>
           <div className="row">
-            <button className="btn btn-secondary" onClick={downloadLeaveReportList}>Listeyi indir</button>
+            <button className="btn btn-secondary" onClick={downloadLeaveReportList}>Excel indir</button>
             <button className="btn btn-gold" onClick={downloadLeaveReportDocuments}>Tüm belge ve dilekçeleri indir</button>
           </div>
         </div>

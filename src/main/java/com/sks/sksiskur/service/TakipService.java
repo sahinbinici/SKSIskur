@@ -161,18 +161,38 @@ public class TakipService {
         return new AdminTakipOzetResponse(yil, ay, blankToNull(birimKodu), reportBirimAdi(birimKodu, period), rows);
     }
 
+    public record TerminatedStudentRow(
+            String ogrenciNo,
+            String adSoyad,
+            String birimAdi,
+            java.time.LocalDate iliskiBitisTarihi
+    ) {
+    }
+
+    @Transactional(readOnly = true)
+    public List<TerminatedStudentRow> terminatedStudents(Long basvuruDonemiId, String birimKodu) {
+        BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
+        String normalizedUnit = blankToNull(birimKodu);
+        return basvuruRepository.findByBasvuruDonemiIdAndIliskiBitisTarihiIsNotNullOrderByIliskiBitisTarihiAsc(period.getId()).stream()
+                .filter(basvuru -> normalizedUnit == null || normalizedUnit.equals(basvuru.getAtananBirimKodu()))
+                .map(basvuru -> new TerminatedStudentRow(
+                        basvuru.getStudent().getOgrenciNo(),
+                        basvuru.getStudent().getAdSoyad(),
+                        basvuru.getAtananBirimAdi(),
+                        basvuru.getIliskiBitisTarihi()
+                ))
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public byte[] terminatedStudentsCsv(Long basvuruDonemiId, String birimKodu) {
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
-        String normalizedUnit = blankToNull(birimKodu);
         StringBuilder csv = new StringBuilder("\uFEFFÖğrenci No;Ad Soyad;Birim;İlişki Kesilme Tarihi;Başvuru Dönemi\r\n");
-        basvuruRepository.findByBasvuruDonemiIdAndIliskiBitisTarihiIsNotNullOrderByIliskiBitisTarihiAsc(period.getId()).stream()
-                .filter(basvuru -> normalizedUnit == null || normalizedUnit.equals(basvuru.getAtananBirimKodu()))
-                .forEach(basvuru -> csv.append(csvValue(basvuru.getStudent().getOgrenciNo())).append(';')
-                        .append(csvValue(basvuru.getStudent().getAdSoyad())).append(';')
-                        .append(csvValue(basvuru.getAtananBirimAdi())).append(';')
-                        .append(basvuru.getIliskiBitisTarihi()).append(';')
-                        .append(csvValue(period.getAd())).append("\r\n"));
+        terminatedStudents(basvuruDonemiId, birimKodu).forEach(row -> csv.append(csvValue(row.ogrenciNo())).append(';')
+                .append(csvValue(row.adSoyad())).append(';')
+                .append(csvValue(row.birimAdi())).append(';')
+                .append(row.iliskiBitisTarihi()).append(';')
+                .append(csvValue(period.getAd())).append("\r\n"));
         return csv.toString().getBytes(StandardCharsets.UTF_8);
     }
 

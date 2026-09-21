@@ -13,6 +13,9 @@ import com.sks.sksiskur.service.DocumentDownload;
 import com.sks.sksiskur.service.TakipService;
 import com.sks.sksiskur.service.SozlesmeService;
 import com.sks.sksiskur.service.DagitimBirimiService;
+import com.sks.sksiskur.service.AdminExportService;
+import com.sks.sksiskur.service.IskurListeService;
+import com.sks.sksiskur.service.KesinListeService;
 import com.sks.sksiskur.web.dto.AdminOzetResponse;
 import com.sks.sksiskur.web.dto.AdminUserCreateRequest;
 import com.sks.sksiskur.web.dto.AdminUserResponse;
@@ -29,12 +32,15 @@ import com.sks.sksiskur.web.dto.BirimAylikRaporResponse;
 import com.sks.sksiskur.web.dto.DagitimRequest;
 import com.sks.sksiskur.web.dto.DagitimSonucResponse;
 import com.sks.sksiskur.web.dto.KayitListesiResponse;
-import com.sks.sksiskur.web.dto.KayitTurRequest;
+import com.sks.sksiskur.web.dto.KayitListeFiltre;
+import com.sks.sksiskur.web.dto.KesinListeUploadResponse;
 import com.sks.sksiskur.web.dto.IzinRaporOgrenciResponse;
 import com.sks.sksiskur.web.dto.IadeRequest;
 import com.sks.sksiskur.web.dto.ReviewRequest;
 import com.sks.sksiskur.web.dto.TakipDonemResponse;
 import com.sks.sksiskur.web.dto.TakipKapaliGunKaydetRequest;
+import com.sks.sksiskur.web.dto.IskurListeResponse;
+import com.sks.sksiskur.web.dto.IskurListeUploadResponse;
 import com.sks.sksiskur.web.dto.WorkUnitResponse;
 import com.sks.sksiskur.web.dto.SozlesmeKaydetRequest;
 import com.sks.sksiskur.web.dto.SozlesmeResponse;
@@ -59,6 +65,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -78,6 +85,9 @@ public class AdminController {
     private final AdminAssignmentService adminAssignmentService;
     private final SozlesmeService sozlesmeService;
     private final DagitimBirimiService dagitimBirimiService;
+    private final IskurListeService iskurListeService;
+    private final AdminExportService adminExportService;
+    private final KesinListeService kesinListeService;
 
     public AdminController(
             AdminApplicationService adminApplicationService,
@@ -88,7 +98,10 @@ public class AdminController {
             AdminUserService adminUserService,
             AdminAssignmentService adminAssignmentService,
             SozlesmeService sozlesmeService,
-            DagitimBirimiService dagitimBirimiService
+            DagitimBirimiService dagitimBirimiService,
+            IskurListeService iskurListeService,
+            AdminExportService adminExportService,
+            KesinListeService kesinListeService
     ) {
         this.adminApplicationService = adminApplicationService;
         this.assignmentService = assignmentService;
@@ -99,6 +112,9 @@ public class AdminController {
         this.adminAssignmentService = adminAssignmentService;
         this.sozlesmeService = sozlesmeService;
         this.dagitimBirimiService = dagitimBirimiService;
+        this.iskurListeService = iskurListeService;
+        this.adminExportService = adminExportService;
+        this.kesinListeService = kesinListeService;
     }
 
     @GetMapping("/ozet")
@@ -126,6 +142,26 @@ public class AdminController {
         return basvuruDonemiService.updateIncomeLimit(id, limit);
     }
 
+    @GetMapping("/basvuru-donemleri/{id}/iskur-listesi")
+    public IskurListeResponse iskurListesi(@PathVariable Long id) {
+        return iskurListeService.get(id);
+    }
+
+    @PostMapping(value = "/basvuru-donemleri/{id}/iskur-listesi", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public IskurListeUploadResponse uploadIskurListesi(
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file,
+            Authentication authentication
+    ) {
+        AuthPrincipal principal = (AuthPrincipal) authentication.getPrincipal();
+        return iskurListeService.upload(id, file, principal.getUsername());
+    }
+
+    @GetMapping("/basvuru-donemleri/{id}/iskur-listesi.xlsx")
+    public ResponseEntity<byte[]> iskurListesiExcel(@PathVariable Long id) {
+        return excelAttachment(adminExportService.iskurListesiExcel(id), "iskur-basvuru-listesi.xlsx");
+    }
+
     @GetMapping("/sozlesmeler")
     public List<SozlesmeResponse> sozlesmeler() {
         return sozlesmeService.list();
@@ -145,6 +181,18 @@ public class AdminController {
             Authentication authentication
     ) {
         return adminApplicationService.list(donemId, status, q, banaAtanan ? username(authentication) : null);
+    }
+
+    @GetMapping("/basvurular.xlsx")
+    public ResponseEntity<byte[]> basvurularExcel(
+            @RequestParam(required = false) ApplicationStatus status,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Long donemId,
+            @RequestParam(defaultValue = "false") boolean banaAtanan,
+            Authentication authentication
+    ) {
+        return excelAttachment(adminExportService.basvurularExcel(
+                donemId, status, q, banaAtanan ? username(authentication) : null), "basvurular.xlsx");
     }
 
     @GetMapping("/yoneticiler")
@@ -204,13 +252,25 @@ public class AdminController {
     }
 
     @GetMapping("/kayit-listesi")
-    public KayitListesiResponse kayitListesi() {
-        return adminApplicationService.kayitListesi();
+    public KayitListesiResponse kayitListesi(@RequestParam(required = false) KayitListeFiltre filtre) {
+        return adminApplicationService.kayitListesi(filtre);
     }
 
-    @PutMapping("/basvurular/{id}/kayit")
-    public BasvuruResponse setKayit(@PathVariable Long id, @Valid @RequestBody KayitTurRequest request) {
-        return adminApplicationService.setKayitTuru(id, request);
+    @GetMapping("/kayit-listesi.xlsx")
+    public ResponseEntity<byte[]> kayitListesiExcel() {
+        return excelAttachment(adminExportService.kayitListesiExcel(), "kayit-listesi.xlsx");
+    }
+
+    @PostMapping(value = "/kayit-listesi/kesin-liste", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public KesinListeUploadResponse uploadKesinListe(
+            @RequestParam("file") MultipartFile file,
+            Authentication authentication
+    ) {
+        return kesinListeService.upload(
+                basvuruDonemiService.requireActive().getId(),
+                file,
+                username(authentication)
+        );
     }
 
     @PostMapping("/kayit-listesi/onayla")
@@ -326,6 +386,32 @@ public class AdminController {
         return takipService.adminMonthlyReport(donemId, birimKodu, month.getYear(), month.getMonthValue());
     }
 
+    @GetMapping("/takip.xlsx")
+    public ResponseEntity<byte[]> takipOzetExcel(
+            @RequestParam(required = false) Integer yil,
+            @RequestParam(required = false) Integer ay,
+            @RequestParam(required = false) String birimKodu,
+            @RequestParam(required = false) Long donemId
+    ) {
+        YearMonth month = resolveMonth(yil, ay);
+        return excelAttachment(
+                adminExportService.takipOzetExcel(donemId, birimKodu, month.getYear(), month.getMonthValue()),
+                "takip-ozeti.xlsx");
+    }
+
+    @GetMapping("/takip/rapor.xlsx")
+    public ResponseEntity<byte[]> takipRaporExcel(
+            @RequestParam(required = false) Integer yil,
+            @RequestParam(required = false) Integer ay,
+            @RequestParam(required = false) String birimKodu,
+            @RequestParam(required = false) Long donemId
+    ) {
+        YearMonth month = resolveMonth(yil, ay);
+        return excelAttachment(
+                adminExportService.takipRaporExcel(donemId, birimKodu, month.getYear(), month.getMonthValue()),
+                "ek6-puantaj-raporu.xlsx");
+    }
+
     @GetMapping("/takip/izin-rapor")
     public List<IzinRaporOgrenciResponse> izinRaporListesi(
             @RequestParam(required = false) Integer yil,
@@ -347,6 +433,19 @@ public class AdminController {
         YearMonth month = resolveMonth(yil, ay);
         return attachment(takipService.leaveAndReportCsv(donemId, birimKodu, month.getYear(), month.getMonthValue()),
                 "izinli-raporlu-ogrenciler.csv", "text/csv;charset=UTF-8");
+    }
+
+    @GetMapping("/takip/izin-rapor.xlsx")
+    public ResponseEntity<byte[]> izinRaporExcel(
+            @RequestParam(required = false) Integer yil,
+            @RequestParam(required = false) Integer ay,
+            @RequestParam(required = false) String birimKodu,
+            @RequestParam(required = false) Long donemId
+    ) {
+        YearMonth month = resolveMonth(yil, ay);
+        return excelAttachment(
+                adminExportService.izinRaporExcel(donemId, birimKodu, month.getYear(), month.getMonthValue()),
+                "izinli-raporlu-ogrenciler.xlsx");
     }
 
     @GetMapping("/takip/izin-rapor-belgeleri.zip")
@@ -371,6 +470,15 @@ public class AdminController {
                 .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=iliskisi-kesilen-ogrenciler.csv")
                 .body(csv);
+    }
+
+    @GetMapping("/takip/iliskisi-kesilenler.xlsx")
+    public ResponseEntity<byte[]> iliskisiKesilenlerExcel(
+            @RequestParam(required = false) Long donemId,
+            @RequestParam(required = false) String birimKodu
+    ) {
+        return excelAttachment(adminExportService.iliskisiKesilenlerExcel(donemId, birimKodu),
+                "iliskisi-kesilen-ogrenciler.xlsx");
     }
 
     @GetMapping("/takip/ogrenciler/{basvuruId}")
@@ -407,6 +515,11 @@ public class AdminController {
                 .contentType(MediaType.parseMediaType(contentType))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
                 .body(content);
+    }
+
+    private ResponseEntity<byte[]> excelAttachment(byte[] content, String filename) {
+        return attachment(content, filename,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     }
 
     private String username(Authentication authentication) {

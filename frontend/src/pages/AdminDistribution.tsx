@@ -62,15 +62,14 @@ export function AdminDistribution() {
     <Shell home="/admin">
       <h3 className="section">Birim dağıtımı</h3>
       <p style={{ color: "var(--muted)", maxWidth: 760, lineHeight: 1.55 }}>
-        Kesin kayıt listesi onaylandıktan sonra öğrenciler önce kendi fakülte/MYO birimine yerleştirilir.
-        Her birimin kendi kontenjanı dolarsa kalan öğrenciler diğer açık birimlere rastgele atanır.
-        Yedek listedeki öğrenciler dağıtıma dahil edilmez.
+        İŞKUR kesin listesi karşılaştırması onaylandıktan sonra yalnız kesin listedeki öğrenciler dağıtılır.
+        Öğrenciler önce kendi fakülte/MYO birimine yerleştirilir; kontenjan dolarsa kalanlar diğer açık birimlere rastgele atanır.
       </p>
       {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
       {data && !data.kesinListeOnaylandi && (
         <div className="alert alert-wait">
-          Kesin liste henüz onaylanmadı. Dağıtım, Kesin / yedek ekranından liste onaylandıktan sonra açılır.
+          Kesin liste karşılaştırması henüz onaylanmadı. Dağıtım, kesin kayıt ekranından onaylandıktan sonra açılır.
         </div>
       )}
       <div className="grid-5" style={{ marginBottom: 18 }}>

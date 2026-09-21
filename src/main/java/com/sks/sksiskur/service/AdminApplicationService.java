@@ -7,14 +7,15 @@ import com.sks.sksiskur.domain.BasvuruDonemi;
 import com.sks.sksiskur.domain.DocumentType;
 import com.sks.sksiskur.domain.KayitListesi;
 import com.sks.sksiskur.domain.KayitTuru;
+import com.sks.sksiskur.domain.KesinKayitKaydi;
 import com.sks.sksiskur.exception.ApiException;
 import com.sks.sksiskur.repository.BasvuruBelgesiRepository;
 import com.sks.sksiskur.repository.BasvuruRepository;
 import com.sks.sksiskur.repository.KayitListesiRepository;
 import com.sks.sksiskur.web.dto.AdminOzetResponse;
 import com.sks.sksiskur.web.dto.BasvuruResponse;
+import com.sks.sksiskur.web.dto.KayitListeFiltre;
 import com.sks.sksiskur.web.dto.KayitListesiResponse;
-import com.sks.sksiskur.web.dto.KayitTurRequest;
 import com.sks.sksiskur.web.dto.ReviewRequest;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpStatus;
@@ -39,6 +40,7 @@ public class AdminApplicationService {
     private final FileStorageService fileStorageService;
     private final DtoMapper mapper;
     private final BasvuruDonemiService basvuruDonemiService;
+    private final KesinListeService kesinListeService;
 
     public AdminApplicationService(
             BasvuruRepository basvuruRepository,
@@ -46,7 +48,8 @@ public class AdminApplicationService {
             KayitListesiRepository kayitListesiRepository,
             FileStorageService fileStorageService,
             DtoMapper mapper,
-            BasvuruDonemiService basvuruDonemiService
+            BasvuruDonemiService basvuruDonemiService,
+            KesinListeService kesinListeService
     ) {
         this.basvuruRepository = basvuruRepository;
         this.belgeRepository = belgeRepository;
@@ -54,24 +57,28 @@ public class AdminApplicationService {
         this.fileStorageService = fileStorageService;
         this.mapper = mapper;
         this.basvuruDonemiService = basvuruDonemiService;
+        this.kesinListeService = kesinListeService;
     }
 
     @Transactional(readOnly = true)
     public AdminOzetResponse ozet(Long donemId) {
         BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
-        boolean kesinListeOnaylandi = kayitListesiRepository.findByBasvuruDonemiId(donem.getId())
-                .map(KayitListesi::isKesinOnaylandi)
-                .orElse(false);
+        KayitListesi liste = kayitListesiRepository.findByBasvuruDonemiId(donem.getId()).orElse(null);
+        boolean kesinListeOnaylandi = liste != null && liste.isKesinOnaylandi();
+        List<Basvuru> approved = basvuruRepository.findByStatusAndBasvuruDonemiId(ApplicationStatus.APPROVED, donem.getId());
+        long kesin = approved.stream().filter(b -> Boolean.TRUE.equals(b.getKesinListede())).count();
+        long kesinListedeDegil = approved.stream().filter(b -> Boolean.FALSE.equals(b.getKesinListede())).count();
+        long kayitBekleyen = approved.stream().filter(b -> b.getKesinListede() == null).count();
         return new AdminOzetResponse(
                 basvuruRepository.countByBasvuruDonemiId(donem.getId()),
                 basvuruRepository.countByStatusAndBasvuruDonemiId(ApplicationStatus.DRAFT, donem.getId()),
                 basvuruRepository.countByStatusAndBasvuruDonemiId(ApplicationStatus.SUBMITTED, donem.getId()),
-                basvuruRepository.countByStatusAndBasvuruDonemiId(ApplicationStatus.APPROVED, donem.getId()),
+                approved.size(),
                 basvuruRepository.countByStatusAndBasvuruDonemiId(ApplicationStatus.REJECTED, donem.getId()),
                 basvuruRepository.countByStatusAndAtananBirimKoduIsNotNullAndBasvuruDonemiId(ApplicationStatus.APPROVED, donem.getId()),
-                basvuruRepository.countByStatusAndKayitTuruAndBasvuruDonemiId(ApplicationStatus.APPROVED, KayitTuru.KESIN, donem.getId()),
-                basvuruRepository.countByStatusAndKayitTuruAndBasvuruDonemiId(ApplicationStatus.APPROVED, KayitTuru.YEDEK, donem.getId()),
-                basvuruRepository.countByStatusAndKayitTuruIsNullAndBasvuruDonemiId(ApplicationStatus.APPROVED, donem.getId()),
+                kesin,
+                0,
+                kayitBekleyen,
                 kesinListeOnaylandi
         );
     }
@@ -117,6 +124,9 @@ public class AdminApplicationService {
         basvuru.setIncelemeTarihi(Instant.now());
         basvuru.setInceleyenAdmin(adminUsername);
         basvuru.setAdminNotu(null);
+        basvuru.setKayitTuru(null);
+        basvuru.setKesinListede(null);
+        basvuru.setKayitTarihi(null);
         return mapper.toBasvuru(basvuruRepository.save(basvuru));
     }
 
@@ -148,25 +158,9 @@ public class AdminApplicationService {
         return mapper.toBasvuru(basvuruRepository.save(basvuru));
     }
 
-    @Transactional
-    public KayitListesiResponse kayitListesi() {
-        return toKayitResponse(currentListe(basvuruDonemiService.requireActive()));
-    }
-
-    @Transactional
-    public BasvuruResponse setKayitTuru(Long id, KayitTurRequest request) {
-        Basvuru basvuru = require(id);
-        assertActivePeriod(basvuru);
-        KayitListesi liste = currentListe(basvuru.getBasvuruDonemi());
-        if (liste.isKesinOnaylandi()) {
-            throw new ApiException(HttpStatus.CONFLICT, "Kesin liste onaylandıktan sonra kayıt türü değiştirilemez.");
-        }
-        if (basvuru.getStatus() != ApplicationStatus.APPROVED) {
-            throw new ApiException(HttpStatus.CONFLICT, "Yalnızca evrakı onaylanan öğrenciler kesin/yedek listededir.");
-        }
-        basvuru.setKayitTuru(request.tur());
-        basvuru.setKayitTarihi(Instant.now());
-        return mapper.toBasvuru(basvuruRepository.save(basvuru));
+    @Transactional(readOnly = true)
+    public KayitListesiResponse kayitListesi(KayitListeFiltre filtre) {
+        return toKayitResponse(basvuruDonemiService.requireActive(), filtre == null ? KayitListeFiltre.TUMU : filtre);
     }
 
     @Transactional
@@ -174,25 +168,21 @@ public class AdminApplicationService {
         BasvuruDonemi donem = basvuruDonemiService.requireActive();
         KayitListesi liste = currentListe(donem);
         if (liste.isKesinOnaylandi()) {
-            return toKayitResponse(liste);
+            return toKayitResponse(donem, KayitListeFiltre.TUMU);
+        }
+        if (kesinListeService.countUploaded(donem.getId()) == 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Kesin liste onaylanmadan önce İŞKUR'dan gelen kesin liste yüklenmelidir.");
         }
         List<Basvuru> approved = basvuruRepository.findByStatusAndBasvuruDonemiId(ApplicationStatus.APPROVED, donem.getId());
-        if (approved.isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "Evrakı onaylanmış öğrenci yok.");
-        }
-        long bekleyen = approved.stream().filter(b -> b.getKayitTuru() == null).count();
-        if (bekleyen > 0) {
-            throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "Kesin liste onaylanmadan önce tüm onaylı öğrenciler kesin veya yedek olarak işaretlenmelidir.");
-        }
-        long kesin = approved.stream().filter(b -> b.getKayitTuru() == KayitTuru.KESIN).count();
+        long kesin = approved.stream().filter(b -> Boolean.TRUE.equals(b.getKesinListede())).count();
         if (kesin == 0) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "En az bir öğrenci kesin listeye alınmalıdır.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Kesin listede eşleşen en az bir onaylı başvuru olmalıdır.");
         }
         liste.setKesinOnaylandi(true);
         liste.setOnayTarihi(Instant.now());
         liste.setOnaylayanAdmin(adminUsername);
-        return toKayitResponse(kayitListesiRepository.save(liste));
+        kayitListesiRepository.save(liste);
+        return toKayitResponse(donem, KayitListeFiltre.TUMU);
     }
 
     @Transactional
@@ -200,7 +190,8 @@ public class AdminApplicationService {
         BasvuruDonemi donem = basvuruDonemiService.requireActive();
         KayitListesi liste = currentListe(donem);
         if (!liste.isKesinOnaylandi()) {
-            return toKayitResponse(liste);
+            kesinListeService.resetComparison(donem);
+            return toKayitResponse(donem, KayitListeFiltre.TUMU);
         }
         long atanan = basvuruRepository.countByStatusAndAtananBirimKoduIsNotNullAndBasvuruDonemiId(ApplicationStatus.APPROVED, donem.getId());
         if (atanan > 0) {
@@ -210,7 +201,9 @@ public class AdminApplicationService {
         liste.setKesinOnaylandi(false);
         liste.setOnayTarihi(null);
         liste.setOnaylayanAdmin(null);
-        return toKayitResponse(kayitListesiRepository.save(liste));
+        kayitListesiRepository.save(liste);
+        kesinListeService.resetComparison(donem);
+        return toKayitResponse(donem, KayitListeFiltre.TUMU);
     }
 
     @Transactional(readOnly = true)
@@ -237,39 +230,70 @@ public class AdminApplicationService {
         });
     }
 
-    private KayitListesiResponse toKayitResponse(KayitListesi liste) {
-        List<KayitListesiResponse.Satir> ogrenciler = basvuruRepository.findByStatusAndBasvuruDonemiId(
-                        ApplicationStatus.APPROVED, liste.getBasvuruDonemi().getId()).stream()
+    private KayitListesiResponse toKayitResponse(BasvuruDonemi donem, KayitListeFiltre filtre) {
+        KayitListesi liste = kayitListesiRepository.findByBasvuruDonemiId(donem.getId()).orElse(null);
+        List<Basvuru> approved = basvuruRepository.findByStatusAndBasvuruDonemiId(ApplicationStatus.APPROVED, donem.getId());
+        List<KayitListesiResponse.Satir> ogrenciler = approved.stream()
                 .sorted(Comparator
                         .comparing((Basvuru b) -> b.getStudent().getSoyad(), String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(b -> b.getStudent().getAd(), String.CASE_INSENSITIVE_ORDER))
-                .map(b -> new KayitListesiResponse.Satir(
-                        b.getId(),
-                        b.getStudent().getOgrenciNo(),
-                        b.getStudent().getTcKimlikNo(),
-                        b.getStudent().getAd(),
-                        b.getStudent().getSoyad(),
-                        b.getStudent().getAdSoyad(),
-                        b.getStudent().getFakulte(),
-                        b.getStudent().getProgram(),
-                        b.getStudent().getBolum(),
-                        b.getKayitTuru(),
-                        b.getAtananBirimAdi()
-                ))
+                .map(this::toSatir)
+                .filter(row -> matchesFilter(row, filtre))
                 .toList();
-        long kesin = ogrenciler.stream().filter(s -> s.kayitTuru() == KayitTuru.KESIN).count();
-        long yedek = ogrenciler.stream().filter(s -> s.kayitTuru() == KayitTuru.YEDEK).count();
-        long bekleyen = ogrenciler.stream().filter(s -> s.kayitTuru() == null).count();
+
+        List<KesinKayitKaydi> uploaded = kesinListeService.listUploaded(donem.getId());
+        List<KayitListesiResponse.ListedeEslesmeyen> listedeEslesmeyenler = uploaded.stream()
+                .filter(kayit -> approved.stream().noneMatch(b -> kesinListeService.matches(b.getStudent(), List.of(kayit))))
+                .map(kayit -> new KayitListesiResponse.ListedeEslesmeyen(
+                        kayit.getTcKimlikNo(), kayit.getAd(), kayit.getSoyad(), kayit.getOgrenciNo()))
+                .toList();
+
+        long kesin = approved.stream().filter(b -> Boolean.TRUE.equals(b.getKesinListede())).count();
+        long kesinListedeDegil = approved.stream().filter(b -> Boolean.FALSE.equals(b.getKesinListede())).count();
+        long bekleyen = approved.stream().filter(b -> b.getKesinListede() == null).count();
+
         return new KayitListesiResponse(
-                liste.isKesinOnaylandi(),
-                liste.getOnayTarihi(),
-                liste.getOnaylayanAdmin(),
-                bekleyen,
+                !uploaded.isEmpty(),
+                liste == null ? null : liste.getKesinListeYuklemeTarihi(),
+                liste == null ? null : liste.getKesinListeYukleyenAdmin(),
+                approved.size(),
                 kesin,
-                yedek,
-                liste.isKesinOnaylandi(),
-                ogrenciler
+                kesinListedeDegil,
+                bekleyen,
+                listedeEslesmeyenler.size(),
+                liste != null && liste.isKesinOnaylandi(),
+                liste == null ? null : liste.getOnayTarihi(),
+                liste == null ? null : liste.getOnaylayanAdmin(),
+                liste != null && liste.isKesinOnaylandi(),
+                ogrenciler,
+                listedeEslesmeyenler
         );
+    }
+
+    private KayitListesiResponse.Satir toSatir(Basvuru b) {
+        return new KayitListesiResponse.Satir(
+                b.getId(),
+                b.getStudent().getOgrenciNo(),
+                b.getStudent().getTcKimlikNo(),
+                b.getStudent().getAd(),
+                b.getStudent().getSoyad(),
+                b.getStudent().getAdSoyad(),
+                b.getStudent().getFakulte(),
+                b.getStudent().getProgram(),
+                b.getStudent().getBolum(),
+                b.getKesinListede(),
+                b.getKayitTuru(),
+                b.getAtananBirimAdi()
+        );
+    }
+
+    private boolean matchesFilter(KayitListesiResponse.Satir row, KayitListeFiltre filtre) {
+        return switch (filtre) {
+            case TUMU -> true;
+            case KESIN_LISTEDE -> Boolean.TRUE.equals(row.kesinListede());
+            case KESIN_LISTEDE_DEGIL -> Boolean.FALSE.equals(row.kesinListede());
+            case ONAYLI_BASVURU -> row.kesinListede() == null;
+        };
     }
 
     private Basvuru require(Long id) {
