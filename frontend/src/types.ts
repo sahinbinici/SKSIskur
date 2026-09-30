@@ -1,4 +1,5 @@
 export type Role = "STUDENT" | "ADMIN" | "BIRIM";
+export type AdminRole = "SUPER_ADMIN" | "YONETICI";
 export type AgreementType = "KVKK" | "ISKUR_SOZLESMESI";
 
 export type ApplicationStatus = "DRAFT" | "SUBMITTED" | "RETURNED" | "APPROVED" | "REJECTED";
@@ -45,6 +46,9 @@ export type AuthResponse = {
   ogrenciNo: string | null;
   birimKodu: string | null;
   birimAdi: string | null;
+  username: string | null;
+  userId: number | null;
+  adminRole: AdminRole | null;
 };
 
 export type DemoInfo = {
@@ -84,7 +88,14 @@ export type StudentProfile = {
   ilce: string | null;
   fotoUrl: string | null;
   danisman: string | null;
+  demoOgrenci: boolean;
+  iskurBasvuruyaUygun: boolean;
+  iskurBasvuruEngelMesaji: string | null;
 };
+
+export function canAccessApplication(profile: StudentProfile | null | undefined) {
+  return Boolean(profile && (profile.demoOgrenci || profile.iskurBasvuruyaUygun));
+}
 
 export type StudentAgreement = {
   tur: AgreementType;
@@ -112,6 +123,7 @@ export type Belge = {
   icerikTipi: string | null;
   boyutByte: number | null;
   dogrulamaDurumu: "DOGRULANDI" | "INCELEME_GEREKLI" | null;
+  dogrulamaNotu: string | null;
   yuklemeTarihi: string;
 };
 
@@ -120,6 +132,8 @@ export type Basvuru = {
   status: ApplicationStatus;
   iban: string | null;
   hesapSahibi: string | null;
+  bankaSubeKodu: string | null;
+  hesapNumarasi: string | null;
   aylikGelir: number | null;
   adminNotu: string | null;
   inceleyenAdmin: string | null;
@@ -133,6 +147,11 @@ export type Basvuru = {
   kayitTarihi: string | null;
   kesinListede: boolean | null;
   atamaBildirimiOkundu: boolean;
+  imzaBildirimiGonderildi: boolean;
+  imzaBildirimiMesaji: string | null;
+  imzaBildirimiGonderimTarihi: string | null;
+  imzaBildirimiOkundu: boolean;
+  imzaBildirimiEpostaGonderildi: boolean;
   atananBirimKodu: string | null;
   atananBirimAdi: string | null;
   atamaTuru: string | null;
@@ -149,9 +168,15 @@ export type AdminUser = {
   username: string;
   adSoyad: string;
   aktif: boolean;
+  rol: AdminRole;
   bekleyenBasvuruSayisi: number;
   olusturmaTarihi: string;
+  benimHesabim: boolean;
 };
+
+export function isSuperAdmin(session: { role: Role; adminRole?: AdminRole | null } | null | undefined) {
+  return session?.role === "ADMIN" && session.adminRole === "SUPER_ADMIN";
+}
 
 export type BasvuruDagitim = {
   atananBasvuruSayisi: number;
@@ -198,17 +223,35 @@ export type DagitimSonuc = {
   atanamayan: number;
   atamaTarihi: string;
   kesinListeOnaylandi: boolean;
+  imzaBildirimiGonderildi: boolean;
   yedek: number;
   birimler: DagitimBirim[];
   atanamayanlar: DagitimAtama[];
 };
 
+export type BelgeYuklemeFiltre = "TUMU" | "VAR" | "YOK";
+
+export const BELGE_YUKLEME_FILTRE_LABEL: Record<BelgeYuklemeFiltre, string> = {
+  TUMU: "Tümü",
+  VAR: "Yüklenmiş",
+  YOK: "Eksik"
+};
+
+export const ADMIN_BELGE_TIPLERI: { type: DocumentType; title: string }[] = [
+  { type: "IKAMETGAH", title: "İkametgah belgesi" },
+  { type: "SGK_DOKUMU", title: "SGK hizmet dökümü" },
+  { type: "ADLI_SICIL", title: "Adli sicil kaydı" },
+  { type: "OGRENCI_BELGESI", title: "Öğrenci belgesi" },
+  { type: "KIMLIK_BELGESI", title: "T.C. kimlik kartı" },
+  { type: "HANE_SGK_DOKUMU", title: "Aynı hanede yaşayanların SGK dökümü" }
+];
+
 export const DOCUMENT_TYPES: { type: DocumentType; title: string; hint: string }[] = [
-  { type: "IKAMETGAH", title: "İkametgah belgesi", hint: "e-Devlet barkodlu yerleşim yeri belgesi. Belge başlığı ve ad-soyad OCR ile kontrol edilir." },
-  { type: "SGK_DOKUMU", title: "SGK hizmet dökümü / maaş bordrosu", hint: "Birden fazla e-Devlet SGK hizmet dökümü veya maaş bordrosu ekleyebilirsiniz. Her belge başlık, ad-soyad, işe giriş ve gelir için OCR ile kontrol edilir." },
-  { type: "ADLI_SICIL", title: "Adli sicil kaydı", hint: "e-Devlet adli sicil kaydı. Belge başlığı ve ad-soyad OCR ile kontrol edilir." },
-  { type: "OGRENCI_BELGESI", title: "Öğrenci belgesi", hint: "Güncel, barkodlu öğrenci belgesi. Belge başlığı ve ad-soyad OCR ile kontrol edilir." },
-  { type: "KIMLIK_BELGESI", title: "T.C. kimlik kartı", hint: "Ön ve arka yüzün aynı PDF'de veya tek görselde olduğu T.C. kimlik kartı. Ad-soyad OCR ile kontrol edilir." }
+  { type: "IKAMETGAH", title: "İkametgah belgesi", hint: "Kendi ikametgah belgenize ek olarak aynı hanede yaşayan kişilerin ikametgah belgesi eklenmelidir. e-Devlet barkodlu yerleşim yeri belgelerini ayrı ayrı yükleyin." },
+  { type: "SGK_DOKUMU", title: "SGK hizmet dökümü / maaş bordrosu", hint: "Birden fazla e-Devlet SGK hizmet dökümü veya maaş bordrosu ekleyebilirsiniz. Barkodlu ve güncel belgeler yükleyin." },
+  { type: "ADLI_SICIL", title: "Adli sicil kaydı", hint: "e-Devlet adli sicil kaydı. Barkodlu ve net çıktı yükleyin." },
+  { type: "OGRENCI_BELGESI", title: "Öğrenci belgesi", hint: "Güncel, barkodlu öğrenci belgesi." },
+  { type: "KIMLIK_BELGESI", title: "T.C. kimlik kartı", hint: "Ön ve arka yüzün aynı PDF'de veya tek görselde olduğu T.C. kimlik kartı." }
 ];
 
 export const STATUS_LABEL: Record<ApplicationStatus, string> = {
@@ -233,6 +276,22 @@ export function kesinListeDurumLabel(kesinListede: boolean | null, status?: Appl
 
 export type PuantajDurum = "GELDI" | "GELMEDI" | "IZINLI" | "RAPORLU";
 export type TakipStatus = "DRAFT" | "SUBMITTED";
+
+export type OgrenciCalismaOzet = {
+  basvuruId: number;
+  birimAdi: string | null;
+  birimKodu: string | null;
+  donemAdi: string | null;
+  yil: number;
+  ay: number;
+  kullanilanIzinGunu: number;
+  izinGunLimiti: number;
+  kalanIzinGunu: number;
+  buAyTamGun: number;
+  buAyEkuantGun: number;
+  takipDurumu: TakipStatus | null;
+  takipKilitli: boolean;
+};
 
 export type BirimOgrenci = {
   basvuruId: number;
@@ -342,6 +401,37 @@ export type BirimKullanici = {
   olusturmaTarihi: string;
 };
 
+export type BirimDuyuru = {
+  id: number;
+  baslik: string;
+  mesaj: string;
+  gonderenAdmin: string;
+  gonderimTarihi: string;
+  tumBirimler: boolean;
+  hedefSayisi: number;
+  okunanSayisi: number;
+  birimKodlari: string[];
+};
+
+export type BirimDuyuruInbox = {
+  id: number;
+  baslik: string;
+  mesaj: string;
+  gonderenAdmin: string;
+  gonderimTarihi: string;
+  okundu: boolean;
+};
+
+export type YoneticiPanosuDuyuru = {
+  id: number;
+  baslik: string;
+  mesaj: string;
+  aktif: boolean;
+  gonderenAdmin: string;
+  olusturmaTarihi: string;
+  guncellemeTarihi: string;
+};
+
 export type KayitListeFiltre = "TUMU" | "KESIN_LISTEDE" | "KESIN_LISTEDE_DEGIL" | "ONAYLI_BASVURU";
 
 export type KayitListesiSatir = {
@@ -370,6 +460,16 @@ export type KesinListeUpload = {
   yukleyenAdmin: string;
 };
 
+export type ImzaBildirimiGonder = {
+  hedefOgrenci: number;
+  sayfaBildirimi: number;
+  epostaGonderilen: number;
+  epostaAtlanan: number;
+  epostaBasarisiz: number;
+  gonderimTarihi: string;
+  gonderenAdmin: string;
+};
+
 export type KayitListesi = {
   kesinListeYuklendi: boolean;
   kesinListeYuklemeTarihi: string | null;
@@ -383,6 +483,9 @@ export type KayitListesi = {
   onayTarihi: string | null;
   onaylayanAdmin: string | null;
   dagitimAcik: boolean;
+  imzaBildirimiGonderildi: boolean;
+  imzaBildirimiGonderimTarihi: string | null;
+  imzaBildirimiGonderenAdmin: string | null;
   ogrenciler: KayitListesiSatir[];
   listedeEslesmeyenler: { tcKimlikNo: string | null; ad: string; soyad: string; ogrenciNo: string | null }[];
 };
@@ -408,4 +511,53 @@ export type AdminTakipOzet = {
   birimKodu: string | null;
   birimAdi: string;
   ogrenciler: AdminTakipSatir[];
+};
+
+export type IslemTuru =
+  | "GIRIS"
+  | "BASVURU_TASLAK"
+  | "BASVURU_GONDERIM"
+  | "BASVURU_ONAY"
+  | "BASVURU_RED"
+  | "BASVURU_IADE"
+  | "YONETICI_OLUSTUR"
+  | "YONETICI_GUNCELLE"
+  | "DONEM_AC"
+  | "DONEM_KAPAT"
+  | "ISKUR_LISTE_YUKLE"
+  | "KESIN_LISTE_YUKLE"
+  | "KESIN_LISTE_ONAY"
+  | "KESIN_LISTE_GERI_AL"
+  | "IMZA_BILDIRIMI"
+  | "BIRIM_DUYURU_GONDER"
+  | "YONETICI_PANO_DUYURU"
+  | "OGRENCI_PANO_DUYURU"
+  | "BIRIM_DAGITIM"
+  | "BIRIM_ATAMA_DEGISTIR"
+  | "BASVURU_YONETICI_DAGITIM"
+  | "KAPALI_GUN_KAYDET"
+  | "EKUANT_KAYDET"
+  | "PUANTAJ_KAYDET"
+  | "TAKIP_GONDER"
+  | "ISKUR_PAKET_INDIR";
+
+export type IslemLog = {
+  id: number;
+  zaman: string;
+  rol: Role;
+  tur: IslemTuru;
+  kullaniciAdi: string;
+  adSoyad: string | null;
+  varlikTipi: string | null;
+  varlikId: number | null;
+  aciklama: string;
+  detay: string | null;
+};
+
+export type IslemLogPage = {
+  kayitlar: IslemLog[];
+  page: number;
+  size: number;
+  total: number;
+  totalPages: number;
 };

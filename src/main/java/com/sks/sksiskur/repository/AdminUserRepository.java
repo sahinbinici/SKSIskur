@@ -1,5 +1,6 @@
 package com.sks.sksiskur.repository;
 
+import com.sks.sksiskur.domain.AdminRole;
 import com.sks.sksiskur.domain.AdminUser;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -19,4 +20,8 @@ public interface AdminUserRepository extends JpaRepository<AdminUser, Long> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<AdminUser> findByAktifTrueOrderByIdAsc();
+
+    long countByRol(AdminRole rol);
+
+    long countByRolAndAktifTrue(AdminRole rol);
 }

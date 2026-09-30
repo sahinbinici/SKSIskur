@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api";
+import { PageHeader } from "../components/PageHeader";
 import { Shell, formatDate } from "../components/ui";
 import type { AgreementDocument, AgreementType } from "../types";
 
@@ -60,7 +61,7 @@ export function AdminAgreementsPage() {
   return (
     <Shell home="/admin">
       <div className="page-heading">
-        <div><h3 className="section">KVKK ve İŞKUR sözleşmeleri</h3><p className="muted">Buradan yayımlanan metin öğrenci başvuru ekranında sırasıyla gösterilir.</p></div>
+        <PageHeader title="Sözleşmeler" description="KVKK ve İŞKUR sözleşme metinlerini yönetin; öğrenci başvurusunda sırayla gösterilir." />
       </div>
       {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}

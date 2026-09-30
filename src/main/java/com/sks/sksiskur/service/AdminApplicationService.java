@@ -5,15 +5,18 @@ import com.sks.sksiskur.domain.Basvuru;
 import com.sks.sksiskur.domain.BasvuruBelgesi;
 import com.sks.sksiskur.domain.BasvuruDonemi;
 import com.sks.sksiskur.domain.DocumentType;
+import com.sks.sksiskur.domain.IslemTuru;
 import com.sks.sksiskur.domain.KayitListesi;
 import com.sks.sksiskur.domain.KayitTuru;
 import com.sks.sksiskur.domain.KesinKayitKaydi;
+import com.sks.sksiskur.domain.Role;
 import com.sks.sksiskur.exception.ApiException;
 import com.sks.sksiskur.repository.BasvuruBelgesiRepository;
 import com.sks.sksiskur.repository.BasvuruRepository;
 import com.sks.sksiskur.repository.KayitListesiRepository;
 import com.sks.sksiskur.web.dto.AdminOzetResponse;
 import com.sks.sksiskur.web.dto.BasvuruResponse;
+import com.sks.sksiskur.web.dto.BelgeYuklemeFiltre;
 import com.sks.sksiskur.web.dto.KayitListeFiltre;
 import com.sks.sksiskur.web.dto.KayitListesiResponse;
 import com.sks.sksiskur.web.dto.ReviewRequest;
@@ -41,6 +44,9 @@ public class AdminApplicationService {
     private final DtoMapper mapper;
     private final BasvuruDonemiService basvuruDonemiService;
     private final KesinListeService kesinListeService;
+    private final ImzaBildirimiService imzaBildirimiService;
+    private final AuditLogService auditLogService;
+    private final AdminBelgeOcrService adminBelgeOcrService;
 
     public AdminApplicationService(
             BasvuruRepository basvuruRepository,
@@ -49,7 +55,10 @@ public class AdminApplicationService {
             FileStorageService fileStorageService,
             DtoMapper mapper,
             BasvuruDonemiService basvuruDonemiService,
-            KesinListeService kesinListeService
+            KesinListeService kesinListeService,
+            ImzaBildirimiService imzaBildirimiService,
+            AuditLogService auditLogService,
+            AdminBelgeOcrService adminBelgeOcrService
     ) {
         this.basvuruRepository = basvuruRepository;
         this.belgeRepository = belgeRepository;
@@ -58,6 +67,9 @@ public class AdminApplicationService {
         this.mapper = mapper;
         this.basvuruDonemiService = basvuruDonemiService;
         this.kesinListeService = kesinListeService;
+        this.imzaBildirimiService = imzaBildirimiService;
+        this.auditLogService = auditLogService;
+        this.adminBelgeOcrService = adminBelgeOcrService;
     }
 
     @Transactional(readOnly = true)
@@ -84,18 +96,91 @@ public class AdminApplicationService {
     }
 
     @Transactional(readOnly = true)
-    public List<BasvuruResponse> list(Long donemId, ApplicationStatus status, String query, String assignedTo) {
-        BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
-        String q = query == null ? "" : query.trim();
-        List<Basvuru> applications = assignedTo == null
-                ? basvuruRepository.search(donem.getId(), status, q)
-                : basvuruRepository.searchAssignedTo(donem.getId(), status, q, assignedTo);
-        return applications.stream().map(mapper::toBasvuru).toList();
+    public List<BasvuruResponse> list(
+            Long donemId,
+            ApplicationStatus status,
+            String query,
+            String assignedTo,
+            DocumentType belgeTipi,
+            BelgeYuklemeFiltre belgeYukleme
+    ) {
+        return filterByBelge(
+                searchBasvurular(donemId, status, query, assignedTo).stream().map(mapper::toBasvuru).toList(),
+                belgeTipi,
+                belgeYukleme
+        );
     }
 
     @Transactional(readOnly = true)
+    public List<Basvuru> listBasvurular(
+            Long donemId,
+            ApplicationStatus status,
+            String query,
+            String assignedTo,
+            DocumentType belgeTipi,
+            BelgeYuklemeFiltre belgeYukleme
+    ) {
+        return filterBasvurularByBelge(searchBasvurular(donemId, status, query, assignedTo), belgeTipi, belgeYukleme);
+    }
+
+    private List<Basvuru> searchBasvurular(
+            Long donemId,
+            ApplicationStatus status,
+            String query,
+            String assignedTo
+    ) {
+        BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
+        String q = query == null ? "" : query.trim();
+        return assignedTo == null
+                ? basvuruRepository.search(donem.getId(), status, q)
+                : basvuruRepository.searchAssignedTo(donem.getId(), status, q, assignedTo);
+    }
+
+    static List<BasvuruResponse> filterByBelge(
+            List<BasvuruResponse> items,
+            DocumentType belgeTipi,
+            BelgeYuklemeFiltre belgeYukleme
+    ) {
+        if (belgeTipi == null || belgeYukleme == null || belgeYukleme == BelgeYuklemeFiltre.TUMU) {
+            return items;
+        }
+        return items.stream()
+                .filter(item -> matchesBelgeFilter(item.belgeler().stream().anyMatch(belge -> belge.belgeTipi() == belgeTipi), belgeYukleme))
+                .toList();
+    }
+
+    static List<Basvuru> filterBasvurularByBelge(
+            List<Basvuru> items,
+            DocumentType belgeTipi,
+            BelgeYuklemeFiltre belgeYukleme
+    ) {
+        if (belgeTipi == null || belgeYukleme == null || belgeYukleme == BelgeYuklemeFiltre.TUMU) {
+            return items;
+        }
+        return items.stream()
+                .filter(item -> matchesBelgeFilter(
+                        item.getBelgeler().stream().anyMatch(belge -> belge.getBelgeTipi() == belgeTipi),
+                        belgeYukleme
+                ))
+                .toList();
+    }
+
+    private static boolean matchesBelgeFilter(boolean hasBelge, BelgeYuklemeFiltre belgeYukleme) {
+        return belgeYukleme == BelgeYuklemeFiltre.VAR ? hasBelge : !hasBelge;
+    }
+
+    @Transactional
     public BasvuruResponse get(Long id) {
-        return mapper.toBasvuru(require(id));
+        Basvuru basvuru = require(id);
+        adminBelgeOcrService.reviewPendingDocuments(basvuru);
+        return mapper.toBasvuru(basvuru);
+    }
+
+    @Transactional
+    public BasvuruResponse refreshOcr(Long id) {
+        Basvuru basvuru = require(id);
+        adminBelgeOcrService.refreshDocuments(basvuru);
+        return mapper.toBasvuru(basvuru);
     }
 
     @Transactional
@@ -127,7 +212,10 @@ public class AdminApplicationService {
         basvuru.setKayitTuru(null);
         basvuru.setKesinListede(null);
         basvuru.setKayitTarihi(null);
-        return mapper.toBasvuru(basvuruRepository.save(basvuru));
+        Basvuru saved = basvuruRepository.save(basvuru);
+        auditLogService.log(Role.ADMIN, adminUsername, adminUsername, IslemTuru.BASVURU_ONAY, "BASVURU", saved.getId(),
+                "Başvuru onaylandı: " + saved.getStudent().getOgrenciNo(), null);
+        return mapper.toBasvuru(saved);
     }
 
     @Transactional
@@ -141,7 +229,10 @@ public class AdminApplicationService {
         basvuru.setIncelemeTarihi(Instant.now());
         basvuru.setInceleyenAdmin(adminUsername);
         basvuru.setAdminNotu(request.not().trim());
-        return mapper.toBasvuru(basvuruRepository.save(basvuru));
+        Basvuru saved = basvuruRepository.save(basvuru);
+        auditLogService.log(Role.ADMIN, adminUsername, adminUsername, IslemTuru.BASVURU_RED, "BASVURU", saved.getId(),
+                "Başvuru reddedildi: " + saved.getStudent().getOgrenciNo(), request.not().trim());
+        return mapper.toBasvuru(saved);
     }
 
     @Transactional
@@ -155,7 +246,10 @@ public class AdminApplicationService {
         basvuru.setIncelemeTarihi(Instant.now());
         basvuru.setInceleyenAdmin(adminUsername);
         basvuru.setAdminNotu(note.trim());
-        return mapper.toBasvuru(basvuruRepository.save(basvuru));
+        Basvuru saved = basvuruRepository.save(basvuru);
+        auditLogService.log(Role.ADMIN, adminUsername, adminUsername, IslemTuru.BASVURU_IADE, "BASVURU", saved.getId(),
+                "Başvuru iade edildi: " + saved.getStudent().getOgrenciNo(), note.trim());
+        return mapper.toBasvuru(saved);
     }
 
     @Transactional(readOnly = true)
@@ -182,11 +276,13 @@ public class AdminApplicationService {
         liste.setOnayTarihi(Instant.now());
         liste.setOnaylayanAdmin(adminUsername);
         kayitListesiRepository.save(liste);
+        auditLogService.log(Role.ADMIN, adminUsername, adminUsername, IslemTuru.KESIN_LISTE_ONAY, "DONEM", donem.getId(),
+                "Kesin liste onaylandı: " + donem.getAd(), null);
         return toKayitResponse(donem, KayitListeFiltre.TUMU);
     }
 
     @Transactional
-    public KayitListesiResponse geriAlKesinListe() {
+    public KayitListesiResponse geriAlKesinListe(String adminUsername) {
         BasvuruDonemi donem = basvuruDonemiService.requireActive();
         KayitListesi liste = currentListe(donem);
         if (!liste.isKesinOnaylandi()) {
@@ -203,6 +299,9 @@ public class AdminApplicationService {
         liste.setOnaylayanAdmin(null);
         kayitListesiRepository.save(liste);
         kesinListeService.resetComparison(donem);
+        imzaBildirimiService.resetForDonem(donem);
+        auditLogService.log(Role.ADMIN, adminUsername, adminUsername, IslemTuru.KESIN_LISTE_GERI_AL, "DONEM", donem.getId(),
+                "Kesin liste onayı geri alındı: " + donem.getAd(), null);
         return toKayitResponse(donem, KayitListeFiltre.TUMU);
     }
 
@@ -265,6 +364,9 @@ public class AdminApplicationService {
                 liste == null ? null : liste.getOnayTarihi(),
                 liste == null ? null : liste.getOnaylayanAdmin(),
                 liste != null && liste.isKesinOnaylandi(),
+                liste != null && liste.isImzaBildirimiGonderildi(),
+                liste == null ? null : liste.getImzaBildirimiGonderimTarihi(),
+                liste == null ? null : liste.getImzaBildirimiGonderenAdmin(),
                 ogrenciler,
                 listedeEslesmeyenler
         );

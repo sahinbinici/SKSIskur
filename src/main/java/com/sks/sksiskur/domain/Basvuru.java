@@ -56,6 +56,12 @@ public class Basvuru {
     @Column(name = "hesap_sahibi", length = 120)
     private String hesapSahibi;
 
+    @Column(name = "banka_sube_kodu", length = 4)
+    private String bankaSubeKodu;
+
+    @Column(name = "hesap_numarasi", length = 16)
+    private String hesapNumarasi;
+
     @Column(name = "aylik_gelir", precision = 12, scale = 2)
     private BigDecimal aylikGelir;
 
@@ -108,6 +114,21 @@ public class Basvuru {
 
     @Column(name = "atama_bildirimi_okundu", nullable = false)
     private boolean atamaBildirimiOkundu = false;
+
+    @Column(name = "imza_bildirimi_mesaji", length = 500)
+    private String imzaBildirimiMesaji;
+
+    @Column(name = "imza_bildirimi_gonderildi", nullable = false)
+    private boolean imzaBildirimiGonderildi = false;
+
+    @Column(name = "imza_bildirimi_gonderim_tarihi")
+    private Instant imzaBildirimiGonderimTarihi;
+
+    @Column(name = "imza_bildirimi_okundu", nullable = false)
+    private boolean imzaBildirimiOkundu = false;
+
+    @Column(name = "imza_bildirimi_eposta_gonderildi", nullable = false)
+    private boolean imzaBildirimiEpostaGonderildi = false;
 
     @OneToMany(mappedBy = "basvuru", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<BasvuruBelgesi> belgeler = new ArrayList<>();

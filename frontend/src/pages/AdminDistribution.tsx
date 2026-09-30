@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api";
+import { useConfirm } from "../components/ConfirmDialog";
+import { PageHeader } from "../components/PageHeader";
 import { Shell, formatDate } from "../components/ui";
 import type { DagitimBirim, DagitimBirimi, DagitimSonuc } from "../types";
 
 export function AdminDistribution() {
+  const confirm = useConfirm();
   const [data, setData] = useState<DagitimSonuc | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -38,7 +41,12 @@ export function AdminDistribution() {
     const confirmText = yeniden
       ? "Mevcut atamalar silinip kesin kayıttaki öğrenciler yeniden dağıtılacak. Devam edilsin mi?"
       : "Kesin kayıtlı ve henüz atanmamış öğrenciler birimlere dağıtılacak. Devam edilsin mi?";
-    if (!window.confirm(confirmText)) return;
+    if (!await confirm({
+      title: yeniden ? "Dağıtımı yeniden yap" : "Birim dağıtımını başlat",
+      message: confirmText,
+      confirmLabel: yeniden ? "Yeniden dağıt" : "Dağıt",
+      variant: yeniden ? "danger" : "primary"
+    })) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -60,16 +68,19 @@ export function AdminDistribution() {
 
   return (
     <Shell home="/admin">
-      <h3 className="section">Birim dağıtımı</h3>
-      <p style={{ color: "var(--muted)", maxWidth: 760, lineHeight: 1.55 }}>
-        İŞKUR kesin listesi karşılaştırması onaylandıktan sonra yalnız kesin listedeki öğrenciler dağıtılır.
-        Öğrenciler önce kendi fakülte/MYO birimine yerleştirilir; kontenjan dolarsa kalanlar diğer açık birimlere rastgele atanır.
-      </p>
-      {error && <div className="alert alert-error">{error}</div>}
+      <PageHeader
+        title="Birim dağıtımı"
+        description="Kesin kayıtlı öğrenciler önce kendi fakülte/MYO birimine yerleştirilir; kontenjan dolarsa kalanlar diğer açık birimlere atanır."
+      />      {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
       {data && !data.kesinListeOnaylandi && (
         <div className="alert alert-wait">
           Kesin liste karşılaştırması henüz onaylanmadı. Dağıtım, kesin kayıt ekranından onaylandıktan sonra açılır.
+        </div>
+      )}
+      {data && data.kesinListeOnaylandi && !data.imzaBildirimiGonderildi && (
+        <div className="alert alert-wait">
+          Birim dağıtımından önce kesin kayıt ekranından öğrencilere imza bildirimi gönderilmelidir.
         </div>
       )}
       <div className="grid-5" style={{ marginBottom: 18 }}>
@@ -80,8 +91,8 @@ export function AdminDistribution() {
         <Stat title="Atanamayan" value={data?.atanamayan} />
       </div>
       <div className="row" style={{ marginBottom: 16 }}>
-        <button className="btn btn-gold" disabled={busy || !data?.kesinListeOnaylandi} onClick={() => run(false)}>Listeyi dağıt</button>
-        <button className="btn btn-primary" disabled={busy || !data?.kesinListeOnaylandi} onClick={() => run(true)}>Yeniden dağıt</button>
+        <button className="btn btn-gold" disabled={busy || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(false)}>Listeyi dağıt</button>
+        <button className="btn btn-primary" disabled={busy || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(true)}>Yeniden dağıt</button>
         <label style={{ display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
           <input type="checkbox" checked={onlyFilled} onChange={(e) => setOnlyFilled(e.target.checked)} style={{ width: "auto", margin: 0 }} />
           Yalnız dolu birimler

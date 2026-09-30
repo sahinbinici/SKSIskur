@@ -2,9 +2,13 @@ package com.sks.sksiskur.service;
 
 import com.sks.sksiskur.domain.BasvuruDonemi;
 import com.sks.sksiskur.domain.IskurBasvuruKaydi;
+import com.sks.sksiskur.domain.IslemTuru;
+import com.sks.sksiskur.domain.Role;
 import com.sks.sksiskur.domain.Student;
 import com.sks.sksiskur.exception.ApiException;
 import com.sks.sksiskur.repository.IskurBasvuruKaydiRepository;
+import com.sks.sksiskur.repository.BasvuruDonemiRepository;
+import com.sks.sksiskur.web.dto.IskurBasvuruUygunluk;
 import com.sks.sksiskur.web.dto.IskurListeResponse;
 import com.sks.sksiskur.web.dto.IskurListeUploadResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,20 +25,29 @@ import java.util.Set;
 @Service
 public class IskurListeService {
 
+    private static final String LISTEDE_DEGIL_MESAJ =
+            "İŞKUR listesinde adınız olmadığı için başvuru yapamazsınız.";
+
     private final IskurBasvuruKaydiRepository repository;
+    private final BasvuruDonemiRepository basvuruDonemiRepository;
     private final BasvuruDonemiService basvuruDonemiService;
     private final IskurExcelParser excelParser;
+    private final AuditLogService auditLogService;
     private final boolean demoEnabled;
 
     public IskurListeService(
             IskurBasvuruKaydiRepository repository,
+            BasvuruDonemiRepository basvuruDonemiRepository,
             BasvuruDonemiService basvuruDonemiService,
             IskurExcelParser excelParser,
+            AuditLogService auditLogService,
             @Value("${app.demo.enabled:false}") boolean demoEnabled
     ) {
         this.repository = repository;
+        this.basvuruDonemiRepository = basvuruDonemiRepository;
         this.basvuruDonemiService = basvuruDonemiService;
         this.excelParser = excelParser;
+        this.auditLogService = auditLogService;
         this.demoEnabled = demoEnabled;
     }
 
@@ -91,6 +104,8 @@ public class IskurListeService {
 
         donem.setIskurListeYuklemeTarihi(Instant.now());
         long saved = repository.countByBasvuruDonemiId(donem.getId());
+        auditLogService.log(Role.ADMIN, adminUsername, adminUsername, IslemTuru.ISKUR_LISTE_YUKLE, "DONEM", donem.getId(),
+                "İŞKUR başvuru listesi yüklendi: " + donem.getAd(), saved + " kayıt");
         return new IskurListeUploadResponse(
                 donem.getId(),
                 saved,
@@ -101,6 +116,33 @@ public class IskurListeService {
     }
 
     @Transactional(readOnly = true)
+    public IskurBasvuruUygunluk basvuruUygunluk(Student student) {
+        if (isDemoStudent(student)) {
+            return new IskurBasvuruUygunluk(true, true, null);
+        }
+        BasvuruDonemi donem = basvuruDonemiRepository.findFirstByAktifTrueOrderByOlusturmaTarihiDesc()
+                .orElse(null);
+        if (donem == null) {
+            return new IskurBasvuruUygunluk(false, false, "Aktif başvuru dönemi bulunmuyor.");
+        }
+        if (repository.countByBasvuruDonemiId(donem.getId()) == 0) {
+            return new IskurBasvuruUygunluk(
+                    false,
+                    false,
+                    "Bu dönem için İŞKUR başvuru listesi henüz yüklenmedi. Lütfen SKS yöneticinize başvurun."
+            );
+        }
+        if (!isInList(donem.getId(), student)) {
+            return new IskurBasvuruUygunluk(false, false, LISTEDE_DEGIL_MESAJ);
+        }
+        return new IskurBasvuruUygunluk(false, true, null);
+    }
+
+    public boolean isDemoStudent(Student student) {
+        return demoEnabled && student.getDemoSifreHash() != null && !student.getDemoSifreHash().isBlank();
+    }
+
+    @Transactional(readOnly = true)
     public void assertEligible(Student student) {
         BasvuruDonemi donem = basvuruDonemiService.requireActive();
         assertEligible(donem, student);
@@ -108,7 +150,7 @@ public class IskurListeService {
 
     @Transactional(readOnly = true)
     public void assertEligible(BasvuruDonemi donem, Student student) {
-        if (demoEnabled && student.getDemoSifreHash() != null && !student.getDemoSifreHash().isBlank()) {
+        if (isDemoStudent(student)) {
             return;
         }
         if (repository.countByBasvuruDonemiId(donem.getId()) == 0) {
@@ -116,8 +158,7 @@ public class IskurListeService {
                     "Bu dönem için İŞKUR başvuru listesi henüz yüklenmedi. Lütfen SKS yöneticinize başvurun.");
         }
         if (!isInList(donem.getId(), student)) {
-            throw new ApiException(HttpStatus.FORBIDDEN,
-                    "İŞKUR başvuru listesinde kaydınız bulunamadı. Bu dönem için başvuru yapamazsınız.");
+            throw new ApiException(HttpStatus.FORBIDDEN, LISTEDE_DEGIL_MESAJ);
         }
     }
 

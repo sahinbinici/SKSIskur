@@ -16,6 +16,8 @@ public record BasvuruResponse(
         Instant kayitTarihi,
         String iban,
         String hesapSahibi,
+        String bankaSubeKodu,
+        String hesapNumarasi,
         BigDecimal aylikGelir,
         String adminNotu,
         String inceleyenAdmin,
@@ -27,6 +29,11 @@ public record BasvuruResponse(
         boolean locked,
         Boolean kesinListede,
         boolean atamaBildirimiOkundu,
+        boolean imzaBildirimiGonderildi,
+        String imzaBildirimiMesaji,
+        Instant imzaBildirimiGonderimTarihi,
+        boolean imzaBildirimiOkundu,
+        boolean imzaBildirimiEpostaGonderildi,
         String atananBirimKodu,
         String atananBirimAdi,
         String atamaTuru,
@@ -46,6 +53,7 @@ public record BasvuruResponse(
             String icerikTipi,
             Long boyutByte,
             BelgeDogrulamaDurumu dogrulamaDurumu,
+            String dogrulamaNotu,
             Instant yuklemeTarihi
     ) {
     }

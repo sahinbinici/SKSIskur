@@ -51,6 +51,9 @@ public class BasvuruBelgesi {
     @Column(name = "dogrulama_durumu", length = 30)
     private BelgeDogrulamaDurumu dogrulamaDurumu;
 
+    @Column(name = "dogrulama_notu", length = 500)
+    private String dogrulamaNotu;
+
     @Column(name = "hane_uyesi_adi", length = 120)
     private String haneUyesiAdi;
 

@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, ApiError, authenticatedBlobUrl } from "../api";
 import { Shell, StatusBadge } from "../components/ui";
-import { DOCUMENT_TYPES, type Basvuru, type DocumentType, type StudentAgreement } from "../types";
+import { DOCUMENT_TYPES, canAccessApplication, type Basvuru, type DocumentType, type StudentAgreement, type StudentProfile } from "../types";
 
 const HALKBANK_CODE = "00012";
 
@@ -26,9 +27,26 @@ function checkHalkbankIban(value: string) {
   return { normalized, message: `Halkbank kodu doğrulanacak · ${normalized.length}/26 karakter`, valid: false, error: false };
 }
 
+function extractHesapFromIban(iban: string) {
+  const normalized = iban.replaceAll(/\s+/g, "").toUpperCase();
+  if (normalized.length !== 26) return { bankaSubeKodu: "", hesapNumarasi: "" };
+  const accountBlock = normalized.slice(14);
+  return {
+    bankaSubeKodu: normalized.slice(11, 15),
+    hesapNumarasi: accountBlock.replace(/^0+/, "") || accountBlock
+  };
+}
+
+function onlyDigits(value: string) {
+  return value.replaceAll(/\D/g, "");
+}
+
 export function ApplicationPage() {
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [basvuru, setBasvuru] = useState<Basvuru | null>(null);
   const [iban, setIban] = useState("");
+  const [bankaSubeKodu, setBankaSubeKodu] = useState("");
+  const [hesapNumarasi, setHesapNumarasi] = useState("");
   const [hesapSahibi, setHesapSahibi] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -40,11 +58,18 @@ export function ApplicationPage() {
     const data = await api.application();
     setBasvuru(data);
     setIban(data.iban ?? "");
+    setBankaSubeKodu(data.bankaSubeKodu ?? "");
+    setHesapNumarasi(data.hesapNumarasi ?? "");
     setHesapSahibi(data.hesapSahibi ?? data.student.adSoyad);
   }
 
   useEffect(() => {
     async function load() {
+      const studentProfile = await api.profile();
+      setProfile(studentProfile);
+      if (!canAccessApplication(studentProfile)) {
+        return;
+      }
       const documents = await api.studentAgreements();
       setAgreements(documents);
       if (documents.every((document) => document.kabulEdildi)) {
@@ -56,7 +81,20 @@ export function ApplicationPage() {
 
   const locked = Boolean(basvuru?.locked);
   const ibanCheck = checkHalkbankIban(iban);
+  const normalizedSubeKodu = onlyDigits(bankaSubeKodu);
+  const normalizedHesapNumarasi = onlyDigits(hesapNumarasi);
+  const hesapBilgisiHazir = Boolean(basvuru?.iban && basvuru?.bankaSubeKodu && basvuru?.hesapNumarasi);
   const pendingAgreement = agreements?.find((agreement) => !agreement.kabulEdildi);
+
+  function updateIban(value: string) {
+    setIban(value);
+    const check = checkHalkbankIban(value);
+    if (check.valid) {
+      const extracted = extractHesapFromIban(check.normalized);
+      setBankaSubeKodu(extracted.bankaSubeKodu);
+      setHesapNumarasi(extracted.hesapNumarasi);
+    }
+  }
 
   async function acceptAgreement() {
     if (!pendingAgreement) return;
@@ -82,13 +120,27 @@ export function ApplicationPage() {
       setError(ibanCheck.message || "Geçerli bir Halkbank IBAN giriniz.");
       return;
     }
+    if (submit) {
+      if (normalizedSubeKodu.length !== 4) {
+        setError("Banka şube kodu 4 haneli olmalıdır.");
+        return;
+      }
+      if (!normalizedHesapNumarasi) {
+        setError("Hesap numarası zorunludur.");
+        return;
+      }
+    }
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      const data = submit
-        ? await api.submit(iban, hesapSahibi)
-        : await api.saveDraft(iban, hesapSahibi);
+      const payload = {
+        iban: ibanCheck.normalized || iban,
+        hesapSahibi,
+        bankaSubeKodu: normalizedSubeKodu,
+        hesapNumarasi: normalizedHesapNumarasi
+      };
+      const data = submit ? await api.submit(payload) : await api.saveDraft(payload);
       setBasvuru(data);
       setMessage(submit ? "Başvurunuz inceleme için gönderildi." : "Taslak kaydedildi.");
     } catch (err) {
@@ -136,6 +188,22 @@ export function ApplicationPage() {
     }
   }
 
+  if (profile && !canAccessApplication(profile)) {
+    return (
+      <Shell home="/panel">
+        <h3 className="section">Başvuru evrakları</h3>
+        <div className="card" style={{ padding: 24 }}>
+          <div className="alert alert-wait">
+            {profile.iskurBasvuruEngelMesaji ?? "İŞKUR listesinde adınız olmadığı için başvuru yapamazsınız."}
+          </div>
+          <Link to="/panel" className="btn btn-secondary" style={{ display: "inline-block", textDecoration: "none", marginTop: 12 }}>
+            Panele dön
+          </Link>
+        </div>
+      </Shell>
+    );
+  }
+
   return (
     <Shell home="/panel">
       {pendingAgreement && <AgreementDialog agreement={pendingAgreement} busy={agreementBusy} onAccept={acceptAgreement} />}
@@ -146,6 +214,19 @@ export function ApplicationPage() {
       {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
       {!agreements && !error && <div className="card" style={{ padding: 22 }}>Sözleşmeler yükleniyor…</div>}
+      {basvuru?.imzaBildirimiGonderildi && !basvuru.imzaBildirimiOkundu && !basvuru.atananBirimAdi && (
+        <div className="alert alert-wait">
+          <strong>İmza bildirimi.</strong> {basvuru.imzaBildirimiMesaji}
+          <button
+            type="button"
+            className="btn btn-secondary btn-compact"
+            style={{ marginLeft: 12 }}
+            onClick={() => void api.markImzaBildirimiOkundu().then(setBasvuru).catch(() => undefined)}
+          >
+            Okudum
+          </button>
+        </div>
+      )}
       {basvuru?.atananBirimAdi && !basvuru.atamaBildirimiOkundu && (
         <div className="alert alert-ok">
           <strong>Birim atamanız yapıldı.</strong> {basvuru.atananBirimAdi} birimine atandınız.
@@ -159,8 +240,11 @@ export function ApplicationPage() {
           </button>
         </div>
       )}
-      {basvuru?.status === "APPROVED" && basvuru.kesinListede === true && !basvuru.atananBirimAdi && (
+      {basvuru?.status === "APPROVED" && basvuru.kesinListede === true && !basvuru.atananBirimAdi && !basvuru.imzaBildirimiGonderildi && (
         <div className="alert alert-ok">İŞKUR kesin listesine alındınız. Birim ataması bekleniyor. Başvuru değiştirilemez.</div>
+      )}
+      {basvuru?.status === "APPROVED" && basvuru.kesinListede === true && !basvuru.atananBirimAdi && basvuru.imzaBildirimiGonderildi && basvuru.imzaBildirimiOkundu && (
+        <div className="alert alert-ok">İmza bildiriminiz alındı. Birim ataması bekleniyor. Başvuru değiştirilemez.</div>
       )}
       {basvuru?.status === "APPROVED" && basvuru.kesinListede === false && (
         <div className="alert alert-wait">Evrakınız onaylanmıştı ancak İŞKUR kesin kayıt listesinde yer almıyorsunuz. Başvuru değiştirilemez.</div>
@@ -184,16 +268,16 @@ export function ApplicationPage() {
       <nav className="application-steps" aria-label="Başvuru adımları">
         <a href="#belgeler"><span>1</span><b>Belgeler</b><small>{new Set(basvuru?.belgeler.filter((belge) => belge.belgeTipi !== "HANE_SGK_DOKUMU").map((belge) => belge.belgeTipi) ?? []).size}/5</small></a>
         <a href="#hane-sgk"><span>2</span><b>Hane SGK</b><small>{basvuru?.belgeler.some((belge) => belge.belgeTipi === "HANE_SGK_DOKUMU") ? "Tamam" : "Bekliyor"}</small></a>
-        <a href="#hesap-bilgisi"><span>3</span><b>Hesap ve gönderim</b><small>{basvuru?.iban ? "Hazır" : "Bekliyor"}</small></a>
+        <a href="#hesap-bilgisi"><span>3</span><b>Hesap ve gönderim</b><small>{hesapBilgisiHazir ? "Hazır" : "Bekliyor"}</small></a>
       </nav>
 
       <section id="belgeler" aria-labelledby="belgeler-baslik">
-        <div className="section-intro"><h4 id="belgeler-baslik">Kişisel belgeler</h4><p>Her belgeyi ayrı yükleyin. OCR sonucu yönetici incelemesinde görünür.</p></div>
+        <div className="section-intro"><h4 id="belgeler-baslik">Kişisel belgeler</h4><p>Her belgeyi ayrı yükleyin. Yükledikten sonra yönetici incelemesine gönderilir.</p></div>
       <div className="upload-grid">
         {DOCUMENT_TYPES.map((item) => {
           const documents = basvuru?.belgeler.filter((b) => b.belgeTipi === item.type) ?? [];
           const current = documents[0];
-          if (item.type === "SGK_DOKUMU") {
+          if (item.type === "SGK_DOKUMU" || item.type === "IKAMETGAH") {
             return (
               <MultipleUploadSlot
                 key={item.type}
@@ -213,7 +297,6 @@ export function ApplicationPage() {
               title={item.title}
               hint={item.hint}
               fileName={current?.orijinalAd}
-              verification={current?.dogrulamaDurumu}
               locked={locked}
               busy={busy}
               onUpload={(file) => onUpload(item.type, file)}
@@ -241,7 +324,7 @@ export function ApplicationPage() {
           <label>IBAN</label>
           <input
             value={iban}
-            onChange={(e) => setIban(e.target.value.toUpperCase())}
+            onChange={(e) => updateIban(e.target.value.toUpperCase())}
             placeholder="TR00 0001 2..."
             disabled={locked}
             inputMode="text"
@@ -254,6 +337,24 @@ export function ApplicationPage() {
               {ibanCheck.message}
             </p>
           )}
+          <label>Banka şube kodu</label>
+          <input
+            value={bankaSubeKodu}
+            onChange={(e) => setBankaSubeKodu(onlyDigits(e.target.value).slice(0, 4))}
+            placeholder="1338"
+            disabled={locked}
+            inputMode="numeric"
+            maxLength={4}
+          />
+          <label>Hesap numarası</label>
+          <input
+            value={hesapNumarasi}
+            onChange={(e) => setHesapNumarasi(onlyDigits(e.target.value).slice(0, 16))}
+            placeholder="119577"
+            disabled={locked}
+            inputMode="numeric"
+            maxLength={16}
+          />
           <label>Hesap sahibi</label>
           <input value={hesapSahibi} onChange={(e) => setHesapSahibi(e.target.value)} disabled={locked} />
           <div className="row">
@@ -366,7 +467,6 @@ function UploadSlot({
   title,
   hint,
   fileName,
-  verification,
   locked,
   busy,
   onUpload,
@@ -376,7 +476,6 @@ function UploadSlot({
   title: string;
   hint: string;
   fileName?: string;
-  verification?: "DOGRULANDI" | "INCELEME_GEREKLI" | null;
   locked: boolean;
   busy: boolean;
   onUpload: (file: File) => void;
@@ -389,8 +488,6 @@ function UploadSlot({
       <h4>{title}</h4>
       <p>{hint}</p>
       {fileName ? <div className="file-name">{fileName}</div> : <div className="file-name">Henüz yüklenmedi</div>}
-      {verification === "DOGRULANDI" && <div className="upload-verification valid">Ad-soyad OCR ile doğrulandı.</div>}
-      {verification === "INCELEME_GEREKLI" && <div className="upload-verification">OCR ad-soyadı net okuyamadı; yönetici inceleyecek.</div>}
       <div className="row" style={{ marginTop: 12 }}>
         {!locked && (
           <label className="btn btn-primary" style={{ margin: 0 }}>
@@ -449,8 +546,6 @@ function MultipleUploadSlot({
           {documents.map((document) => (
             <div className="document-item" key={document.id}>
               <span className="document-name" title={document.orijinalAd}>{document.orijinalAd}</span>
-              {document.dogrulamaDurumu === "DOGRULANDI" && <span className="document-status valid">OCR doğrulandı</span>}
-              {document.dogrulamaDurumu === "INCELEME_GEREKLI" && <span className="document-status">İnceleme gerekli</span>}
               <button type="button" className="btn btn-secondary btn-compact" onClick={() => void openDocument(api.studentDocumentUrl(document.id))}>Görüntüle</button>
               {!locked && <button type="button" className="btn btn-danger" disabled={busy} onClick={() => onDelete(document.id)}>Sil</button>}
             </div>

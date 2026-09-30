@@ -14,6 +14,15 @@ import java.util.Comparator;
 public class DtoMapper {
 
     public StudentProfileResponse toProfile(Student student) {
+        return toProfile(student, false, true, null);
+    }
+
+    public StudentProfileResponse toProfile(
+            Student student,
+            boolean demoOgrenci,
+            boolean iskurBasvuruyaUygun,
+            String iskurBasvuruEngelMesaji
+    ) {
         return new StudentProfileResponse(
                 student.getId(),
                 student.getOgrenciNo(),
@@ -39,7 +48,10 @@ public class DtoMapper {
                 student.getIl(),
                 student.getIlce(),
                 student.getFotoUrl(),
-                student.getDanisman()
+                student.getDanisman(),
+                demoOgrenci,
+                iskurBasvuruyaUygun,
+                iskurBasvuruEngelMesaji
         );
     }
 
@@ -51,6 +63,8 @@ public class DtoMapper {
                 basvuru.getKayitTarihi(),
                 basvuru.getIban(),
                 basvuru.getHesapSahibi(),
+                basvuru.getBankaSubeKodu(),
+                basvuru.getHesapNumarasi(),
                 basvuru.getAylikGelir(),
                 basvuru.getAdminNotu(),
                 basvuru.getInceleyenAdmin(),
@@ -62,6 +76,11 @@ public class DtoMapper {
                 basvuru.isLockedForStudent(),
                 basvuru.getKesinListede(),
                 basvuru.isAtamaBildirimiOkundu(),
+                basvuru.isImzaBildirimiGonderildi(),
+                basvuru.getImzaBildirimiMesaji(),
+                basvuru.getImzaBildirimiGonderimTarihi(),
+                basvuru.isImzaBildirimiOkundu(),
+                basvuru.isImzaBildirimiEpostaGonderildi(),
                 basvuru.getAtananBirimKodu(),
                 basvuru.getAtananBirimAdi(),
                 basvuru.getAtamaTuru(),
@@ -87,6 +106,7 @@ public class DtoMapper {
                 belge.getIcerikTipi(),
                 belge.getBoyutByte(),
                 belge.getDogrulamaDurumu(),
+                belge.getDogrulamaNotu(),
                 belge.getYuklemeTarihi()
         );
     }

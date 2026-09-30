@@ -1,0 +1,137 @@
+# Production SSH:
+#   Host 193.140.136.26  user cekec  path /home/cekec/apps/sksiskur
+# Required GitHub Actions secret:
+#   DEPLOY_SSH_KEY  — OpenSSH private key whose public half is in cekec ~/.ssh/authorized_keys
+#
+# Optional secrets (override defaults): DEPLOY_HOST, DEPLOY_USER, DEPLOY_PATH, DEPLOY_PORT
+
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Backend tests
+        run: mvn -B -ntp test
+
+      - name: Frontend build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  deploy:
+    name: Deploy production
+    needs: ci
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Package backend
+        run: mvn -B -ntp -DskipTests package
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create deploy archive
+        run: bash scripts/pack-deploy.sh
+
+      - name: Check SSH key secret
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          if [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "GitHub secret DEPLOY_SSH_KEY is missing. Add the deploy private key in repo Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Upload archive
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST || '193.140.136.26' }}
+          username: ${{ secrets.DEPLOY_USER || 'cekec' }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          source: sksiskur-deploy.tar.gz
+          target: /home/cekec
+
+      - name: Extract and restart containers
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DEPLOY_HOST || '193.140.136.26' }}
+          username: ${{ secrets.DEPLOY_USER || 'cekec' }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+            APP_DIR="${{ secrets.DEPLOY_PATH || '/home/cekec/apps/sksiskur' }}"
+            STAMP="$(date +%Y%m%d%H%M%S)"
+            mkdir -p "$APP_DIR/backups" "$APP_DIR/target"
+            if [ -f "$APP_DIR/target/SKSIskur-0.0.1-SNAPSHOT.war" ]; then
+              cp "$APP_DIR/target/SKSIskur-0.0.1-SNAPSHOT.war" "$APP_DIR/backups/SKSIskur-$STAMP.war"
+            fi
+            tar -xzf /home/cekec/sksiskur-deploy.tar.gz -C "$APP_DIR"
+            cd "$APP_DIR"
+            docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+            for i in $(seq 1 30); do
+              code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8093/ || true)"
+              if [ "$code" = "200" ]; then
+                echo "Health check OK ($code)"
+                docker compose -f docker-compose.prod.yml --env-file .env ps
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Health check failed"
+            docker compose -f docker-compose.prod.yml --env-file .env ps
+            docker logs --tail 80 sksiskur-web-1 || true
+            docker logs --tail 80 sksiskur-api-1 || true
+            exit 1

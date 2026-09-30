@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../api";
+import { PageHeader } from "../components/PageHeader";
 import { Shell } from "../components/ui";
 import type { DagitimBirimi } from "../types";
 
@@ -45,7 +46,7 @@ export function AdminUnitsPage() {
   }
 
   return <Shell home="/admin" wide>
-    <h3 className="section">Dağıtım birimleri ve kontenjanlar</h3>
+    <PageHeader title="Birimler ve kontenjanlar" description="Dağıtım birimlerini tanımlayın ve kontenjanları yönetin." />
     <p className="muted">Sicilden gelen birimler ilk açılışta buraya eklenir. Dağıtıma kapalı birimler öğrenci atamasına hiç dahil edilmez. Her birimin kontenjanı ayrı uygulanır.</p>
     {error && <div className="alert alert-error">{error}</div>}{message && <div className="alert alert-ok">{message}</div>}
     <form className="card" style={{ padding: 18, marginBottom: 18 }} onSubmit={create}>

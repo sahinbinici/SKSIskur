@@ -19,6 +19,7 @@ import com.sks.sksiskur.web.dto.BirimOgrenciResponse;
 import com.sks.sksiskur.web.dto.EkuantKaydetRequest;
 import com.sks.sksiskur.web.dto.IzinRaporOgrenciResponse;
 import com.sks.sksiskur.web.dto.PuantajKaydetRequest;
+import com.sks.sksiskur.web.dto.OgrenciCalismaOzetResponse;
 import com.sks.sksiskur.web.dto.TakipDonemResponse;
 import com.sks.sksiskur.web.dto.TakipKapaliGunKaydetRequest;
 import org.springframework.beans.factory.annotation.Value;
@@ -45,6 +46,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -761,6 +763,51 @@ public class TakipService {
                         date + " için EK-6 girişi yönetici tarafından kapatıldı.");
             }
         }
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<OgrenciCalismaOzetResponse> ogrenciCalismaOzet(String ogrenciNo) {
+        return basvuruRepository.findByStudentOgrenciNoAndBasvuruDonemiAktifTrue(ogrenciNo)
+                .filter(Basvuru::isAssigned)
+                .filter(basvuru -> basvuru.getStatus() == ApplicationStatus.APPROVED)
+                .flatMap(basvuru -> {
+                    YearMonth month = YearMonth.now(ZONE);
+                    if (!basvuru.canWorkIn(month)) {
+                        return Optional.empty();
+                    }
+                    int kullanilanIzin = countPermissionDays(basvuru.getId());
+                    TakipDonem donem = takipDonemRepository
+                            .findByBasvuruIdAndYilAndAy(basvuru.getId(), month.getYear(), month.getMonthValue())
+                            .orElse(null);
+                    int buAyTamGun = 0;
+                    int buAyEkuantGun = donem == null ? 0 : donem.getGunler().size();
+                    TakipStatus status = null;
+                    boolean locked = false;
+                    if (donem != null) {
+                        status = donem.getStatus();
+                        locked = donem.isLocked();
+                        for (TakipGun gun : donem.getGunler()) {
+                            if (gun.getDurum() == PuantajDurum.GELDI) {
+                                buAyTamGun++;
+                            }
+                        }
+                    }
+                    return Optional.of(new OgrenciCalismaOzetResponse(
+                            basvuru.getId(),
+                            basvuru.getAtananBirimAdi(),
+                            basvuru.getAtananBirimKodu(),
+                            basvuru.getBasvuruDonemi() == null ? null : basvuru.getBasvuruDonemi().getAd(),
+                            month.getYear(),
+                            month.getMonthValue(),
+                            kullanilanIzin,
+                            MAX_IZIN_GUNU,
+                            Math.max(0, MAX_IZIN_GUNU - kullanilanIzin),
+                            buAyTamGun,
+                            buAyEkuantGun,
+                            status,
+                            locked
+                    ));
+                });
     }
 
     private BirimOgrenciResponse toOgrenci(Basvuru basvuru) {

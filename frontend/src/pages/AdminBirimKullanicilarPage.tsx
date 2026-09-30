@@ -1,5 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../api";
+import { useConfirm } from "../components/ConfirmDialog";
+import { PageHeader } from "../components/PageHeader";
 import { Shell, formatDate } from "../components/ui";
 import type { BirimKullanici, WorkUnit } from "../types";
 
@@ -12,6 +14,7 @@ const emptyForm = {
 };
 
 export function AdminBirimKullanicilarPage() {
+  const confirm = useConfirm();
   const [units, setUnits] = useState<WorkUnit[]>([]);
   const [items, setItems] = useState<BirimKullanici[]>([]);
   const [form, setForm] = useState(emptyForm);
@@ -122,7 +125,12 @@ export function AdminBirimKullanicilarPage() {
   }
 
   async function remove(item: BirimKullanici) {
-    if (!window.confirm(`${item.username} hesabı silinsin mi?`)) return;
+    if (!await confirm({
+      title: "Hesabı sil",
+      message: `${item.username} hesabı kalıcı olarak silinecek.`,
+      confirmLabel: "Sil",
+      variant: "danger"
+    })) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -140,7 +148,7 @@ export function AdminBirimKullanicilarPage() {
 
   return (
     <Shell home="/admin">
-      <h3 className="section">Birim hesapları</h3>
+      <PageHeader title="Birim hesapları" description="Birim kullanıcılarını oluşturun, güncelleyin ve erişimlerini yönetin." />
       <p style={{ color: "var(--muted)", maxWidth: 760, lineHeight: 1.55 }}>
         Her birime bir veya daha fazla kullanıcı tanımlanır. Bu hesapla giren kişi yalnızca kendi birimine
         atanan öğrencilerin EK-6 ve puantajını görür. Şifreler saklanmaz; yalnızca yeni şifre yazılabilir.

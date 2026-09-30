@@ -5,7 +5,9 @@ import com.sks.sksiskur.web.dto.AdminLoginRequest;
 import com.sks.sksiskur.web.dto.AuthResponse;
 import com.sks.sksiskur.web.dto.DemoInfoResponse;
 import com.sks.sksiskur.web.dto.StudentLoginRequest;
+import com.sks.sksiskur.service.OgrenciPanosuDuyuruService;
 import com.sks.sksiskur.service.AuthService;
+import com.sks.sksiskur.web.dto.YoneticiPanosuDuyuruResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -22,9 +25,11 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final OgrenciPanosuDuyuruService ogrenciPanosuDuyuruService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, OgrenciPanosuDuyuruService ogrenciPanosuDuyuruService) {
         this.authService = authService;
+        this.ogrenciPanosuDuyuruService = ogrenciPanosuDuyuruService;
     }
 
     @PostMapping("/ogrenci")
@@ -45,6 +50,11 @@ public class AuthController {
     @GetMapping("/demo")
     public DemoInfoResponse demoInfo() {
         return authService.demoInfo();
+    }
+
+    @GetMapping("/ogrenci-duyurulari")
+    public List<YoneticiPanosuDuyuruResponse> ogrenciDuyurulari() {
+        return ogrenciPanosuDuyuruService.listActive();
     }
 
     @GetMapping("/me")

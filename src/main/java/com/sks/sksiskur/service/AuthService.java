@@ -3,6 +3,7 @@ package com.sks.sksiskur.service;
 import com.sks.sksiskur.config.DemoAccounts;
 import com.sks.sksiskur.domain.AdminUser;
 import com.sks.sksiskur.domain.BirimKullanici;
+import com.sks.sksiskur.domain.IslemTuru;
 import com.sks.sksiskur.domain.Role;
 import com.sks.sksiskur.domain.Student;
 import com.sks.sksiskur.exception.ApiException;
@@ -40,6 +41,7 @@ public class AuthService {
     private final SicilUnitCatalog sicilUnitCatalog;
     private final BasvuruDonemiService basvuruDonemiService;
     private final IskurListeService iskurListeService;
+    private final AuditLogService auditLogService;
     private final boolean demoEnabled;
 
     public AuthService(
@@ -52,6 +54,7 @@ public class AuthService {
             SicilUnitCatalog sicilUnitCatalog,
             BasvuruDonemiService basvuruDonemiService,
             IskurListeService iskurListeService,
+            AuditLogService auditLogService,
             @Value("${app.demo.enabled:false}") boolean demoEnabled
     ) {
         this.prolizClient = prolizClient;
@@ -63,6 +66,7 @@ public class AuthService {
         this.sicilUnitCatalog = sicilUnitCatalog;
         this.basvuruDonemiService = basvuruDonemiService;
         this.iskurListeService = iskurListeService;
+        this.auditLogService = auditLogService;
         this.demoEnabled = demoEnabled;
     }
 
@@ -77,7 +81,10 @@ public class AuthService {
             }
             iskurListeService.assertEligible(local);
             String token = jwtService.generateToken(local.getOgrenciNo(), Role.STUDENT.name(), local.getId());
-            return new AuthResponse(token, Role.STUDENT, local.getAdSoyad(), local.getOgrenciNo(), null, null);
+            auditLogService.log(Role.STUDENT, local.getOgrenciNo(), local.getAdSoyad(), IslemTuru.GIRIS, "OGRENCI", local.getId(),
+                    "Öğrenci girişi (demo)", null);
+            return new AuthResponse(token, Role.STUDENT, local.getAdSoyad(), local.getOgrenciNo(), null, null,
+                    local.getOgrenciNo(), local.getId(), null);
         }
 
         ProlizLoginResponse login = prolizClient.checkPassword(ogrenciNo, request.sifre(), clientIp(httpRequest));
@@ -93,7 +100,10 @@ public class AuthService {
         iskurListeService.assertEligible(student);
 
         String token = jwtService.generateToken(student.getOgrenciNo(), Role.STUDENT.name(), student.getId());
-        return new AuthResponse(token, Role.STUDENT, student.getAdSoyad(), student.getOgrenciNo(), null, null);
+        auditLogService.log(Role.STUDENT, student.getOgrenciNo(), student.getAdSoyad(), IslemTuru.GIRIS, "OGRENCI", student.getId(),
+                "Öğrenci girişi", null);
+        return new AuthResponse(token, Role.STUDENT, student.getAdSoyad(), student.getOgrenciNo(), null, null,
+                student.getOgrenciNo(), student.getId(), null);
     }
 
     public AuthResponse adminLogin(AdminLoginRequest request) {
@@ -103,8 +113,12 @@ public class AuthService {
         if (!passwordEncoder.matches(request.password(), admin.getPasswordHash())) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "Kullanıcı adı veya şifre hatalı");
         }
-        String token = jwtService.generateToken(admin.getUsername(), Role.ADMIN.name(), admin.getId());
-        return new AuthResponse(token, Role.ADMIN, admin.getAdSoyad(), null, null, null);
+        String token = jwtService.generateToken(admin.getUsername(), Role.ADMIN.name(), admin.getId(), null,
+                admin.getRol().name());
+        auditLogService.log(Role.ADMIN, admin.getUsername(), admin.getAdSoyad(), IslemTuru.GIRIS, "YONETICI", admin.getId(),
+                "Yönetici girişi", admin.getRol().name());
+        return new AuthResponse(token, Role.ADMIN, admin.getAdSoyad(), null, null, null,
+                admin.getUsername(), admin.getId(), admin.getRol());
     }
 
     public AuthResponse unitLogin(AdminLoginRequest request) {
@@ -118,7 +132,10 @@ public class AuthService {
                 throw new ApiException(HttpStatus.UNAUTHORIZED, "Bu birim hesabı pasif.");
             }
             String token = jwtService.generateToken(local.getUsername(), Role.BIRIM.name(), local.getId(), local.getBirimKodu());
-            return new AuthResponse(token, Role.BIRIM, local.getAdSoyad(), null, local.getBirimKodu(), local.getBirimAdi());
+            auditLogService.log(Role.BIRIM, local.getUsername(), local.getBirimAdi(), IslemTuru.GIRIS, "BIRIM", local.getId(),
+                    "Birim girişi", local.getBirimKodu());
+            return new AuthResponse(token, Role.BIRIM, local.getAdSoyad(), null, local.getBirimKodu(), local.getBirimAdi(),
+                    local.getUsername(), local.getId(), null);
         }
         WorkUnit unit = sicilUnitCatalog.authenticate(username, request.password())
                 .or(() -> demoEnabled ? DemoAccounts.authenticate(username, request.password()) : java.util.Optional.empty())
@@ -130,7 +147,10 @@ public class AuthService {
             uid = 0L;
         }
         String token = jwtService.generateToken(unit.kod(), Role.BIRIM.name(), uid, unit.kod());
-        return new AuthResponse(token, Role.BIRIM, unit.displayName(), null, unit.kod(), unit.displayName());
+        auditLogService.log(Role.BIRIM, unit.kod(), unit.displayName(), IslemTuru.GIRIS, "BIRIM", uid,
+                "Birim girişi (sicil)", unit.kod());
+        return new AuthResponse(token, Role.BIRIM, unit.displayName(), null, unit.kod(), unit.displayName(),
+                unit.kod(), uid, null);
     }
 
     private void applyStudent(Student student, ProlizStudentDto remote) {

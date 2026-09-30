@@ -3,6 +3,8 @@ package com.sks.sksiskur.service;
 import com.sks.sksiskur.domain.ApplicationStatus;
 import com.sks.sksiskur.domain.Basvuru;
 import com.sks.sksiskur.domain.BasvuruDonemi;
+import com.sks.sksiskur.domain.IslemTuru;
+import com.sks.sksiskur.domain.Role;
 import com.sks.sksiskur.domain.KayitListesi;
 import com.sks.sksiskur.domain.KayitTuru;
 import com.sks.sksiskur.domain.KesinKayitKaydi;
@@ -31,19 +33,22 @@ public class KesinListeService {
     private final KayitListesiRepository kayitListesiRepository;
     private final BasvuruDonemiService basvuruDonemiService;
     private final IskurExcelParser excelParser;
+    private final AuditLogService auditLogService;
 
     public KesinListeService(
             KesinKayitKaydiRepository kesinKayitKaydiRepository,
             BasvuruRepository basvuruRepository,
             KayitListesiRepository kayitListesiRepository,
             BasvuruDonemiService basvuruDonemiService,
-            IskurExcelParser excelParser
+            IskurExcelParser excelParser,
+            AuditLogService auditLogService
     ) {
         this.kesinKayitKaydiRepository = kesinKayitKaydiRepository;
         this.basvuruRepository = basvuruRepository;
         this.kayitListesiRepository = kayitListesiRepository;
         this.basvuruDonemiService = basvuruDonemiService;
         this.excelParser = excelParser;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -82,6 +87,9 @@ public class KesinListeService {
         meta.setKesinListeYuklemeTarihi(Instant.now());
         meta.setKesinListeYukleyenAdmin(adminUsername);
         kayitListesiRepository.save(meta);
+        auditLogService.log(Role.ADMIN, adminUsername, adminUsername, IslemTuru.KESIN_LISTE_YUKLE, "DONEM", donem.getId(),
+                "Kesin liste yüklendi: " + donem.getAd(),
+                comparison.eslesen() + " eşleşme, " + comparison.kesinListedeDegil() + " listede yok");
 
         return new KesinListeUploadResponse(
                 donem.getId(),

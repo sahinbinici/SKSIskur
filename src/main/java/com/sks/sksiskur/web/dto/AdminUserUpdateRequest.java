@@ -1,5 +1,7 @@
 package com.sks.sksiskur.web.dto;
 
+import com.sks.sksiskur.domain.AdminRole;
+
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -14,6 +16,7 @@ public record AdminUserUpdateRequest(
         @Size(max = 120, message = "Ad soyad 120 karakteri aşamaz")
         String adSoyad,
         @NotNull(message = "Durum zorunludur")
-        Boolean aktif
+        Boolean aktif,
+        AdminRole rol
 ) {
 }

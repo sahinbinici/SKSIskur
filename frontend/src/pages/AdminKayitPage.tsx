@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError, downloadAuthenticatedFile } from "../api";
-import { Shell, formatDate } from "../components/ui";
-import { KayitListSheets } from "./AdminListReports";
+import { useConfirm } from "../components/ConfirmDialog";
+import { EmptyState } from "../components/EmptyState";
+import { PageHeader } from "../components/PageHeader";
+import { Shell, formatDate } from "../components/ui";import { KayitListSheets } from "./AdminListReports";
 import type { KayitListeFiltre, KayitListesi } from "../types";
 
 function kesinDurumLabel(kesinListede: boolean | null) {
@@ -12,7 +14,7 @@ function kesinDurumLabel(kesinListede: boolean | null) {
 }
 
 export function AdminKayitPage() {
-  const [data, setData] = useState<KayitListesi | null>(null);
+  const confirm = useConfirm();  const [data, setData] = useState<KayitListesi | null>(null);
   const [filter, setFilter] = useState<KayitListeFiltre>("TUMU");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -29,8 +31,12 @@ export function AdminKayitPage() {
   }, []);
 
   async function uploadKesinList(file: File) {
-    if (!window.confirm("Yeni dosya mevcut kesin listesini değiştirir ve karşılaştırmayı yeniden yapar. Devam edilsin mi?")) return;
-    setBusy(true);
+    const ok = await confirm({
+      title: "Kesin listeyi yükle",
+      message: "Yeni dosya mevcut kesin listesini değiştirir ve karşılaştırmayı yeniden yapar.",
+      confirmLabel: "Yükle"
+    });
+    if (!ok) return;    setBusy(true);
     setError("");
     setMessage("");
     try {
@@ -46,8 +52,12 @@ export function AdminKayitPage() {
   }
 
   async function onayla() {
-    if (!window.confirm("Karşılaştırma sonucu onaylansın mı? Onaydan sonra birim dağıtımı yapılabilir.")) return;
-    setBusy(true);
+    const ok = await confirm({
+      title: "Karşılaştırmayı onayla",
+      message: "Onaydan sonra birim dağıtımı yapılabilir. Bu işlem geri alınabilir.",
+      confirmLabel: "Onayla"
+    });
+    if (!ok) return;    setBusy(true);
     setError("");
     setMessage("");
     try {
@@ -61,9 +71,34 @@ export function AdminKayitPage() {
     }
   }
 
+  async function gonderImzaBildirimi() {
+    const ok = await confirm({
+      title: "İmza bildirimi gönder",
+      message: "Kesin kayıtlı öğrencilere sayfa bildirimi ve Proliz e-posta adresine e-posta gönderilir.",
+      confirmLabel: "Gönder"
+    });
+    if (!ok) return;    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await api.gonderImzaBildirimi();
+      await load();
+      setMessage(`İmza bildirimi gönderildi: ${result.hedefOgrenci} öğrenci, ${result.epostaGonderilen} e-posta, ${result.epostaAtlanan} e-posta atlandı, ${result.epostaBasarisiz} e-posta başarısız.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "İmza bildirimi gönderilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function geriAl() {
-    if (!window.confirm("Kesin liste yüklemesi ve onayı geri alınsın mı? Dağıtım yapılmamış olmalıdır.")) return;
-    setBusy(true);
+    const ok = await confirm({
+      title: "Kesin listeyi sıfırla",
+      message: "Kesin liste yüklemesi ve onayı geri alınır. Dağıtım yapılmamış olmalıdır.",
+      confirmLabel: "Sıfırla",
+      variant: "danger"
+    });
+    if (!ok) return;    setBusy(true);
     setError("");
     setMessage("");
     try {
@@ -80,18 +115,21 @@ export function AdminKayitPage() {
   return (
     <Shell home="/admin">
       <div className="no-print">
-      <h3 className="section">İŞKUR kesin kayıt listesi</h3>
-      <p style={{ color: "var(--muted)", maxWidth: 820, lineHeight: 1.55 }}>
-        Evrak onayı kesin kayıt değildir. Onaylı başvuruları Excel olarak indirip İŞKUR&apos;a gönderin.
-        İŞKUR incelemesinden sonra dönen kesin listeyi yükleyin; sistem onaylı başvurularla otomatik karşılaştırır.
-        Karşılaştırmayı onayladıktan sonra birim dağıtımı yapılabilir.
-      </p>
-      {error && <div className="alert alert-error">{error}</div>}
+      <PageHeader
+        title="İŞKUR kesin kayıt"
+        description="Onaylı başvuruları İŞKUR'a gönderin, dönen kesin listeyi yükleyin, imza bildirimi ve dağıtım adımlarını tamamlayın."
+      />      {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
       {data?.kesinOnaylandi && (
         <div className="alert alert-ok">
           Kesin liste karşılaştırması onaylandı{data.onaylayanAdmin ? ` (${data.onaylayanAdmin})` : ""}.
           {data.onayTarihi ? ` ${formatDate(data.onayTarihi)}` : ""}
+        </div>
+      )}
+      {data?.imzaBildirimiGonderildi && (
+        <div className="alert alert-ok">
+          İmza bildirimi gönderildi{data.imzaBildirimiGonderenAdmin ? ` (${data.imzaBildirimiGonderenAdmin})` : ""}.
+          {data.imzaBildirimiGonderimTarihi ? ` ${formatDate(data.imzaBildirimiGonderimTarihi)}` : ""}
         </div>
       )}
       <div className="grid-5" style={{ marginBottom: 18 }}>
@@ -113,7 +151,7 @@ export function AdminKayitPage() {
         </button>
       </section>
       <section className="card" style={{ padding: 18, marginBottom: 18 }}>
-        <h4 style={{ marginTop: 0 }}>2. İŞKUR&apos;dan gelen kesin listeyi yükleyin</h4>
+        <h4 style={{ marginTop: 0 }}>2. İŞKUR&apos;dan gelen kesin listeyi yükleyin ve onaylayın</h4>
         <div className="row" style={{ alignItems: "center" }}>
           <input
             ref={fileInputRef}
@@ -132,6 +170,27 @@ export function AdminKayitPage() {
             </span>
           )}
         </div>
+        <div className="row" style={{ marginTop: 14 }}>
+          <button className="btn btn-gold" disabled={busy || !data?.kesinListeYuklendi || data?.kesinOnaylandi} onClick={() => void onayla()}>
+            Karşılaştırmayı onayla
+          </button>
+          <button className="btn btn-danger" disabled={busy || (!data?.kesinListeYuklendi && !data?.kesinOnaylandi)} onClick={() => void geriAl()}>
+            Listeyi sıfırla
+          </button>
+        </div>
+      </section>      <section className="card" style={{ padding: 18, marginBottom: 18 }}>
+        <h4 style={{ marginTop: 0 }}>3. Öğrencilere imza bildirimi gönderin</h4>
+        <p style={{ color: "var(--muted)", lineHeight: 1.55, marginTop: 0 }}>
+          Birim dağıtımından önce kesin kayıtlı öğrencilere hem sistemde mesaj hem de Proliz e-posta adresine bildirim gider.
+          Merkez kampüs öğrencileri SKS Daire Başkanlığı&apos;na, taşra öğrencileri bulundukları birime gelerek imza atmalıdır.
+        </p>
+        <button
+          className="btn btn-gold"
+          disabled={busy || !data?.kesinOnaylandi || data?.imzaBildirimiGonderildi || (data?.kesinListede ?? 0) === 0}
+          onClick={gonderImzaBildirimi}
+        >
+          İmza bildirimi gönder
+        </button>
       </section>
       <div className="toolbar">
         <select
@@ -147,17 +206,10 @@ export function AdminKayitPage() {
           <option value="KESIN_LISTEDE_DEGIL">Kesin listede değil</option>
           <option value="ONAYLI_BASVURU">Karşılaştırma bekleyen</option>
         </select>
-        <button className="btn btn-gold" disabled={busy || !data?.kesinListeYuklendi || data?.kesinOnaylandi} onClick={onayla}>
-          Karşılaştırmayı onayla
-        </button>
-        <button className="btn btn-primary" disabled={busy || (!data?.kesinListeYuklendi && !data?.kesinOnaylandi)} onClick={geriAl}>
-          Listeyi sıfırla
-        </button>
         <button className="btn btn-secondary" disabled={!data} onClick={() => window.print()}>
           Yazdır / PDF
         </button>
-      </div>
-      {data && data.listedeEslesmeyenler.length > 0 && (
+      </div>      {data && data.listedeEslesmeyenler.length > 0 && (
         <section className="card" style={{ padding: 18, marginBottom: 18, overflow: "auto" }}>
           <h4 style={{ marginTop: 0 }}>Kesin listede olup başvurusu eşleşmeyen kayıtlar</h4>
           <table>
@@ -198,10 +250,11 @@ export function AdminKayitPage() {
             ))}
             {(data?.ogrenciler.length ?? 0) === 0 && (
               <tr>
-                <td colSpan={4} style={{ color: "var(--muted)" }}>Bu filtrede öğrenci yok. Önce evrak onayını tamamlayın.</td>
+                <td colSpan={4}>
+                  <EmptyState title="Bu filtrede öğrenci yok" description="Önce evrak onayını tamamlayın veya filtreyi değiştirin." />
+                </td>
               </tr>
-            )}
-          </tbody>
+            )}          </tbody>
         </table>
       </div>
       </div>

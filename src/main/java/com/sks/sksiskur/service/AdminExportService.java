@@ -1,26 +1,44 @@
 package com.sks.sksiskur.service;
 
 import com.sks.sksiskur.domain.ApplicationStatus;
+import com.sks.sksiskur.domain.Basvuru;
+import com.sks.sksiskur.domain.BasvuruBelgesi;
+import com.sks.sksiskur.domain.DocumentType;
 import com.sks.sksiskur.domain.IskurBasvuruKaydi;
+import com.sks.sksiskur.domain.Student;
+import com.sks.sksiskur.exception.ApiException;
 import com.sks.sksiskur.domain.KayitTuru;
 import com.sks.sksiskur.domain.PuantajDurum;
 import com.sks.sksiskur.domain.TakipStatus;
 import com.sks.sksiskur.repository.IskurBasvuruKaydiRepository;
 import com.sks.sksiskur.web.dto.AdminTakipOzetResponse;
 import com.sks.sksiskur.web.dto.BasvuruResponse;
+import com.sks.sksiskur.web.dto.BelgeYuklemeFiltre;
 import com.sks.sksiskur.web.dto.BirimAylikRaporResponse;
 import com.sks.sksiskur.web.dto.IzinRaporOgrenciResponse;
 import com.sks.sksiskur.web.dto.KayitListeFiltre;
 import com.sks.sksiskur.web.dto.KayitListesiResponse;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Service
 public class AdminExportService {
@@ -32,24 +50,35 @@ public class AdminExportService {
     private final IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository;
     private final BasvuruDonemiService basvuruDonemiService;
     private final ExcelExportService excelExportService;
+    private final FileStorageService fileStorageService;
 
     public AdminExportService(
             AdminApplicationService adminApplicationService,
             TakipService takipService,
             IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository,
             BasvuruDonemiService basvuruDonemiService,
-            ExcelExportService excelExportService
+            ExcelExportService excelExportService,
+            FileStorageService fileStorageService
     ) {
         this.adminApplicationService = adminApplicationService;
         this.takipService = takipService;
         this.iskurBasvuruKaydiRepository = iskurBasvuruKaydiRepository;
         this.basvuruDonemiService = basvuruDonemiService;
         this.excelExportService = excelExportService;
+        this.fileStorageService = fileStorageService;
     }
 
     @Transactional(readOnly = true)
-    public byte[] basvurularExcel(Long donemId, ApplicationStatus status, String query, String assignedTo) {
-        List<BasvuruResponse> items = adminApplicationService.list(donemId, status, query, assignedTo);
+    public byte[] basvurularExcel(
+            Long donemId,
+            ApplicationStatus status,
+            String query,
+            String assignedTo,
+            DocumentType belgeTipi,
+            BelgeYuklemeFiltre belgeYukleme
+    ) {
+        List<BasvuruResponse> items = adminApplicationService.list(
+                donemId, status, query, assignedTo, belgeTipi, belgeYukleme);
         List<String> headers = List.of(
                 "Sıra", "Öğrenci No", "T.C. Kimlik", "Ad", "Soyad", "Fakülte / Bölüm",
                 "Atanan Birim", "İnceleme Sorumlusu", "Durum", "Kayıt", "Belge", "Gönderim"
@@ -57,15 +86,15 @@ public class AdminExportService {
         List<List<Object>> rows = new ArrayList<>();
         for (int i = 0; i < items.size(); i++) {
             BasvuruResponse item = items.get(i);
-            rows.add(List.of(
+            rows.add(excelRow(
                     i + 1,
                     item.student().ogrenciNo(),
-                    nullToEmpty(item.student().tcKimlikNo()),
+                    item.student().tcKimlikNo(),
                     item.student().ad(),
                     item.student().soyad(),
                     faculty(item.student().fakulte(), item.student().program(), item.student().bolum()),
-                    nullToEmpty(item.atananBirimAdi()),
-                    nullToEmpty(item.atananAdmin()),
+                    item.atananBirimAdi(),
+                    item.atananAdmin(),
                     statusLabel(item.status()),
                     kayitLabel(item),
                     item.belgeler().size() + "/5",
@@ -73,6 +102,111 @@ public class AdminExportService {
             ));
         }
         return excelExportService.singleSheet("Başvurular", headers, rows);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] basvurularBelgeBazindaZip(
+            Long donemId,
+            ApplicationStatus status,
+            String query,
+            String assignedTo,
+            DocumentType belgeTipi,
+            BelgeYuklemeFiltre belgeYukleme
+    ) {
+        if (belgeTipi == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Toplu indirme için belge türü seçmelisiniz.");
+        }
+        if (belgeYukleme == BelgeYuklemeFiltre.YOK) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Eksik belge filtresinde indirilecek dosya bulunmaz.");
+        }
+        List<Basvuru> basvurular = adminApplicationService.listBasvurular(
+                donemId, status, query, assignedTo, belgeTipi, belgeYukleme);
+        String belgeFolder = belgeTipi.name().toLowerCase(Locale.ROOT);
+        try (ByteArrayOutputStream output = new ByteArrayOutputStream(); ZipOutputStream zip = new ZipOutputStream(output)) {
+            Set<String> usedNames = new HashSet<>();
+            int fileCount = 0;
+            for (Basvuru basvuru : basvurular) {
+                Student student = basvuru.getStudent();
+                String studentPrefix = safeZipName(student.getOgrenciNo() + "_" + student.getAd() + "_" + student.getSoyad());
+                Map<DocumentType, Integer> counters = new EnumMap<>(DocumentType.class);
+                List<BasvuruBelgesi> belgeler = basvuru.getBelgeler().stream()
+                        .filter(belge -> belge.getBelgeTipi() == belgeTipi)
+                        .sorted(Comparator.comparing(BasvuruBelgesi::getYuklemeTarihi))
+                        .toList();
+                for (BasvuruBelgesi belge : belgeler) {
+                    Path path = fileStorageService.resolve(belge.getSaklamaYolu());
+                    if (!Files.exists(path)) {
+                        continue;
+                    }
+                    int index = counters.merge(belge.getBelgeTipi(), 1, Integer::sum);
+                    String entryName = uniqueZipEntry(
+                            usedNames,
+                            belgeFolder + "/" + studentPrefix + "_" + zipBelgeFileName(belge, index)
+                    );
+                    zip.putNextEntry(new ZipEntry(entryName));
+                    Files.copy(path, zip);
+                    zip.closeEntry();
+                    fileCount++;
+                }
+            }
+            zip.finish();
+            if (fileCount == 0) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Seçilen filtreye uygun indirilebilir dosya bulunamadı.");
+            }
+            return output.toByteArray();
+        } catch (IOException ex) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Belge dosyaları hazırlanamadı.");
+        }
+    }
+
+    private static String zipBelgeFileName(BasvuruBelgesi belge, int index) {
+        String extension = fileExtension(belge.getOrijinalAd(), belge.getSaklamaYolu());
+        String base = belge.getOrijinalAd();
+        if (base == null || base.isBlank()) {
+            base = belge.getBelgeTipi().name().toLowerCase(Locale.ROOT);
+        } else {
+            base = base.replaceAll("\\.[^.]+$", "");
+        }
+        base = safeZipName(base);
+        if (index > 1) {
+            base = base + "_" + index;
+        }
+        if (belge.getHaneUyesiAdi() != null && !belge.getHaneUyesiAdi().isBlank()) {
+            base = base + "_" + safeZipName(belge.getHaneUyesiAdi());
+        }
+        return base + extension;
+    }
+
+    private static String fileExtension(String originalName, String storagePath) {
+        String candidate = originalName != null && originalName.contains(".") ? originalName : storagePath;
+        int dot = candidate.lastIndexOf('.');
+        if (dot < 0 || dot == candidate.length() - 1) {
+            return "";
+        }
+        return candidate.substring(dot).toLowerCase(Locale.ROOT);
+    }
+
+    private static String uniqueZipEntry(Set<String> usedNames, String candidate) {
+        String entry = safeZipName(candidate);
+        if (usedNames.add(entry)) {
+            return entry;
+        }
+        String base = entry;
+        String extension = "";
+        int dot = entry.lastIndexOf('.');
+        if (dot > 0) {
+            base = entry.substring(0, dot);
+            extension = entry.substring(dot);
+        }
+        int suffix = 2;
+        while (!usedNames.add(base + "_" + suffix + extension)) {
+            suffix++;
+        }
+        return base + "_" + suffix + extension;
+    }
+
+    private static String safeZipName(String value) {
+        return value.replaceAll("[\\\\/:*?\"<>|]", "_");
     }
 
     @Transactional(readOnly = true)
@@ -84,11 +218,11 @@ public class AdminExportService {
         List<KayitListesiResponse.Satir> disinda = onayli.stream()
                 .filter(row -> Boolean.FALSE.equals(row.kesinListede())).toList();
         List<List<Object>> eslesmeyen = data.listedeEslesmeyenler().stream()
-                .map(row -> List.<Object>of(
-                        nullToEmpty(row.tcKimlikNo()),
+                .map(row -> excelRow(
+                        row.tcKimlikNo(),
                         row.ad(),
                         row.soyad(),
-                        nullToEmpty(row.ogrenciNo())
+                        row.ogrenciNo()
                 ))
                 .toList();
         return excelExportService.workbook(List.of(
@@ -112,12 +246,12 @@ public class AdminExportService {
         List<List<Object>> rows = new ArrayList<>();
         for (int i = 0; i < kayitlar.size(); i++) {
             IskurBasvuruKaydi kayit = kayitlar.get(i);
-            rows.add(List.of(
+            rows.add(excelRow(
                     i + 1,
-                    nullToEmpty(kayit.getTcKimlikNo()),
+                    kayit.getTcKimlikNo(),
                     kayit.getAd(),
                     kayit.getSoyad(),
-                    nullToEmpty(kayit.getOgrenciNo())
+                    kayit.getOgrenciNo()
             ));
         }
         return excelExportService.singleSheet("İŞKUR Listesi", headers, rows);
@@ -133,12 +267,12 @@ public class AdminExportService {
         List<List<Object>> rows = new ArrayList<>();
         for (int i = 0; i < ozet.ogrenciler().size(); i++) {
             AdminTakipOzetResponse.Satir row = ozet.ogrenciler().get(i);
-            rows.add(List.of(
+            rows.add(excelRow(
                     i + 1,
                     row.ogrenciNo(),
                     row.adSoyad(),
-                    nullToEmpty(row.birimKodu()),
-                    nullToEmpty(row.birimAdi()),
+                    row.birimKodu(),
+                    row.birimAdi(),
                     row.ekuant(),
                     row.geldi(),
                     row.gelmedi(),
@@ -163,20 +297,20 @@ public class AdminExportService {
         List<List<Object>> ekuantRows = new ArrayList<>();
         List<List<Object>> puantajRows = new ArrayList<>();
         for (BirimAylikRaporResponse.RaporOgrenci ogrenci : rapor.ogrenciler()) {
-            ekuantRows.add(List.of(
+            ekuantRows.add(excelRow(
                     ogrenci.siraNo(),
                     ogrenci.ogrenciNo(),
-                    nullToEmpty(ogrenci.tcKimlikNo()),
+                    ogrenci.tcKimlikNo(),
                     ogrenci.ad(),
                     ogrenci.soyad(),
-                    nullToEmpty(ogrenci.iban()),
+                    ogrenci.iban(),
                     formatDays(ogrenci.ekuantGunler()),
                     ogrenci.ekuantGunler().size()
             ));
-            puantajRows.add(List.of(
+            puantajRows.add(excelRow(
                     ogrenci.siraNo(),
                     ogrenci.ogrenciNo(),
-                    nullToEmpty(ogrenci.tcKimlikNo()),
+                    ogrenci.tcKimlikNo(),
                     ogrenci.ad(),
                     ogrenci.soyad(),
                     formatDays(ogrenci.geldiGunler()),
@@ -195,13 +329,13 @@ public class AdminExportService {
         List<IzinRaporOgrenciResponse> rows = takipService.leaveAndReportStudents(donemId, birimKodu, yil, ay);
         List<String> headers = List.of("Öğrenci No", "Ad Soyad", "Birim", "Tarih", "Durum", "Belge");
         List<List<Object>> data = rows.stream()
-                .map(row -> List.<Object>of(
+                .map(row -> excelRow(
                         row.ogrenciNo(),
                         row.adSoyad(),
-                        nullToEmpty(row.birimAdi()),
+                        row.birimAdi(),
                         row.tarih(),
                         row.durum() == PuantajDurum.IZINLI ? "İzinli" : "Raporlu",
-                        nullToEmpty(row.belgeAdi())
+                        row.belgeAdi()
                 ))
                 .toList();
         return excelExportService.singleSheet("İzin ve Rapor", headers, data);
@@ -212,10 +346,10 @@ public class AdminExportService {
         var period = basvuruDonemiService.resolveForAdmin(donemId);
         List<String> headers = List.of("Öğrenci No", "Ad Soyad", "Birim", "İlişki Kesilme Tarihi", "Başvuru Dönemi");
         List<List<Object>> rows = takipService.terminatedStudents(donemId, birimKodu).stream()
-                .map(row -> List.<Object>of(
+                .map(row -> excelRow(
                         row.ogrenciNo(),
                         row.adSoyad(),
-                        nullToEmpty(row.birimAdi()),
+                        row.birimAdi(),
                         row.iliskiBitisTarihi(),
                         period.getAd()
                 ))
@@ -230,15 +364,15 @@ public class AdminExportService {
         List<List<Object>> data = new ArrayList<>();
         for (int i = 0; i < rows.size(); i++) {
             KayitListesiResponse.Satir row = rows.get(i);
-            data.add(List.of(
+            data.add(excelRow(
                     i + 1,
                     row.ogrenciNo(),
-                    nullToEmpty(row.tcKimlikNo()),
-                    nullToEmpty(row.ad()),
-                    nullToEmpty(row.soyad()),
+                    row.tcKimlikNo(),
+                    row.ad(),
+                    row.soyad(),
                     faculty(row.fakulte(), row.program(), row.bolum()),
                     kesinListeLabel(row.kesinListede()),
-                    nullToEmpty(row.atananBirimAdi())
+                    row.atananBirimAdi()
             ));
         }
         return new ExcelExportService.SheetSpec(name, headers, data);
@@ -261,6 +395,14 @@ public class AdminExportService {
 
     private static String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private static List<Object> excelRow(Object... values) {
+        List<Object> row = new ArrayList<>(values.length);
+        for (Object value : values) {
+            row.add(value == null ? "" : value);
+        }
+        return row;
     }
 
     private static String statusLabel(ApplicationStatus status) {

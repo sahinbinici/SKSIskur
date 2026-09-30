@@ -33,14 +33,30 @@ public class BelgeOcrService {
     }
 
     public BelgeDogrulamaDurumu verify(Path source, String contentType, Student student, DocumentType type) {
-        String text = normalize(extract(source, contentType));
-        if (text.isBlank()) return BelgeDogrulamaDurumu.INCELEME_GEREKLI;
-        if (!hasExpectedTitle(text, type)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, type.getLabel() + " başlığı OCR ile doğrulanamadı; doğru ve net belge yükleyiniz.");
+        return review(source, contentType, student, type).durum();
+    }
+
+    public BelgeOcrReviewResult review(Path source, String contentType, Student student, DocumentType type) {
+        try {
+            String text = normalize(extract(source, contentType));
+            if (text.isBlank()) {
+                return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.INCELEME_GEREKLI,
+                        "Belge metni okunamadı. Net PDF/görsel ve e-Devlet barkodlu çıktı olup olmadığını kontrol edin.");
+            }
+            if (!hasExpectedTitle(text, type)) {
+                return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.INCELEME_GEREKLI,
+                        type.getLabel() + " başlığı bulunamadı. Doğru belge türü yüklendi mi kontrol edin.");
+            }
+            if (containsAllWords(text, student.getAd()) && containsAllWords(text, student.getSoyad())) {
+                return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.DOGRULANDI,
+                        "Belge başlığı ve öğrenci ad-soyadı OCR ile eşleşti.");
+            }
+            return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.INCELEME_GEREKLI,
+                    "Ad-soyad OCR ile tam eşleşmedi. Belgeyi açıp öğrenci bilgisiyle karşılaştırın.");
+        } catch (Exception ex) {
+            return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.INCELEME_GEREKLI,
+                    "OCR çalıştırılamadı; belgeyi manuel inceleyin.");
         }
-        return containsAllWords(text, student.getAd()) && containsAllWords(text, student.getSoyad())
-                ? BelgeDogrulamaDurumu.DOGRULANDI
-                : BelgeDogrulamaDurumu.INCELEME_GEREKLI;
     }
 
     private boolean hasExpectedTitle(String text, DocumentType type) {

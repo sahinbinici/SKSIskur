@@ -1,5 +1,6 @@
 package com.sks.sksiskur.config;
 
+import com.sks.sksiskur.domain.AdminRole;
 import com.sks.sksiskur.domain.AdminUser;
 import com.sks.sksiskur.repository.AdminUserRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,8 +34,16 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     public void run(String... args) {
         adminUserRepository.findByUsername(username).ifPresentOrElse(admin -> {
+            boolean changed = false;
             if (name != null && !name.equals(admin.getAdSoyad())) {
                 admin.setAdSoyad(name);
+                changed = true;
+            }
+            if (admin.getRol() != AdminRole.SUPER_ADMIN) {
+                admin.setRol(AdminRole.SUPER_ADMIN);
+                changed = true;
+            }
+            if (changed) {
                 adminUserRepository.save(admin);
             }
         }, () -> {
@@ -43,6 +52,7 @@ public class DataInitializer implements CommandLineRunner {
             admin.setPasswordHash(passwordEncoder.encode(password));
             admin.setAdSoyad(name);
             admin.setAktif(true);
+            admin.setRol(AdminRole.SUPER_ADMIN);
             adminUserRepository.save(admin);
         });
     }

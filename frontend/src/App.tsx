@@ -4,6 +4,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { StudentHome } from "./pages/StudentHome";
 import { ApplicationPage } from "./pages/ApplicationPage";
 import { AdminDashboard } from "./pages/AdminDashboard";
+import { AdminBasvuruReports } from "./pages/AdminBasvuruReports";
 import { AdminDetail } from "./pages/AdminDetail";
 import { AdminDistribution } from "./pages/AdminDistribution";
 import { AdminKayitPage } from "./pages/AdminKayitPage";
@@ -14,6 +15,8 @@ import { AdminPeriodsPage } from "./pages/AdminPeriodsPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { AdminAgreementsPage } from "./pages/AdminAgreementsPage";
 import { AdminUnitsPage } from "./pages/AdminUnitsPage";
+import { AdminDuyurularPage } from "./pages/AdminDuyurularPage";
+import { AdminIslemLogPage } from "./pages/AdminIslemLogPage";
 import { UnitStudentsPage } from "./pages/UnitStudentsPage";
 import { UnitTrackingPage } from "./pages/UnitTrackingPage";
 import { UnitReportPage } from "./pages/UnitReportPage";
@@ -39,17 +42,21 @@ export function App() {
   return (
     <Routes>
       <Route path="/" element={<LoginPage />} />
+      <Route path="/giris" element={<Navigate to="/" replace />} />
       <Route path="/panel" element={<Guard role="STUDENT"><StudentHome /></Guard>} />
       <Route path="/basvuru" element={<Guard role="STUDENT"><ApplicationPage /></Guard>} />
       <Route path="/admin" element={<Guard role="ADMIN"><AdminDashboard /></Guard>} />
+      <Route path="/admin/raporlar" element={<Guard role="ADMIN"><AdminBasvuruReports /></Guard>} />
       <Route path="/admin/donemler" element={<Guard role="ADMIN"><AdminPeriodsPage /></Guard>} />
       <Route path="/admin/sozlesmeler" element={<Guard role="ADMIN"><AdminAgreementsPage /></Guard>} />
       <Route path="/admin/birimler" element={<Guard role="ADMIN"><AdminUnitsPage /></Guard>} />
+      <Route path="/admin/duyurular" element={<Guard role="ADMIN"><AdminDuyurularPage /></Guard>} />
       <Route path="/admin/basvuru/:id" element={<Guard role="ADMIN"><AdminDetail /></Guard>} />
       <Route path="/admin/kayit" element={<Guard role="ADMIN"><AdminKayitPage /></Guard>} />
       <Route path="/admin/dagitim" element={<Guard role="ADMIN"><AdminDistribution /></Guard>} />
       <Route path="/admin/kullanicilar" element={<Guard role="ADMIN"><AdminBirimKullanicilarPage /></Guard>} />
       <Route path="/admin/yoneticiler" element={<Guard role="ADMIN"><AdminUsersPage /></Guard>} />
+      <Route path="/admin/islem-loglari" element={<Guard role="ADMIN"><AdminIslemLogPage /></Guard>} />
       <Route path="/admin/takip" element={<Guard role="ADMIN"><AdminTakipPage /></Guard>} />
       <Route path="/admin/takip/:basvuruId" element={<Guard role="ADMIN"><AdminTakipDetail /></Guard>} />
       <Route path="/birim" element={<Guard role="BIRIM"><UnitStudentsPage /></Guard>} />

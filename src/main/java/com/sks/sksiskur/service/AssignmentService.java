@@ -76,6 +76,10 @@ public class AssignmentService {
             throw new ApiException(HttpStatus.CONFLICT,
                     "Birim dağıtımı ancak İŞKUR kesin listesi yüklenip karşılaştırma onaylandıktan sonra yapılabilir.");
         }
+        if (!imzaBildirimiGonderildi(donem)) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Birim dağıtımı öncesinde kesin kayıtlı öğrencilere imza bildirimi gönderilmelidir.");
+        }
         List<Basvuru> approved = new ArrayList<>(kesinOgrenciler(donem));
         if (approved.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Dağıtılacak kesin kayıtlı öğrenci yok.");
@@ -167,6 +171,12 @@ public class AssignmentService {
                 .orElse(false);
     }
 
+    private boolean imzaBildirimiGonderildi(BasvuruDonemi donem) {
+        return kayitListesiRepository.findByBasvuruDonemiId(donem.getId())
+                .map(KayitListesi::isImzaBildirimiGonderildi)
+                .orElse(false);
+    }
+
     private DagitimSonucResponse toResponse(List<Basvuru> approved, Instant atamaTarihi, BasvuruDonemi donem) {
         Map<String, DagitimSonucResponse.BirimOzet> grouped = new LinkedHashMap<>();
         List<DagitimBirimiService.ConfiguredUnit> configuredUnits = dagitimBirimiService.allUnits();
@@ -241,6 +251,7 @@ public class AssignmentService {
                 unassigned.size(),
                 atamaTarihi,
                 kesinListeOnayli(donem),
+                imzaBildirimiGonderildi(donem),
                 yedek,
                 birimler,
                 unassigned

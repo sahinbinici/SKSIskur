@@ -1,9 +1,13 @@
 package com.sks.sksiskur.web;
 
+import com.sks.sksiskur.domain.IslemTuru;
 import com.sks.sksiskur.security.AuthPrincipal;
+import com.sks.sksiskur.service.AuditLogService;
 import com.sks.sksiskur.service.DocumentDownload;
+import com.sks.sksiskur.service.BirimDuyuruService;
 import com.sks.sksiskur.service.TakipService;
 import com.sks.sksiskur.web.dto.BirimAylikRaporResponse;
+import com.sks.sksiskur.web.dto.BirimDuyuruInboxResponse;
 import com.sks.sksiskur.web.dto.BirimOgrenciResponse;
 import com.sks.sksiskur.web.dto.EkuantKaydetRequest;
 import com.sks.sksiskur.web.dto.PuantajKaydetRequest;
@@ -33,9 +37,23 @@ import java.util.List;
 public class BirimController {
 
     private final TakipService takipService;
+    private final BirimDuyuruService birimDuyuruService;
+    private final AuditLogService auditLogService;
 
-    public BirimController(TakipService takipService) {
+    public BirimController(TakipService takipService, BirimDuyuruService birimDuyuruService, AuditLogService auditLogService) {
         this.takipService = takipService;
+        this.birimDuyuruService = birimDuyuruService;
+        this.auditLogService = auditLogService;
+    }
+
+    @GetMapping("/duyurular")
+    public List<BirimDuyuruInboxResponse> duyurular(Authentication authentication) {
+        return birimDuyuruService.listForBirim(birimKodu(authentication));
+    }
+
+    @PostMapping("/duyurular/{id}/okundu")
+    public BirimDuyuruInboxResponse markDuyuruOkundu(Authentication authentication, @PathVariable Long id) {
+        return birimDuyuruService.markRead(birimKodu(authentication), id);
     }
 
     @GetMapping("/ogrenciler")
@@ -70,7 +88,11 @@ public class BirimController {
             @PathVariable Long basvuruId,
             @Valid @RequestBody EkuantKaydetRequest request
     ) {
-        return takipService.saveEkuant(birimKodu(authentication), basvuruId, request);
+        TakipDonemResponse saved = takipService.saveEkuant(birimKodu(authentication), basvuruId, request);
+        auditLogService.logBirim(authentication, birimKodu(authentication), IslemTuru.EKUANT_KAYDET, "BASVURU", basvuruId,
+                "Ekuant kaydedildi: " + request.yil() + "-" + String.format("%02d", request.ay()),
+                request.gunler() == null ? null : request.gunler().size() + " gün");
+        return saved;
     }
 
     @PutMapping("/ogrenciler/{basvuruId}/puantaj")
@@ -79,7 +101,11 @@ public class BirimController {
             @PathVariable Long basvuruId,
             @RequestBody PuantajKaydetRequest request
     ) {
-        return takipService.savePuantaj(birimKodu(authentication), basvuruId, request);
+        TakipDonemResponse saved = takipService.savePuantaj(birimKodu(authentication), basvuruId, request);
+        auditLogService.logBirim(authentication, birimKodu(authentication), IslemTuru.PUANTAJ_KAYDET, "BASVURU", basvuruId,
+                "Puantaj kaydedildi: " + request.yil() + "-" + String.format("%02d", request.ay()),
+                request.kayitlar() == null ? null : request.kayitlar().size() + " kayıt");
+        return saved;
     }
 
     @PostMapping(value = "/ogrenciler/{basvuruId}/puantaj/belge", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -112,7 +138,10 @@ public class BirimController {
             @PathVariable Long basvuruId,
             @RequestBody TakipAyRequest request
     ) {
-        return takipService.submit(birimKodu(authentication), basvuruId, request.yil(), request.ay());
+        TakipDonemResponse saved = takipService.submit(birimKodu(authentication), basvuruId, request.yil(), request.ay());
+        auditLogService.logBirim(authentication, birimKodu(authentication), IslemTuru.TAKIP_GONDER, "BASVURU", basvuruId,
+                "Aylık takip gönderildi: " + request.yil() + "-" + String.format("%02d", request.ay()), null);
+        return saved;
     }
 
     private String birimKodu(Authentication authentication) {

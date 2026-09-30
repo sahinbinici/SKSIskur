@@ -40,25 +40,51 @@ public class SgkOcrService {
     }
 
     public BelgeDogrulamaDurumu verify(Path source, String contentType, BigDecimal limit, Student student) {
-        String rawText = extract(source, contentType);
-        String text = rawText.toLowerCase(Locale.forLanguageTag("tr-TR"));
-        if (text.isBlank()) throw new ApiException(HttpStatus.BAD_REQUEST, "SGK dökümü okunamadı; barkodlu ve net PDF/görsel yükleyiniz.");
-        String normalized = normalize(rawText);
-        if (!hasExpectedTitle(normalized)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "SGK hizmet dökümü veya maaş bordrosu başlığı OCR ile doğrulanamadı; doğru ve net belge yükleyiniz.");
+        return review(source, contentType, limit, student).durum();
+    }
+
+    public BelgeOcrReviewResult review(Path source, String contentType, BigDecimal limit, Student student) {
+        try {
+            String rawText = extract(source, contentType);
+            String text = rawText.toLowerCase(Locale.forLanguageTag("tr-TR"));
+            if (text.isBlank()) {
+                return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.INCELEME_GEREKLI,
+                        "SGK dökümü okunamadı. Barkodlu ve net PDF/görsel olup olmadığını kontrol edin.");
+            }
+            String normalized = normalize(rawText);
+            if (!hasExpectedTitle(normalized)) {
+                return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.INCELEME_GEREKLI,
+                        "SGK hizmet dökümü veya maaş bordrosu başlığı bulunamadı.");
+            }
+            Matcher start = START.matcher(text);
+            while (start.find()) {
+                if (parseDate(start.group(2)).isAfter(LocalDate.now().minusMonths(1))) {
+                    return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.INCELEME_GEREKLI,
+                            "Son bir ay içinde SGK işe giriş kaydı görünüyor. Belgeyi açıp tarihi doğrulayın.");
+                }
+            }
+            Matcher income = INCOME.matcher(text);
+            if (!income.find()) {
+                return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.INCELEME_GEREKLI,
+                        "SGK dökümündeki gelir bilgisi okunamadı. Gelir satırını manuel kontrol edin.");
+            }
+            BigDecimal incomeValue = new BigDecimal(income.group(2).replace(".", "").replace(',', '.'));
+            if (incomeValue.compareTo(limit.multiply(BigDecimal.valueOf(3))) > 0) {
+                return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.INCELEME_GEREKLI,
+                        "SGK geliri dönem limitinin üç katını aşıyor olabilir. Gelir satırını manuel doğrulayın.");
+            }
+            if (containsAllWords(normalized, student.getAd()) && containsAllWords(normalized, student.getSoyad())) {
+                return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.DOGRULANDI,
+                        "SGK belgesi başlığı, ad-soyad ve gelir kontrolleri OCR ile uyumlu görünüyor.");
+            }
+            return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.INCELEME_GEREKLI,
+                    "SGK belgesinde ad-soyad tam eşleşmedi. Öğrenci bilgisiyle karşılaştırın.");
+        } catch (ApiException ex) {
+            return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.INCELEME_GEREKLI, ex.getMessage());
+        } catch (Exception ex) {
+            return new BelgeOcrReviewResult(BelgeDogrulamaDurumu.INCELEME_GEREKLI,
+                    "SGK OCR çalıştırılamadı; belgeyi manuel inceleyin.");
         }
-        Matcher start = START.matcher(text);
-        while (start.find()) if (parseDate(start.group(2)).isAfter(LocalDate.now().minusMonths(1)))
-            throw new ApiException(HttpStatus.BAD_REQUEST, "Son bir ay içinde SGK işe giriş kaydı bulunduğu için başvuru yapılamaz.");
-        Matcher income = INCOME.matcher(text);
-        if (!income.find()) throw new ApiException(HttpStatus.BAD_REQUEST, "SGK dökümündeki gelir bilgisi okunamadı; barkodlu ve net belge yükleyiniz.");
-        BigDecimal incomeValue = new BigDecimal(income.group(2).replace(".", "").replace(',', '.'));
-        if (incomeValue.compareTo(limit.multiply(BigDecimal.valueOf(3))) > 0)
-            throw new ApiException(HttpStatus.BAD_REQUEST, "SGK dökümündeki gelir, dönem gelir limitinin üç katını aştığı için başvuru yapılamaz.");
-        return containsAllWords(normalized, student.getAd()) && containsAllWords(normalized, student.getSoyad())
-                ? BelgeDogrulamaDurumu.DOGRULANDI
-                : BelgeDogrulamaDurumu.INCELEME_GEREKLI;
     }
 
     private String extract(Path source, String contentType) {

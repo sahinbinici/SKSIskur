@@ -30,6 +30,10 @@ public class JwtService {
     }
 
     public String generateToken(String subject, String role, Long userId, String birimKodu) {
+        return generateToken(subject, role, userId, birimKodu, null);
+    }
+
+    public String generateToken(String subject, String role, Long userId, String birimKodu, String adminRole) {
         Instant now = Instant.now();
         var builder = Jwts.builder()
                 .subject(subject)
@@ -39,6 +43,9 @@ public class JwtService {
                 .expiration(Date.from(now.plusMillis(expirationMs)));
         if (birimKodu != null && !birimKodu.isBlank()) {
             builder.claim("birimKodu", birimKodu);
+        }
+        if (adminRole != null && !adminRole.isBlank()) {
+            builder.claim("adminRole", adminRole);
         }
         return builder.signWith(key).compact();
     }

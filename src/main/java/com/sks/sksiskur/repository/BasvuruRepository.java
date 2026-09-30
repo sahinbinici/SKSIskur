@@ -58,6 +58,13 @@ public interface BasvuruRepository extends JpaRepository<Basvuru, Long> {
     );
 
     @EntityGraph(attributePaths = {"student"})
+    List<Basvuru> findByStatusAndKayitTuruAndKesinListedeTrueAndAtananBirimKoduIsNullAndBasvuruDonemiId(
+            ApplicationStatus status,
+            KayitTuru kayitTuru,
+            Long basvuruDonemiId
+    );
+
+    @EntityGraph(attributePaths = {"student"})
     List<Basvuru> findByKayitTuruAndAtananBirimKoduIsNotNullAndBasvuruDonemiIdOrderByStudentSoyadAscStudentAdAsc(KayitTuru kayitTuru, Long basvuruDonemiId);
 
     @EntityGraph(attributePaths = {"student"})

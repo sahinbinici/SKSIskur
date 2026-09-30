@@ -1,179 +1,181 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { api, ApiError, downloadAuthenticatedFile } from "../api";
-import { Shell, StatusBadge, formatDate } from "../components/ui";
+import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { api, ApiError } from "../api";
+import { PageHeader } from "../components/PageHeader";
+import { LoadingBlock } from "../components/LoadingBlock";
+import { Shell, formatDate } from "../components/ui";
+import { AdminWorkflowGuide } from "../components/AdminWorkflowGuide";
+import { AdminPendingTasks } from "../components/AdminPendingTasks";
 import { ApplicationListSheet } from "./AdminListReports";
-import { STATUS_LABEL, kesinListeDurumLabel, type AdminOzet, type ApplicationStatus, type Basvuru, type BasvuruDonemi } from "../types";
+import { AdminBasvuruToolbar } from "./admin/AdminBasvuruToolbar";
+import { BasvuruStat, BasvuruTable, statFilterForStatus } from "./admin/BasvuruTable";
+import { useAdminBasvuruList } from "./admin/useAdminBasvuruList";
+import {
+  ADMIN_BELGE_TIPLERI,
+  BELGE_YUKLEME_FILTRE_LABEL,
+  STATUS_LABEL,
+  type ApplicationStatus,
+  type YoneticiPanosuDuyuru
+} from "../types";
 
 export function AdminDashboard() {
-  const [ozet, setOzet] = useState<AdminOzet | null>(null);
-  const [items, setItems] = useState<Basvuru[]>([]);
-  const [status, setStatus] = useState<ApplicationStatus | "">("SUBMITTED");
-  const [query, setQuery] = useState("");
-  const [error, setError] = useState("");
-  const [periods, setPeriods] = useState<BasvuruDonemi[]>([]);
-  const [periodId, setPeriodId] = useState<number | undefined>();
-  const [onlyMine, setOnlyMine] = useState(false);
-  const navigate = useNavigate();
-
-  async function load(nextStatus = status, nextQuery = query, nextPeriodId = periodId, nextOnlyMine = onlyMine) {
-    const [summary, list] = await Promise.all([
-      api.adminSummary(nextPeriodId),
-      api.adminList(nextStatus, nextQuery, nextPeriodId, nextOnlyMine)
-    ]);
-    setOzet(summary);
-    setItems(list);
-  }
+  const [searchParams] = useSearchParams();
+  const mode = searchParams.get("mod") === "indir" ? "export" : "review";
+  const {
+    ozet,
+    items,
+    status,
+    setStatus,
+    query,
+    setQuery,
+    error,
+    setError,
+    loading,
+    periods,
+    periodId,
+    setPeriodId,
+    onlyMine,
+    setOnlyMine,
+    belgeTipi,
+    setBelgeTipi,
+    belgeYukleme,
+    setBelgeYukleme,
+    load
+  } = useAdminBasvuruList(mode === "export" ? "" : "SUBMITTED");
+  const prevMode = useRef(mode);
+  const [panoDuyurulari, setPanoDuyurulari] = useState<YoneticiPanosuDuyuru[]>([]);
 
   useEffect(() => {
-    load().catch((err) => setError(err instanceof ApiError ? err.message : "Liste alınamadı."));
+    api.adminPanoDuyurulari(true)
+      .then(setPanoDuyurulari)
+      .catch(() => setPanoDuyurulari([]));
   }, []);
 
   useEffect(() => {
-    api.basvuruDonemleri()
-      .then((data) => {
-        setPeriods(data);
-        setPeriodId(data.find((period) => period.aktif)?.id);
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Dönemler yüklenemedi."));
-  }, []);
+    if (prevMode.current === mode) return;
+    prevMode.current = mode;
+    if (mode === "export") {
+      setStatus("");
+      setOnlyMine(false);
+      void load("", query, periodId, false, belgeTipi, belgeYukleme).catch((err) =>
+        setError(err instanceof ApiError ? err.message : "Liste alınamadı.")
+      );
+      return;
+    }
+    setStatus("SUBMITTED");
+    setOnlyMine(false);
+    void load("SUBMITTED", query, periodId, false, belgeTipi, belgeYukleme).catch((err) =>
+      setError(err instanceof ApiError ? err.message : "Liste alınamadı.")
+    );
+  }, [mode]);
 
-  const filterLabel = [status ? STATUS_LABEL[status] : "Tümü", query.trim() ? `Arama: ${query.trim()}` : ""]
+  const selectedBelge = ADMIN_BELGE_TIPLERI.find((belge) => belge.type === belgeTipi);
+  const activeStat = statFilterForStatus(status, onlyMine);
+  const filterLabel = [
+    status ? STATUS_LABEL[status] : "Tümü",
+    query.trim() ? `Arama: ${query.trim()}` : "",
+    selectedBelge && belgeYukleme !== "TUMU"
+      ? `${selectedBelge.title}: ${BELGE_YUKLEME_FILTRE_LABEL[belgeYukleme]}`
+      : selectedBelge
+        ? `Belge: ${selectedBelge.title}`
+        : ""
+  ]
     .filter(Boolean)
     .join(" · ");
+
+  function applyStatFilter(next: ApplicationStatus | "ASSIGNED" | "ALL") {
+    if (next === "ASSIGNED") {
+      setOnlyMine(true);
+      setStatus("");
+      void load("", query, periodId, true, belgeTipi, belgeYukleme).catch((err) =>
+        setError(err instanceof ApiError ? err.message : "Liste alınamadı.")
+      );
+      return;
+    }
+    setOnlyMine(false);
+    const nextStatus = next === "ALL" ? "" : next;
+    setStatus(nextStatus);
+    void load(nextStatus, query, periodId, false, belgeTipi, belgeYukleme).catch((err) =>
+      setError(err instanceof ApiError ? err.message : "Liste alınamadı.")
+    );
+  }
 
   return (
     <Shell home="/admin">
       <div className="no-print">
-      <h3 className="section">Başvuru takip ve raporlama</h3>
-      <p style={{ color: "var(--muted)", marginTop: -10 }}>
-        Tüm yöneticiler tüm başvuruları ve işlemleri görebilir; karar veren yönetici ayrıca kayda işlenir.
-      </p>
-      {error && <div className="alert alert-error">{error}</div>}
-      <div className="grid-5" style={{ marginBottom: 18 }}>
-        <Stat title="Toplam" value={ozet?.toplam} />
-        <Stat title="Taslak" value={ozet?.taslak} />
-        <Stat title="İncelemede" value={ozet?.gonderildi} />
-        <Stat title="Onaylandı" value={ozet?.onaylandi} />
-        <Stat title="Atanan" value={ozet?.atanan} />
-      </div>
-      <div className="toolbar">
-        <select
-          value={periodId ?? ""}
-          onChange={(e) => {
-            const next = Number(e.target.value) || undefined;
-            setPeriodId(next);
-            load(status, query, next).catch((err) => setError(err instanceof ApiError ? err.message : "Liste alınamadı."));
-          }}
-        >
-          {periods.map((period) => <option key={period.id} value={period.id}>{period.ad}{period.aktif ? " (açık)" : " (arşiv)"}</option>)}
-        </select>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-          <input
-            type="checkbox"
-            checked={onlyMine}
-            onChange={(e) => {
-              const next = e.target.checked;
-              setOnlyMine(next);
-              load(status, query, periodId, next).catch((err) => setError(err instanceof ApiError ? err.message : "Liste alınamadı."));
-            }}
-            style={{ width: "auto", margin: 0 }}
-          />
-          Bana atananlar
-        </label>
-        <select
-          value={status}
-          onChange={(e) => {
-            const value = e.target.value as ApplicationStatus | "";
-            setStatus(value);
-            load(value, query).catch((err) => setError(err instanceof ApiError ? err.message : "Liste alınamadı."));
-          }}
-        >
-          <option value="">Tümü</option>
-          <option value="DRAFT">Taslak</option>
-          <option value="SUBMITTED">İncelemede</option>
-          <option value="RETURNED">İade edildi</option>
-          <option value="APPROVED">Onaylandı</option>
-          <option value="REJECTED">Reddedildi</option>
-        </select>
-        <label className="sr-only" htmlFor="application-search">Öğrenci veya başvuru ara</label>
-        <input
-          id="application-search"
-          placeholder="Ad, soyad veya öğrenci no"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              load(status, query).catch((err) => setError(err instanceof ApiError ? err.message : "Liste alınamadı."));
-            }
-          }}
+        <PageHeader
+          title="Başvurular"
+          description="Başvuruları inceleyin, onaylayın veya filtreleyerek Excel ve belge listeleri indirin."
         />
-        <button className="btn btn-primary" onClick={() => load(status, query)}>Ara</button>
-        <button
-          className="btn btn-gold"
-          disabled={items.length === 0}
-          onClick={() => downloadAuthenticatedFile(
-            api.adminBasvurularExcelUrl(status, query, periodId, onlyMine),
-            "basvurular.xlsx"
-          ).catch((err) => setError(err instanceof ApiError ? err.message : "Excel indirilemedi."))}
-        >
-          Excel indir
-        </button>
-        <button className="btn btn-secondary" onClick={() => window.print()} disabled={items.length === 0}>
-          Yazdır / PDF
-        </button>
-      </div>
-      <div className="card" style={{ overflow: "auto" }}>
-        <table>
-          <thead>
-            <tr>
-              <th>Öğrenci</th>
-              <th>Fakülte</th>
-              <th>Atanan birim</th>
-              <th>İnceleme sorumlusu</th>
-              <th>Durum</th>
-              <th>Kesin liste</th>
-              <th>Gönderim</th>
-              <th>Belgeler</th>
-              <th><span className="sr-only">İşlem</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id}>
-                <td>
-                  <b>{item.student.adSoyad}</b>
-                  <div style={{ color: "var(--muted)" }}>{item.student.ogrenciNo}</div>
-                </td>
-                <td>{item.student.fakulte || item.student.program || item.student.bolum}</td>
-                <td>{item.atananBirimAdi || "—"}</td>
-                <td>{item.atananAdmin || "Atama bekliyor"}</td>
-                <td><StatusBadge status={item.status} /></td>
-                <td>{kesinListeDurumLabel(item.kesinListede, item.status)}</td>
-                <td>{formatDate(item.gonderimTarihi)}</td>
-                <td>{item.belgeler.length}/5</td>
-                <td><button className="btn btn-secondary btn-compact" onClick={() => navigate(`/admin/basvuru/${item.id}`)}>İncele</button></td>
-              </tr>
-            ))}
-            {items.length === 0 && (
-              <tr>
-                <td colSpan={9} style={{ color: "var(--muted)" }}>Kayıt bulunamadı.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      </div>
-      <ApplicationListSheet items={items} filterLabel={filterLabel} />
-    </Shell>
-  );
-}
 
-function Stat({ title, value }: { title: string; value?: number }) {
-  return (
-    <div className="card stat">
-      <b>{value ?? "—"}</b>
-      <span>{title}</span>
-    </div>
+        {panoDuyurulari.map((duyuru) => (
+          <div className="alert alert-wait admin-pano-duyuru" key={duyuru.id}>
+            <div>
+              <strong>{duyuru.baslik}</strong>
+              <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>{duyuru.mesaj}</div>
+              <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 8 }}>
+                {formatDate(duyuru.guncellemeTarihi)} · {duyuru.gonderenAdmin}
+              </div>
+            </div>
+            <Link to="/admin/duyurular?sekme=pano" className="btn btn-secondary btn-compact">
+              Duyuruları yönet
+            </Link>
+          </div>
+        ))}
+
+        <AdminPendingTasks />
+
+        <AdminWorkflowGuide />
+
+        <div className="page-tabs">
+          <Link to="/admin" className={mode === "review" ? "active" : ""}>İnceleme</Link>
+          <Link to="/admin?mod=indir" className={mode === "export" ? "active" : ""}>Liste indir</Link>
+        </div>
+
+        {error && <div className="alert alert-error">{error}</div>}
+
+        {mode === "review" && (
+          <div className="grid-5" style={{ marginBottom: 18 }}>
+            <BasvuruStat title="Toplam" value={ozet?.toplam} listCount={activeStat === "ALL" && !onlyMine ? items.length : undefined} active={activeStat === "ALL" && !onlyMine} onClick={() => applyStatFilter("ALL")} />
+            <BasvuruStat title="Taslak" value={ozet?.taslak} listCount={activeStat === "DRAFT" ? items.length : undefined} active={activeStat === "DRAFT"} onClick={() => applyStatFilter("DRAFT")} />
+            <BasvuruStat title="İncelemede" value={ozet?.gonderildi} listCount={activeStat === "SUBMITTED" ? items.length : undefined} active={activeStat === "SUBMITTED"} onClick={() => applyStatFilter("SUBMITTED")} />
+            <BasvuruStat title="Onaylandı" value={ozet?.onaylandi} listCount={activeStat === "APPROVED" ? items.length : undefined} active={activeStat === "APPROVED"} onClick={() => applyStatFilter("APPROVED")} />
+            <BasvuruStat title="Bana atanan" value={ozet?.atanan} listCount={onlyMine ? items.length : undefined} active={onlyMine} onClick={() => applyStatFilter("ASSIGNED")} />
+          </div>
+        )}
+
+        <AdminBasvuruToolbar
+          mode={mode}
+          periods={periods}
+          periodId={periodId}
+          setPeriodId={setPeriodId}
+          onlyMine={onlyMine}
+          setOnlyMine={setOnlyMine}
+          status={status}
+          setStatus={setStatus}
+          query={query}
+          setQuery={setQuery}
+          belgeTipi={belgeTipi}
+          setBelgeTipi={setBelgeTipi}
+          belgeYukleme={belgeYukleme}
+          setBelgeYukleme={setBelgeYukleme}
+          itemsCount={items.length}
+          setError={setError}
+          load={load}
+        />
+
+        {loading ? (
+          <LoadingBlock label="Başvuru listesi yükleniyor..." />
+        ) : (
+          <BasvuruTable
+            items={items}
+            belgeTipi={mode === "export" ? belgeTipi : undefined}
+            reviewMode={mode === "review"}
+            emptyHint={mode === "review" ? "İncelemede başvuru yok. Özet kartlarından farklı bir durum seçin." : undefined}
+          />
+        )}
+      </div>
+      {mode === "export" && <ApplicationListSheet items={items} filterLabel={filterLabel} />}
+    </Shell>
   );
 }

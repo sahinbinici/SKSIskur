@@ -41,7 +41,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/auth/ogrenci", "/api/auth/admin", "/api/auth/birim", "/api/auth/demo").permitAll()
+                        .requestMatchers("/api/auth/ogrenci", "/api/auth/admin", "/api/auth/birim", "/api/auth/demo", "/api/auth/ogrenci-duyurulari").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/student/**").hasRole("STUDENT")
                         .requestMatchers("/api/birim/**").hasRole("BIRIM")

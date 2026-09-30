@@ -39,3 +39,5 @@ frontend/dist/
 *.log
 .env
 .env.*
+!.env.production.example
+sksiskur-deploy.tar.gz

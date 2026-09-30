@@ -41,4 +41,13 @@ public class KayitListesi {
 
     @Column(name = "kesin_liste_yukleyen_admin", length = 80)
     private String kesinListeYukleyenAdmin;
+
+    @Column(name = "imza_bildirimi_gonderildi", nullable = false)
+    private boolean imzaBildirimiGonderildi = false;
+
+    @Column(name = "imza_bildirimi_gonderim_tarihi")
+    private Instant imzaBildirimiGonderimTarihi;
+
+    @Column(name = "imza_bildirimi_gonderen_admin", length = 80)
+    private String imzaBildirimiGonderenAdmin;
 }

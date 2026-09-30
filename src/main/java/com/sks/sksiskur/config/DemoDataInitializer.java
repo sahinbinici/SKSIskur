@@ -213,8 +213,11 @@ public class DemoDataInitializer implements CommandLineRunner {
         BasvuruDonemi donem = basvuruDonemiRepository.findFirstByAktifTrueOrderByOlusturmaTarihiDesc().orElseThrow();
         basvuru.setBasvuruDonemi(donem);
         basvuru.setStatus(scenario.status());
-        basvuru.setIban(ibanFrom(scenario.ogrenciNo()));
+        String iban = ibanFrom(scenario.ogrenciNo());
+        basvuru.setIban(iban);
         basvuru.setHesapSahibi(student.getAdSoyad());
+        basvuru.setBankaSubeKodu(iban.substring(11, 15));
+        basvuru.setHesapNumarasi(iban.substring(14).replaceFirst("^0+(?!$)", ""));
         basvuru.setAylikGelir(new java.math.BigDecimal("12500.00"));
         Instant now = Instant.now();
         if (scenario.status() != ApplicationStatus.DRAFT) {

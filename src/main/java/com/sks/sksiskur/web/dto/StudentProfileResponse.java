@@ -25,6 +25,9 @@ public record StudentProfileResponse(
         String il,
         String ilce,
         String fotoUrl,
-        String danisman
+        String danisman,
+        boolean demoOgrenci,
+        boolean iskurBasvuruyaUygun,
+        String iskurBasvuruEngelMesaji
 ) {
 }

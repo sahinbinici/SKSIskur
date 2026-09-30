@@ -15,7 +15,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile.api.simple
     image: sksiskur-api:latest
     restart: unless-stopped
     environment:
@@ -27,6 +27,13 @@ services:
       # Geçici test ortamı: gerçek yayına geçmeden önce "false" yapın.
       APP_DEMO_ENABLED: "true"
       CORS_ALLOWED_ORIGINS: http://193.140.136.26:${SKS_PORT:-8093}
+      APP_MAIL_ENABLED: ${APP_MAIL_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-noreply@gantep.edu.tr}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-SKS İŞKUR}
     volumes:
       - sksiskur_uploads:/data/uploads
     depends_on:

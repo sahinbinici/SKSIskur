@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiError, authenticatedBlobUrl } from "../api";
+import { useConfirm } from "../components/ConfirmDialog";
 import { Shell, formatDate } from "../components/ui";
 import { PUANTAJ_LABEL, type PuantajDurum, type PuantajGun, type TakipDonem } from "../types";
 
@@ -67,6 +68,7 @@ function needsDocument(durum: PuantajDurum | null | undefined) {
 }
 
 export function UnitTrackingPage() {
+  const confirm = useConfirm();
   const { basvuruId } = useParams();
   const id = Number(basvuruId);
   const now = new Date();
@@ -233,7 +235,11 @@ export function UnitTrackingPage() {
 
   async function submit() {
     if (!canSubmit) return;
-    if (!window.confirm(`${MONTHS[ay - 1]} ${yil} EK-6 ve puantaj kaydı gönderilsin mi? Gönderilen ay değiştirilemez.`)) {
+    if (!await confirm({
+      title: "Ayı gönder",
+      message: `${MONTHS[ay - 1]} ${yil} EK-6 ve puantaj kaydı gönderilecek. Gönderilen ay değiştirilemez.`,
+      confirmLabel: "Gönder"
+    })) {
       return;
     }
     await run(() => api.gonderTakip(id, yil, ay), "Ay gönderildi.");
@@ -259,6 +265,14 @@ export function UnitTrackingPage() {
 
       {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
+
+      <section className="card help-tip" style={{ padding: 16, marginBottom: 18 }}>
+        <b>Bu ay nasıl doldurulur?</b>
+        <p style={{ margin: "6px 0 0", color: "var(--muted)", lineHeight: 1.55 }}>
+          Haftada en fazla 3 gün EK-6 seçin. Puantajda her gün için geldi / gelmedi / izinli / raporlu işaretleyin.
+          İzin ve rapor günlerinde dilekçe yükleyin. Ay tamamlanınca alttaki gönder düğmesini kullanın.
+        </p>
+      </section>
       {locked && (
         <div className="alert alert-wait">
           Bu ay {formatDate(donem?.gonderimTarihi)} tarihinde gönderildi. Gönderilen kayıt değiştirilemez.

@@ -163,7 +163,7 @@ public class IskurExcelParser {
         return trimmed.isBlank() ? null : trimmed;
     }
 
-    static String personKey(String ad, String soyad) {
+    public static String personKey(String ad, String soyad) {
         return NameNormalizer.fold(ad + " " + soyad).trim();
     }
 }

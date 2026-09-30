@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { api, setToken } from "./api";
-import type { AuthResponse, Role } from "./types";
+import type { AdminRole, AuthResponse, Role } from "./types";
 
 type Session = {
   token: string;
@@ -9,6 +9,9 @@ type Session = {
   ogrenciNo: string | null;
   birimKodu: string | null;
   birimAdi: string | null;
+  username: string | null;
+  userId: number | null;
+  adminRole: AdminRole | null;
 };
 
 type AuthContextValue = {
@@ -72,7 +75,10 @@ function persist(response: AuthResponse, setSession: (session: Session) => void)
     displayName: response.displayName,
     ogrenciNo: response.ogrenciNo,
     birimKodu: response.birimKodu,
-    birimAdi: response.birimAdi
+    birimAdi: response.birimAdi,
+    username: response.username,
+    userId: response.userId,
+    adminRole: response.adminRole
   };
   setToken(response.token);
   localStorage.setItem(SESSION_KEY, JSON.stringify(next));

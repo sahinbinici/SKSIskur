@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, downloadAuthenticatedFile } from "../api";
+import { useConfirm } from "../components/ConfirmDialog";
+import { PageHeader } from "../components/PageHeader";
 import { Shell, formatDate } from "../components/ui";
 import type { BasvuruDonemi, IskurListe } from "../types";
 
 export function AdminPeriodsPage() {
+  const confirm = useConfirm();
   const [periods, setPeriods] = useState<BasvuruDonemi[]>([]);
   const [iskurList, setIskurList] = useState<IskurListe | null>(null);
   const [name, setName] = useState("");
@@ -55,7 +58,12 @@ export function AdminPeriodsPage() {
   }
 
   async function close(period: BasvuruDonemi) {
-    if (!window.confirm(`${period.ad} dönemi kapatılsın mı? Birim kullanıcıları bu döneme ait öğrencileri ve puantajları artık göremez.`)) return;
+    if (!await confirm({
+      title: "Dönemi kapat",
+      message: `${period.ad} dönemi kapatılacak. Birim kullanıcıları bu döneme ait öğrencileri artık göremez.`,
+      confirmLabel: "Kapat",
+      variant: "danger"
+    })) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -82,7 +90,11 @@ export function AdminPeriodsPage() {
 
   async function uploadIskurList(file: File) {
     if (!active) return;
-    if (!window.confirm("Yeni dosya mevcut İŞKUR listesinin tamamını değiştirir. Devam edilsin mi?")) return;
+    if (!await confirm({
+      title: "İŞKUR listesini yükle",
+      message: "Yeni dosya mevcut İŞKUR listesinin tamamını değiştirir.",
+      confirmLabel: "Yükle"
+    })) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -102,7 +114,10 @@ export function AdminPeriodsPage() {
 
   return (
     <Shell home="/admin">
-      <h3 className="section">Başvuru dönemleri</h3>
+      <PageHeader
+        title="Başvuru dönemleri"
+        description="Aktif dönemi açın, İŞKUR listesini yükleyin ve öğrenci başvuru penceresini yönetin."
+      />
       <p style={{ color: "var(--muted)", maxWidth: 760, lineHeight: 1.55 }}>
         Aynı anda yalnızca bir dönem açık olabilir. Dönem açıldıktan sonra İŞKUR&apos;dan gelen Excel listesini yükleyin; yalnızca listede adı ve soyadı bulunan öğrenciler giriş yapıp başvuru oluşturabilir. Öğrenci giriş tarih aralığı dışında oturum açılamaz.
       </p>

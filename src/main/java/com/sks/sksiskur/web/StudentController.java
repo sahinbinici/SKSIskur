@@ -6,6 +6,8 @@ import com.sks.sksiskur.security.AuthPrincipal;
 import com.sks.sksiskur.service.DocumentDownload;
 import com.sks.sksiskur.service.StudentApplicationService;
 import com.sks.sksiskur.service.SozlesmeService;
+import com.sks.sksiskur.service.TakipService;
+import com.sks.sksiskur.web.dto.OgrenciCalismaOzetResponse;
 import com.sks.sksiskur.web.dto.BasvuruKaydetRequest;
 import com.sks.sksiskur.web.dto.BasvuruResponse;
 import com.sks.sksiskur.web.dto.StudentProfileResponse;
@@ -36,10 +38,16 @@ public class StudentController {
 
     private final StudentApplicationService studentApplicationService;
     private final SozlesmeService sozlesmeService;
+    private final TakipService takipService;
 
-    public StudentController(StudentApplicationService studentApplicationService, SozlesmeService sozlesmeService) {
+    public StudentController(
+            StudentApplicationService studentApplicationService,
+            SozlesmeService sozlesmeService,
+            TakipService takipService
+    ) {
         this.studentApplicationService = studentApplicationService;
         this.sozlesmeService = sozlesmeService;
+        this.takipService = takipService;
     }
 
     @GetMapping("/profil")
@@ -60,6 +68,13 @@ public class StudentController {
     @GetMapping("/basvuru")
     public BasvuruResponse getApplication(Authentication authentication) {
         return studentApplicationService.getOrCreate(ogrenciNo(authentication));
+    }
+
+    @GetMapping("/calisma-ozeti")
+    public ResponseEntity<OgrenciCalismaOzetResponse> calismaOzeti(Authentication authentication) {
+        return takipService.ogrenciCalismaOzet(ogrenciNo(authentication))
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @PutMapping("/basvuru")
@@ -96,6 +111,11 @@ public class StudentController {
     @PostMapping("/basvuru/atama-bildirimi/okundu")
     public BasvuruResponse markAssignmentNoticeRead(Authentication authentication) {
         return studentApplicationService.markAtamaBildirimiOkundu(ogrenciNo(authentication));
+    }
+
+    @PostMapping("/basvuru/imza-bildirimi/okundu")
+    public BasvuruResponse markImzaNoticeRead(Authentication authentication) {
+        return studentApplicationService.markImzaBildirimiOkundu(ogrenciNo(authentication));
     }
 
     private String ogrenciNo(Authentication authentication) {

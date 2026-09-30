@@ -1,4 +1,4 @@
-import type { AdminOzet, AdminTakipOzet, AdminUser, AgreementDocument, AgreementType, ApplicationStatus, AuthResponse, Basvuru, BasvuruDagitim, BasvuruDonemi, BirimAylikRapor, BirimKullanici, BirimOgrenci, DagitimBirimi, DagitimSonuc, DemoInfo, DocumentType, IskurListe, IskurListeUpload, IzinRaporOgrenci, KayitListeFiltre, KayitListesi, KesinListeUpload, PuantajDurum, StudentAgreement, StudentProfile, TakipDonem, WorkUnit } from "./types";
+import type { AdminOzet, AdminRole, AdminTakipOzet, AdminUser, AgreementDocument, AgreementType, ApplicationStatus, AuthResponse, Basvuru, BasvuruDagitim, BasvuruDonemi, BelgeYuklemeFiltre, BirimAylikRapor, BirimDuyuru, BirimDuyuruInbox, BirimKullanici, BirimOgrenci, DagitimBirimi, DagitimSonuc, DemoInfo, DocumentType, ImzaBildirimiGonder, IskurListe, IskurListeUpload, IslemLogPage, IslemTuru, IzinRaporOgrenci, KayitListeFiltre, KayitListesi, KesinListeUpload, OgrenciCalismaOzet, PuantajDurum, Role, StudentAgreement, StudentProfile, TakipDonem, WorkUnit, YoneticiPanosuDuyuru } from "./types";
 
 const TOKEN_KEY = "sksiskur.token";
 
@@ -76,20 +76,43 @@ export const api = {
       body: JSON.stringify({ username, password })
     }),
   demoInfo: () => request<DemoInfo>("/api/auth/demo"),
+  ogrenciPortalDuyurulari: () => request<YoneticiPanosuDuyuru[]>("/api/auth/ogrenci-duyurulari"),
   profile: () => request<StudentProfile>("/api/student/profil"),
   studentAgreements: () => request<StudentAgreement[]>("/api/student/sozlesmeler"),
   acceptStudentAgreement: (type: AgreementType) =>
     request<StudentAgreement[]>(`/api/student/sozlesmeler/${type}/kabul`, { method: "POST" }),
   application: () => request<Basvuru>("/api/student/basvuru"),
-  saveDraft: (iban: string, hesapSahibi: string) =>
+  studentCalismaOzet: async (): Promise<OgrenciCalismaOzet | null> => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+    const response = await fetch("/api/student/calisma-ozeti", { headers });
+    if (response.status === 204) {
+      return null;
+    }
+    if (!response.ok) {
+      let message = "Çalışma özeti alınamadı.";
+      try {
+        const data = await response.json();
+        if (data?.message) message = data.message;
+      } catch {
+        // ignore
+      }
+      throw new ApiError(response.status, message);
+    }
+    return response.json() as Promise<OgrenciCalismaOzet>;
+  },
+  saveDraft: (payload: { iban: string; hesapSahibi: string; bankaSubeKodu: string; hesapNumarasi: string }) =>
     request<Basvuru>("/api/student/basvuru", {
       method: "PUT",
-      body: JSON.stringify({ iban, hesapSahibi })
+      body: JSON.stringify(payload)
     }),
-  submit: (iban: string, hesapSahibi: string) =>
+  submit: (payload: { iban: string; hesapSahibi: string; bankaSubeKodu: string; hesapNumarasi: string }) =>
     request<Basvuru>("/api/student/basvuru/gonder", {
       method: "POST",
-      body: JSON.stringify({ iban, hesapSahibi })
+      body: JSON.stringify(payload)
     }),
   upload: async (belgeTipi: DocumentType, file: File, haneUyesiAdi?: string) => {
     const body = new FormData();
@@ -107,15 +130,47 @@ export const api = {
   }),
   closeBasvuruDonemi: (id: number) => request<BasvuruDonemi>(`/api/admin/basvuru-donemleri/${id}/kapat`, { method: "POST" }),
   iskurListesiExcelUrl: (donemId: number) => `/api/admin/basvuru-donemleri/${donemId}/iskur-listesi.xlsx`,
-  adminBasvurularExcelUrl: (status?: ApplicationStatus | "", q?: string, donemId?: number, banaAtanan = false) => {
+  adminBasvuruQueryParams: (
+    status?: ApplicationStatus | "",
+    q?: string,
+    donemId?: number,
+    banaAtanan = false,
+    belgeTipi?: DocumentType | "",
+    belgeYukleme?: BelgeYuklemeFiltre
+  ) => {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
     if (q) params.set("q", q);
     if (donemId) params.set("donemId", String(donemId));
     if (banaAtanan) params.set("banaAtanan", "true");
-    const query = params.toString();
+    if (belgeTipi) params.set("belgeTipi", belgeTipi);
+    if (belgeYukleme && belgeYukleme !== "TUMU") params.set("belgeYukleme", belgeYukleme);
+    return params;
+  },
+  adminBasvurularExcelUrl: (
+    status?: ApplicationStatus | "",
+    q?: string,
+    donemId?: number,
+    banaAtanan = false,
+    belgeTipi?: DocumentType | "",
+    belgeYukleme?: BelgeYuklemeFiltre
+  ) => {
+    const query = api.adminBasvuruQueryParams(status, q, donemId, banaAtanan, belgeTipi, belgeYukleme).toString();
     return `/api/admin/basvurular.xlsx${query ? `?${query}` : ""}`;
   },
+  adminBasvurularBelgeZipUrl: (
+    status?: ApplicationStatus | "",
+    q?: string,
+    donemId?: number,
+    banaAtanan = false,
+    belgeTipi?: DocumentType | "",
+    belgeYukleme?: BelgeYuklemeFiltre
+  ) => {
+    const query = api.adminBasvuruQueryParams(status, q, donemId, banaAtanan, belgeTipi, belgeYukleme).toString();
+    return `/api/admin/basvurular-belgeler.zip${query ? `?${query}` : ""}`;
+  },
+  adminBasvurularBelgeZipFilename: (belgeTipi: DocumentType) =>
+    `basvurular-${belgeTipi.toLowerCase()}.zip`,
   updateBasvuruDonemiGelirLimiti: (id: number, limit: number) => request<BasvuruDonemi>(`/api/admin/basvuru-donemleri/${id}/gelir-limiti?limit=${encodeURIComponent(String(limit))}`, { method: "PUT" }),
   iskurListesi: (donemId: number) => request<IskurListe>(`/api/admin/basvuru-donemleri/${donemId}/iskur-listesi`),
   uploadIskurListesi: async (donemId: number, file: File) => {
@@ -127,20 +182,23 @@ export const api = {
   updateAdminAgreement: (type: AgreementType, payload: { baslik: string; icerik: string }) =>
     request<AgreementDocument>(`/api/admin/sozlesmeler/${type}`, { method: "PUT", body: JSON.stringify(payload) }),
   adminSummary: (donemId?: number) => request<AdminOzet>(`/api/admin/ozet${donemId ? `?donemId=${donemId}` : ""}`),
-  adminList: (status?: ApplicationStatus | "", q?: string, donemId?: number, banaAtanan = false) => {
-    const params = new URLSearchParams();
-    if (status) params.set("status", status);
-    if (q) params.set("q", q);
-    if (donemId) params.set("donemId", String(donemId));
-    if (banaAtanan) params.set("banaAtanan", "true");
-    const query = params.toString();
+  adminList: (
+    status?: ApplicationStatus | "",
+    q?: string,
+    donemId?: number,
+    banaAtanan = false,
+    belgeTipi?: DocumentType | "",
+    belgeYukleme?: BelgeYuklemeFiltre
+  ) => {
+    const query = api.adminBasvuruQueryParams(status, q, donemId, banaAtanan, belgeTipi, belgeYukleme).toString();
     return request<Basvuru[]>(`/api/admin/basvurular${query ? `?${query}` : ""}`);
   },
   adminGet: (id: number) => request<Basvuru>(`/api/admin/basvurular/${id}`),
+  adminRefreshOcr: (id: number) => request<Basvuru>(`/api/admin/basvurular/${id}/ocr-kontrol`, { method: "POST" }),
   yoneticiler: () => request<AdminUser[]>("/api/admin/yoneticiler"),
   createYonetici: (payload: { username: string; password: string; adSoyad: string }) =>
     request<AdminUser>("/api/admin/yoneticiler", { method: "POST", body: JSON.stringify(payload) }),
-  updateYonetici: (id: number, payload: { username: string; password?: string; adSoyad: string; aktif: boolean }) =>
+  updateYonetici: (id: number, payload: { username: string; password?: string; adSoyad: string; aktif: boolean; rol?: AdminRole }) =>
     request<AdminUser>(`/api/admin/yoneticiler/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   basvurulariYoneticiyeDagit: (donemId?: number) =>
     request<BasvuruDagitim>(`/api/admin/yoneticiler/basvurulari-dagit${donemId ? `?donemId=${donemId}` : ""}`, { method: "POST" }),
@@ -169,6 +227,40 @@ export const api = {
     }),
   adminUnits: () => request<WorkUnit[]>("/api/admin/birimler"),
   dagitimBirimleri: () => request<DagitimBirimi[]>("/api/admin/dagitim-birimleri"),
+  adminBirimDuyurulari: () => request<BirimDuyuru[]>("/api/admin/birim-duyurulari"),
+  sendBirimDuyurusu: (payload: { baslik: string; mesaj: string; tumBirimler: boolean; birimKodlari: string[] }) =>
+    request<{ id: number; hedefSayisi: number }>("/api/admin/birim-duyurulari", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  adminPanoDuyurulari: (aktif?: boolean) =>
+    request<YoneticiPanosuDuyuru[]>(`/api/admin/pano-duyurulari${aktif ? "?aktif=true" : ""}`),
+  createPanoDuyurusu: (payload: { baslik: string; mesaj: string; aktif: boolean }) =>
+    request<YoneticiPanosuDuyuru>("/api/admin/pano-duyurulari", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  updatePanoDuyurusu: (id: number, payload: { baslik: string; mesaj: string; aktif: boolean }) =>
+    request<YoneticiPanosuDuyuru>(`/api/admin/pano-duyurulari/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+  deletePanoDuyurusu: (id: number) =>
+    request<void>(`/api/admin/pano-duyurulari/${id}`, { method: "DELETE" }),
+  adminOgrenciDuyurulari: (aktif?: boolean) =>
+    request<YoneticiPanosuDuyuru[]>(`/api/admin/ogrenci-duyurulari${aktif ? "?aktif=true" : ""}`),
+  createOgrenciDuyurusu: (payload: { baslik: string; mesaj: string; aktif: boolean }) =>
+    request<YoneticiPanosuDuyuru>("/api/admin/ogrenci-duyurulari", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  updateOgrenciDuyurusu: (id: number, payload: { baslik: string; mesaj: string; aktif: boolean }) =>
+    request<YoneticiPanosuDuyuru>(`/api/admin/ogrenci-duyurulari/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
+  deleteOgrenciDuyurusu: (id: number) =>
+    request<void>(`/api/admin/ogrenci-duyurulari/${id}`, { method: "DELETE" }),
   createOzelDagitimBirimi: (payload: { kod: string; ad: string; kontenjan: number; dagitimaAcik: boolean }) =>
     request<DagitimBirimi>("/api/admin/dagitim-birimleri", { method: "POST", body: JSON.stringify(payload) }),
   updateDagitimBirimi: (id: number, payload: { kontenjan: number; dagitimaAcik: boolean }) =>
@@ -207,7 +299,11 @@ export const api = {
   },
   markAtamaBildirimiOkundu: () =>
     request<Basvuru>("/api/student/basvuru/atama-bildirimi/okundu", { method: "POST" }),
+  markImzaBildirimiOkundu: () =>
+    request<Basvuru>("/api/student/basvuru/imza-bildirimi/okundu", { method: "POST" }),
   onaylaKesinListe: () => request<KayitListesi>("/api/admin/kayit-listesi/onayla", { method: "POST" }),
+  gonderImzaBildirimi: () =>
+    request<ImzaBildirimiGonder>("/api/admin/kayit-listesi/imza-bildirimi-gonder", { method: "POST" }),
   geriAlKesinListe: () => request<KayitListesi>("/api/admin/kayit-listesi/geri-al", { method: "POST" }),
   adminTakip: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
     const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
@@ -251,6 +347,12 @@ export const api = {
     if (donemId) params.set("donemId", String(donemId));
     return `/api/admin/takip/rapor.xlsx?${params}`;
   },
+  adminIskurPaketiExcelUrl: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
+    const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
+    if (birimKodu) params.set("birimKodu", birimKodu);
+    if (donemId) params.set("donemId", String(donemId));
+    return `/api/admin/takip/iskur-paketi.xlsx?${params}`;
+  },
   adminIzinRaporlular: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
     const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
     if (birimKodu) params.set("birimKodu", birimKodu);
@@ -280,6 +382,9 @@ export const api = {
   adminPuantajBelgeUrl: (basvuruId: number, yil: number, ay: number, tarih: string) =>
     `/api/admin/takip/ogrenciler/${basvuruId}/puantaj/belge?yil=${yil}&ay=${ay}&tarih=${tarih}`,
   birimOgrenciler: () => request<BirimOgrenci[]>("/api/birim/ogrenciler"),
+  birimDuyurular: () => request<BirimDuyuruInbox[]>("/api/birim/duyurular"),
+  markBirimDuyuruOkundu: (id: number) =>
+    request<BirimDuyuruInbox>(`/api/birim/duyurular/${id}/okundu`, { method: "POST" }),
   birimTakip: (basvuruId: number, yil: number, ay: number) =>
     request<TakipDonem>(`/api/birim/ogrenciler/${basvuruId}/takip?yil=${yil}&ay=${ay}`),
   saveEkuant: (basvuruId: number, yil: number, ay: number, gunler: string[]) =>
@@ -308,7 +413,27 @@ export const api = {
       body: JSON.stringify({ yil, ay })
     }),
   birimRapor: (yil: number, ay: number) =>
-    request<BirimAylikRapor>(`/api/birim/rapor?yil=${yil}&ay=${ay}`)
+    request<BirimAylikRapor>(`/api/birim/rapor?yil=${yil}&ay=${ay}`),
+  islemLoglari: (params: {
+    tur?: IslemTuru;
+    rol?: Role;
+    kullanici?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+    size?: number;
+  } = {}) => {
+    const query = new URLSearchParams();
+    if (params.tur) query.set("tur", params.tur);
+    if (params.rol) query.set("rol", params.rol);
+    if (params.kullanici) query.set("kullanici", params.kullanici);
+    if (params.from) query.set("from", params.from);
+    if (params.to) query.set("to", params.to);
+    if (params.page != null) query.set("page", String(params.page));
+    if (params.size != null) query.set("size", String(params.size));
+    const suffix = query.toString();
+    return request<IslemLogPage>(`/api/admin/islem-loglari${suffix ? `?${suffix}` : ""}`);
+  }
 };
 
 export { ApiError };
@@ -319,7 +444,10 @@ export async function authenticatedBlobUrl(path: string) {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined
   });
   if (!response.ok) {
-    throw new ApiError(response.status, "Belge açılamadı.");
+    const message = response.status === 504
+      ? "Dosya oluşturma zaman aşımına uğradı. Birim filtresi seçerek tekrar deneyin veya birkaç dakika sonra yenileyin."
+      : "Belge açılamadı.";
+    throw new ApiError(response.status, message);
   }
   const blob = await response.blob();
   return URL.createObjectURL(blob);

@@ -1,5 +1,6 @@
 package com.sks.sksiskur.security;
 
+import com.sks.sksiskur.domain.AdminRole;
 import com.sks.sksiskur.domain.Role;
 import com.sks.sksiskur.service.BasvuruDonemiService;
 import io.jsonwebtoken.Claims;
@@ -37,11 +38,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 Claims claims = jwtService.parse(token);
                 String roleValue = claims.get("role", String.class);
                 Number uid = claims.get("uid", Number.class);
+                AdminRole adminRole = null;
+                String adminRoleValue = claims.get("adminRole", String.class);
+                if (adminRoleValue != null && !adminRoleValue.isBlank()) {
+                    adminRole = AdminRole.valueOf(adminRoleValue);
+                }
                 AuthPrincipal principal = new AuthPrincipal(
                         uid != null ? uid.longValue() : null,
                         claims.getSubject(),
                         Role.valueOf(roleValue),
-                        claims.get("birimKodu", String.class)
+                        claims.get("birimKodu", String.class),
+                        adminRole
                 );
                 if (principal.role() == Role.STUDENT && request.getRequestURI().startsWith("/api/student/")
                         && !basvuruDonemiService.isStudentAccessOpen()) {

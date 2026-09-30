@@ -16,6 +16,6 @@ public interface TakipDonemRepository extends JpaRepository<TakipDonem, Long> {
     @EntityGraph(attributePaths = {"gunler"})
     List<TakipDonem> findByBasvuruId(Long basvuruId);
 
-    @EntityGraph(attributePaths = {"gunler", "basvuru"})
+    @EntityGraph(attributePaths = {"gunler", "basvuru", "basvuru.student"})
     List<TakipDonem> findByYilAndAyAndBasvuruIdIn(int yil, int ay, Collection<Long> basvuruIds);
 }

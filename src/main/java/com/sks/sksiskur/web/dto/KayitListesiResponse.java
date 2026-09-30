@@ -18,6 +18,9 @@ public record KayitListesiResponse(
         Instant onayTarihi,
         String onaylayanAdmin,
         boolean dagitimAcik,
+        boolean imzaBildirimiGonderildi,
+        Instant imzaBildirimiGonderimTarihi,
+        String imzaBildirimiGonderenAdmin,
         List<Satir> ogrenciler,
         List<ListedeEslesmeyen> listedeEslesmeyenler
 ) {

@@ -12,6 +12,7 @@ public record DagitimSonucResponse(
         int atanamayan,
         Instant atamaTarihi,
         boolean kesinListeOnaylandi,
+        boolean imzaBildirimiGonderildi,
         int yedek,
         List<BirimOzet> birimler,
         List<AtamaSatir> atanamayanlar

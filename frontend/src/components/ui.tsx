@@ -1,7 +1,63 @@
-import { NavLink } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth";
-import { STATUS_LABEL, type ApplicationStatus } from "../types";
+import { isSuperAdmin, STATUS_LABEL, type ApplicationStatus } from "../types";
 import type { ReactNode } from "react";
+
+type NavMenuId = "operasyon" | "yonetim" | "diger";
+
+function NavDropdown({
+  id,
+  label,
+  openMenu,
+  setOpenMenu,
+  className,
+  children
+}: {
+  id: NavMenuId;
+  label: string;
+  openMenu: NavMenuId | null;
+  setOpenMenu: (value: NavMenuId | null) => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const open = openMenu === id;
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpenMenu(null);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open, setOpenMenu]);
+
+  return (
+    <div className={`nav-menu${open ? " is-open" : ""}${className ? ` ${className}` : ""}`} ref={ref}>
+      <button
+        type="button"
+        className="nav-menu-trigger"
+        aria-expanded={open}
+        onClick={() => setOpenMenu(open ? null : id)}
+      >
+        {label}
+      </button>
+      <div className="nav-menu-links" onClick={() => setOpenMenu(null)}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function AdminBasvuruNavLink() {
+  const location = useLocation();
+  const isExport = new URLSearchParams(location.search).get("mod") === "indir";
+  const active = location.pathname === "/admin" && !isExport;
+  return <NavLink to="/admin" className={`nav-link${active ? " active" : ""}`}>Başvurular</NavLink>;
+}
 
 export function StatusBadge({ status }: { status: ApplicationStatus }) {
   return <span className={`badge ${status}`}>{STATUS_LABEL[status]}</span>;
@@ -9,6 +65,28 @@ export function StatusBadge({ status }: { status: ApplicationStatus }) {
 
 export function Shell({ children, home, wide, full }: { children: ReactNode; home: string; wide?: boolean; full?: boolean }) {
   const { session, logout } = useAuth();
+  const superAdmin = isSuperAdmin(session);
+  const [openMenu, setOpenMenu] = useState<NavMenuId | null>(null);
+
+  const operasyonLinks = (
+    <>
+      <NavLink to="/admin/kayit">Kesin kayıt</NavLink>
+      <NavLink to="/admin/dagitim">Birim dağıtımı</NavLink>
+      <NavLink to="/admin/duyurular">Duyurular</NavLink>
+    </>
+  );
+
+  const yonetimLinks = (
+    <>
+      <NavLink to="/admin/donemler">Dönemler</NavLink>
+      <NavLink to="/admin/birimler">Birimler ve kontenjanlar</NavLink>
+      <NavLink to="/admin/sozlesmeler">Sözleşmeler</NavLink>
+      {superAdmin && <NavLink to="/admin/yoneticiler">Yöneticiler</NavLink>}
+      {superAdmin && <NavLink to="/admin/kullanicilar">Birim hesapları</NavLink>}
+      <NavLink to="/admin/islem-loglari">İşlem günlüğü</NavLink>
+    </>
+  );
+
   return (
     <div className="page-shell">
       <header className="topbar">
@@ -22,25 +100,18 @@ export function Shell({ children, home, wide, full }: { children: ReactNode; hom
         <div className="topbar-actions">
           {session?.role === "ADMIN" && (
             <>
-              <NavLink to="/admin" className="nav-link">Başvurular</NavLink>
-              <details className="nav-menu">
-                <summary>Operasyon</summary>
-                <div className="nav-menu-links">
-                  <NavLink to="/admin/kayit">Kesin / yedek</NavLink>
-                  <NavLink to="/admin/dagitim">Birim dağıtımı</NavLink>
-                  <NavLink to="/admin/takip">Devam takibi</NavLink>
-                </div>
-              </details>
-              <details className="nav-menu">
-                <summary>Yönetim</summary>
-                <div className="nav-menu-links">
-                  <NavLink to="/admin/donemler">Dönemler</NavLink>
-                  <NavLink to="/admin/birimler">Birimler ve kontenjanlar</NavLink>
-                  <NavLink to="/admin/sozlesmeler">Sözleşmeler</NavLink>
-                  <NavLink to="/admin/yoneticiler">Yöneticiler</NavLink>
-                  <NavLink to="/admin/kullanicilar">Birim hesapları</NavLink>
-                </div>
-              </details>
+              <AdminBasvuruNavLink />
+              <NavLink to="/admin/takip" className="nav-link nav-link-wide">Aylık İŞKUR</NavLink>
+              <NavDropdown id="operasyon" label="Operasyon" openMenu={openMenu} setOpenMenu={setOpenMenu} className="nav-desktop-only">
+                {operasyonLinks}
+              </NavDropdown>
+              <NavDropdown id="yonetim" label="Yönetim" openMenu={openMenu} setOpenMenu={setOpenMenu} className="nav-desktop-only">
+                {yonetimLinks}
+              </NavDropdown>
+              <NavDropdown id="diger" label="Menü" openMenu={openMenu} setOpenMenu={setOpenMenu} className="nav-compact-only">
+                {operasyonLinks}
+                {yonetimLinks}
+              </NavDropdown>
             </>
           )}
           {session?.role === "BIRIM" && (
