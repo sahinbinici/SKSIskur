@@ -1,9 +1,7 @@
-# Production SSH:
-#   Host 193.140.136.26  user cekec  path /home/cekec/apps/sksiskur
-# Required GitHub Actions secret:
-#   SKSISKUR_KEY  — OpenSSH private key whose public half is in cekec ~/.ssh/authorized_keys
-#
-# Optional secrets (override defaults): DEPLOY_HOST, DEPLOY_USER, DEPLOY_PATH, DEPLOY_PORT
+# Production deploy uses a self-hosted runner on the app server (cekec@193.140.136.26).
+# GitHub-hosted runners cannot SSH in: campus firewall times out port 22.
+# Runner label: sksiskur-prod
+# The runner pulls jobs over HTTPS; no inbound SSH from GitHub is required.
 
 name: CI/CD
 
@@ -15,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -48,14 +47,11 @@ jobs:
           npm ci
           npm run build
 
-  deploy:
-    name: Deploy production
+  package:
+    name: Package release
     needs: ci
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
-    concurrency:
-      group: production-deploy
-      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
@@ -83,55 +79,50 @@ jobs:
       - name: Create deploy archive
         run: bash scripts/pack-deploy.sh
 
-      - name: Check SSH key secret
-        env:
-          SKSISKUR_KEY: ${{ secrets.SKSISKUR_KEY }}
-        run: |
-          if [ -z "$SKSISKUR_KEY" ]; then
-            echo "GitHub secret SKSISKUR_KEY is missing. Add the deploy private key in repo Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-
-      - name: Upload archive
-        uses: appleboy/scp-action@v0.1.7
+      - uses: actions/upload-artifact@v4
         with:
-          host: ${{ secrets.DEPLOY_HOST || '193.140.136.26' }}
-          username: ${{ secrets.DEPLOY_USER || 'cekec' }}
-          key: ${{ secrets.SKSISKUR_KEY }}
-          port: ${{ secrets.DEPLOY_PORT || 22 }}
-          source: sksiskur-deploy.tar.gz
-          target: /home/cekec
+          name: sksiskur-deploy
+          path: sksiskur-deploy.tar.gz
+          retention-days: 7
+
+  deploy:
+    name: Deploy production
+    needs: package
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: [self-hosted, sksiskur-prod]
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sksiskur-deploy
+          path: ${{ github.workspace }}
 
       - name: Extract and restart containers
-        uses: appleboy/ssh-action@v1.2.2
-        with:
-          host: ${{ secrets.DEPLOY_HOST || '193.140.136.26' }}
-          username: ${{ secrets.DEPLOY_USER || 'cekec' }}
-          key: ${{ secrets.SKSISKUR_KEY }}
-          port: ${{ secrets.DEPLOY_PORT || 22 }}
-          command_timeout: 20m
-          script: |
-            set -euo pipefail
-            APP_DIR="${{ secrets.DEPLOY_PATH || '/home/cekec/apps/sksiskur' }}"
-            STAMP="$(date +%Y%m%d%H%M%S)"
-            mkdir -p "$APP_DIR/backups" "$APP_DIR/target"
-            if [ -f "$APP_DIR/target/SKSIskur-0.0.1-SNAPSHOT.war" ]; then
-              cp "$APP_DIR/target/SKSIskur-0.0.1-SNAPSHOT.war" "$APP_DIR/backups/SKSIskur-$STAMP.war"
+        env:
+          APP_DIR: /home/cekec/apps/sksiskur
+        run: |
+          set -euo pipefail
+          STAMP="$(date +%Y%m%d%H%M%S)"
+          mkdir -p "$APP_DIR/backups" "$APP_DIR/target"
+          if [ -f "$APP_DIR/target/SKSIskur-0.0.1-SNAPSHOT.war" ]; then
+            cp "$APP_DIR/target/SKSIskur-0.0.1-SNAPSHOT.war" "$APP_DIR/backups/SKSIskur-$STAMP.war"
+          fi
+          tar -xzf "$GITHUB_WORKSPACE/sksiskur-deploy.tar.gz" -C "$APP_DIR"
+          cd "$APP_DIR"
+          docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+          for i in $(seq 1 30); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8093/ || true)"
+            if [ "$code" = "200" ]; then
+              echo "Health check OK ($code)"
+              docker compose -f docker-compose.prod.yml --env-file .env ps
+              exit 0
             fi
-            tar -xzf /home/cekec/sksiskur-deploy.tar.gz -C "$APP_DIR"
-            cd "$APP_DIR"
-            docker compose -f docker-compose.prod.yml --env-file .env up -d --build
-            for i in $(seq 1 30); do
-              code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8093/ || true)"
-              if [ "$code" = "200" ]; then
-                echo "Health check OK ($code)"
-                docker compose -f docker-compose.prod.yml --env-file .env ps
-                exit 0
-              fi
-              sleep 2
-            done
-            echo "Health check failed"
-            docker compose -f docker-compose.prod.yml --env-file .env ps
-            docker logs --tail 80 sksiskur-web-1 || true
-            docker logs --tail 80 sksiskur-api-1 || true
-            exit 1
+            sleep 2
+          done
+          echo "Health check failed"
+          docker compose -f docker-compose.prod.yml --env-file .env ps
+          docker logs --tail 80 sksiskur-web-1 || true
+          docker logs --tail 80 sksiskur-api-1 || true
+          exit 1
