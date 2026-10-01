@@ -1,7 +1,7 @@
 # Production SSH:
 #   Host 193.140.136.26  user cekec  path /home/cekec/apps/sksiskur
 # Required GitHub Actions secret:
-#   DEPLOY_SSH_KEY  — OpenSSH private key whose public half is in cekec ~/.ssh/authorized_keys
+#   SKSISKUR_KEY  — OpenSSH private key whose public half is in cekec ~/.ssh/authorized_keys
 #
 # Optional secrets (override defaults): DEPLOY_HOST, DEPLOY_USER, DEPLOY_PATH, DEPLOY_PORT
 
@@ -85,10 +85,10 @@ jobs:
 
       - name: Check SSH key secret
         env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SKSISKUR_KEY: ${{ secrets.SKSISKUR_KEY }}
         run: |
-          if [ -z "$DEPLOY_SSH_KEY" ]; then
-            echo "GitHub secret DEPLOY_SSH_KEY is missing. Add the deploy private key in repo Settings > Secrets and variables > Actions."
+          if [ -z "$SKSISKUR_KEY" ]; then
+            echo "GitHub secret SKSISKUR_KEY is missing. Add the deploy private key in repo Settings > Secrets and variables > Actions."
             exit 1
           fi
 
@@ -97,7 +97,7 @@ jobs:
         with:
           host: ${{ secrets.DEPLOY_HOST || '193.140.136.26' }}
           username: ${{ secrets.DEPLOY_USER || 'cekec' }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          key: ${{ secrets.SKSISKUR_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           source: sksiskur-deploy.tar.gz
           target: /home/cekec
@@ -107,7 +107,7 @@ jobs:
         with:
           host: ${{ secrets.DEPLOY_HOST || '193.140.136.26' }}
           username: ${{ secrets.DEPLOY_USER || 'cekec' }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          key: ${{ secrets.SKSISKUR_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           command_timeout: 20m
           script: |
