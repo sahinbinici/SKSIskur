@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError, downloadAuthenticatedFile } from "../api";
 import { useAuth } from "../auth";
+import { useConfirm } from "../components/ConfirmDialog";
 import { Shell } from "../components/ui";
-import type { BirimAylikRapor, BirimRaporOgrenci } from "../types";
+import type { BirimAylikRapor, BirimRaporOgrenci, TakipStatus } from "../types";
 
 export const MONTHS = [
   "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -49,26 +51,45 @@ function formatSaat(value: number) {
   return value.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
+function statusLabel(status?: TakipStatus | null) {
+  if (status === "APPROVED") return "Onaylandı";
+  if (status === "SUBMITTED") return "Onay bekliyor";
+  if (status === "DRAFT") return "Taslak";
+  return "Eksik";
+}
+
 export function UnitReportPage() {
+  const confirm = useConfirm();
   const { session } = useAuth();
+  const [searchParams] = useSearchParams();
   const [yearOptions] = useState(() => {
     const current = new Date().getFullYear();
     return [current - 1, current, current + 1];
   });
-  const [yil, setYil] = useState(() => new Date().getFullYear());
-  const [ay, setAy] = useState(() => new Date().getMonth() + 1);
+  const now = new Date();
+  const [yil, setYil] = useState(() => Number(searchParams.get("yil")) || now.getFullYear());
+  const [ay, setAy] = useState(() => Number(searchParams.get("ay")) || now.getMonth() + 1);
   const [kind, setKind] = useState<Kind>("ekuant");
   const [data, setData] = useState<BirimAylikRapor | null>(null);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  async function reload() {
     setLoading(true);
     setError("");
-    api.birimRapor(yil, ay)
-      .then(setData)
-      .catch((err) => setError(err instanceof ApiError ? err.message : "Rapor alınamadı."))
-      .finally(() => setLoading(false));
+    setMessage("");
+    try {
+      setData(await api.birimRapor(yil, ay));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Rapor alınamadı.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void reload();
   }, [yil, ay]);
 
   const birimAdi = data?.birimAdi || session?.birimAdi || session?.displayName || "";
@@ -94,13 +115,36 @@ export function UnitReportPage() {
     ).catch((err) => setError(err instanceof ApiError ? err.message : "Excel indirilemedi."));
   }
 
+  async function submitMonth() {
+    if (!data?.gonderilebilir) return;
+    if (!await confirm({
+      title: "Ayı SKS'ye gönder",
+      message: `${MONTHS[ay - 1]} ${yil} için tüm öğrencilerin EK-6 ve puantaj kaydı birlikte gönderilecek. Gönderilen ay birim tarafından değiştirilemez.`,
+      confirmLabel: "Gönder"
+    })) {
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await api.gonderBirimTakip(yil, ay);
+      setMessage(`${result.gonderilenOgrenci} öğrencinin kaydı gönderildi. SKS onayı bekleniyor.`);
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Gönderim tamamlanamadı.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <Shell home="/birim" full>
       <div className="report-toolbar no-print">
         <div>
           <h3 className="section" style={{ margin: 0 }}>Aylık EK-6 / puantaj raporu</h3>
           <p style={{ color: "var(--muted)", margin: "6px 0 0" }}>
-            SKS onayından sonra EK-6 ve puantaj cetvellerini Excel indirip veya yazdırıp imzalayın. İŞKUR ödeme dosyası yalnızca SKS yöneticisinde indirilir.
+            Önce listedeki her öğrenci için EK-6 ve puantajı tamamlayın; ardından bu ekrandan ayı tek seferde SKS’ye gönderin. Onay sonrası cetveli Excel veya yazdırı ile indirin.
           </p>
         </div>
         <div className="toolbar" style={{ margin: 0 }}>
@@ -128,16 +172,26 @@ export function UnitReportPage() {
           <button type="button" className="btn btn-gold" onClick={printReport} disabled={loading || !data?.yazdirilabilir}>
             Yazdır / PDF
           </button>
+          <button type="button" className="btn btn-gold" onClick={() => void submitMonth()} disabled={loading || !data?.gonderilebilir}>
+            Yöneticiye gönder
+          </button>
         </div>
       </div>
+      {message && <div className="alert alert-ok no-print">{message}</div>}
       {data && !data.yazdirilabilir && (
         <div className="alert alert-wait no-print">
           {data.onayBekleyenOgrenci > 0
             ? `${data.onayBekleyenOgrenci} öğrencinin kaydı yönetici onayı bekliyor.`
-            : data.gonderilmeyenOgrenci > 0
-              ? `${data.gonderilmeyenOgrenci} öğrencinin ayı henüz gönderilmedi.`
-              : "Bu ay için yazdırma henüz açılmadı."}
-          Önizleme aşağıda görünür; yazdırma tüm öğrenciler onaylandığında açılır.
+            : data.tamamlanmamisOgrenci > 0
+              ? `${data.tamamlanmamisOgrenci} öğrencinin EK-6 veya puantajı eksik. Öğrenci satırından tamamlayın.`
+              : data.gonderilebilir
+                ? "Tüm öğrenciler hazır; «Yöneticiye gönder» ile ayı iletin."
+                : data.gonderilmeyenOgrenci > 0
+                  ? `${data.gonderilmeyenOgrenci} öğrencinin ayı henüz gönderilmedi.`
+                  : "Bu ay için yazdırma henüz açılmadı."}
+          {data.tamamlanmamisOgrenci > 0 && (
+            <span> <Link to="/birim">Öğrenci listesi</Link> üzerinden eksikleri tamamlayın.</span>
+          )}
         </div>
       )}
       {data?.yazdirilabilir && (
@@ -147,6 +201,35 @@ export function UnitReportPage() {
       )}
       {error && <div className="alert alert-error no-print">{error}</div>}
       {loading && <div className="alert alert-wait no-print">Rapor hazırlanıyor...</div>}
+      {data && data.ogrenciler.length > 0 && (
+        <div className="card no-print" style={{ overflow: "auto", marginBottom: 16 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Öğrenci</th>
+                <th>EK-6 gün</th>
+                <th>Puantaj</th>
+                <th>Durum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.ogrenciler.map((ogrenci) => (
+                <tr key={ogrenci.basvuruId}>
+                  <td>
+                    <Link to={`/birim/ogrenci/${ogrenci.basvuruId}?yil=${yil}&ay=${ay}`}>
+                      <b>{ogrenci.ad} {ogrenci.soyad}</b>
+                    </Link>
+                    <div style={{ color: "var(--muted)", fontSize: 12 }}>{ogrenci.ogrenciNo}</div>
+                  </td>
+                  <td>{ogrenci.ekuantGunler.length}</td>
+                  <td>{ogrenci.toplamGun > 0 ? `${ogrenci.toplamGun} geldi` : "—"}</td>
+                  <td>{statusLabel(ogrenci.status)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {data && kind === "ekuant" && (
         <EkuantSheet yil={yil} ay={ay} birimAdi={birimAdi} weeks={weeks} ogrenciler={ogrenciler} />
       )}

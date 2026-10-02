@@ -79,6 +79,7 @@ export function AdminTakipPage() {
   const periodLabel = selectedPeriod?.ad ?? "Dönem seçin";
   const birimLabel = birimKodu ? units.find((unit) => unit.kod === birimKodu)?.ad ?? birimKodu : "Tüm birimler";
   const approvedCount = ozet?.ogrenciler.filter((row) => row.status === "APPROVED").length ?? 0;
+  const submittedCount = ozet?.ogrenciler.filter((row) => row.status === "SUBMITTED" || row.status === "APPROVED").length ?? 0;
   const ogrenciSayisi = pageTab === "cetvel" ? rapor?.ogrenciler.length ?? 0 : ozet?.ogrenciler.length ?? 0;
 
   async function saveClosedDays(next: string[]) {
@@ -210,13 +211,28 @@ export function AdminTakipPage() {
     return "—";
   }
 
-  function downloadIskurPaketi(kod?: string) {
-    const scope = kod || "tum-birimler";
-    const filename = `iskur-odeme_${scope}_${yil}-${String(ay).padStart(2, "0")}.xlsm`;
+  function downloadIskurPaketi() {
+    if (!birimKodu) {
+      setError("İŞKUR ödeme dosyası için üstten bir birim seçin.");
+      return;
+    }
+    const filename = `iskur-odeme_${birimKodu}_${yil}-${String(ay).padStart(2, "0")}.xlsm`;
     void downloadAuthenticatedFile(
-      api.adminIskurPaketiExcelUrl(yil, ay, kod || undefined, periodId),
+      api.adminIskurPaketiExcelUrl(yil, ay, birimKodu, periodId),
       filename
     ).catch((err) => setError(err instanceof ApiError ? err.message : "İŞKUR paketi indirilemedi."));
+  }
+
+  function downloadTakipRaporExcel() {
+    if (!birimKodu) {
+      setError("EK-6 / puantaj Excel için üstten bir birim seçin.");
+      return;
+    }
+    const filename = `ek6-puantaj_${birimKodu}_${yil}-${String(ay).padStart(2, "0")}.xlsx`;
+    void downloadAuthenticatedFile(
+      api.adminTakipRaporExcelUrl(yil, ay, birimKodu, periodId),
+      filename
+    ).catch((err) => setError(err instanceof ApiError ? err.message : "Excel indirilemedi."));
   }
 
   function downloadLeaveReportDocuments() {
@@ -230,7 +246,7 @@ export function AdminTakipPage() {
     <Shell home="/admin" full>
       <PageHeader
         title="Aylık devam ve ödeme"
-        description="Birimin gönderdiğini onaylayın veya düzeltme için iade edin. İŞKUR ödeme dosyası burada indirilir; birim yalnızca onaylı EK-6 / puantaj cetvelini indirir."
+        description="Birim ayı toplu gönderir; siz onaylayın veya iade edin. Gönderilen EK-6 / puantaj Excel’i birim seçerek indirilir; İŞKUR ödeme dosyası onaylı kayıtlarla ayrı sekmeden alınır."
       />
 
       <div className="filter-bar no-print">
@@ -303,44 +319,15 @@ export function AdminTakipPage() {
         >
           <button
             className="btn btn-gold btn-lg"
-            disabled={!selectedPeriod || loading || approvedCount === 0}
-            onClick={() => downloadIskurPaketi(birimKodu)}
+            disabled={!selectedPeriod || loading || !birimKodu || approvedCount === 0}
+            onClick={() => downloadIskurPaketi()}
           >
-            {birimKodu ? "Seçili birimin ödeme dosyasını indir" : "Tüm birimler ödeme dosyasını indir"}
+            Seçili birimin ödeme dosyasını indir
           </button>
           {!birimKodu && (
-            <div className="card" style={{ marginTop: 16, overflow: "auto" }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Birim</th>
-                    <th>Onaylı puantaj</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {units.map((unit) => {
-                    const count = ozet?.ogrenciler.filter((row) => row.birimKodu === unit.kod && row.status === "APPROVED").length ?? 0;
-                    return (
-                      <tr key={unit.kod}>
-                        <td>{unit.ad}<div className="muted">Kod {unit.kod}</div></td>
-                        <td>{count}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            disabled={loading || count === 0}
-                            onClick={() => downloadIskurPaketi(unit.kod)}
-                          >
-                            Bu birimi indir
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <p style={{ color: "var(--muted)", marginTop: 12, marginBottom: 0 }}>
+              Ödeme dosyası için filtrelerden bir birim seçin; tüm birimler alt alta listelenmez.
+            </p>
           )}
         </ActionCard>
       )}
@@ -348,6 +335,14 @@ export function AdminTakipPage() {
       {pageTab === "ozet" && ozet && (
         <>
           <div className="secondary-actions no-print" style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={loading || !birimKodu || submittedCount === 0}
+              onClick={downloadTakipRaporExcel}
+            >
+              EK-6 / puantaj Excel
+            </button>
             <button
               type="button"
               className="btn btn-gold"
@@ -369,7 +364,7 @@ export function AdminTakipPage() {
               Birimdeki kayıtları iade et
             </button>
             <span style={{ color: "var(--muted)", fontSize: 13 }}>
-              Onay sonrası birim cetvel indirir; ödeme dosyası yalnızca SKS tarafında.
+              Birim seçiliyken gönderilen kayıtların EK-6 ve puantajını Excel indirebilirsiniz.
             </span>
           </div>
         <div className="card" style={{ overflow: "auto" }}>

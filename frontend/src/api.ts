@@ -461,6 +461,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ yil, ay })
     }),
+  gonderBirimTakip: (yil: number, ay: number) =>
+    request<{ yil: number; ay: number; gonderilenOgrenci: number }>("/api/birim/takip/gonder", {
+      method: "POST",
+      body: JSON.stringify({ yil, ay })
+    }),
   birimRapor: (yil: number, ay: number) =>
     request<BirimAylikRapor>(`/api/birim/rapor?yil=${yil}&ay=${ay}`),
   birimRaporExcelUrl: (yil: number, ay: number) =>

@@ -288,7 +288,20 @@ public class AdminExportService {
 
     @Transactional(readOnly = true)
     public byte[] takipRaporExcel(Long donemId, String birimKodu, int yil, int ay) {
+        if (birimKodu == null || birimKodu.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "EK-6 / puantaj Excel indirmek için birim seçilmelidir.");
+        }
         BirimAylikRaporResponse rapor = takipService.adminMonthlyReport(donemId, birimKodu, yil, ay);
+        if (rapor.ogrenciler().isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Seçili birimde bu ay için öğrenci kaydı yok.");
+        }
+        boolean hasSubmitted = rapor.ogrenciler().stream()
+                .anyMatch(ogrenci -> ogrenci.status() == com.sks.sksiskur.domain.TakipStatus.SUBMITTED
+                        || ogrenci.status() == com.sks.sksiskur.domain.TakipStatus.APPROVED);
+        if (!hasSubmitted) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Birim henüz bu ayı göndermedi. Excel, gönderilmiş veya onaylı kayıtlar için indirilebilir.");
+        }
         return aylikRaporWorkbook(rapor);
     }
 

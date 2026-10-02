@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError, authenticatedBlobUrl } from "../api";
-import { useConfirm } from "../components/ConfirmDialog";
 import { Shell, formatDate } from "../components/ui";
 import { PUANTAJ_LABEL, type PuantajDurum, type PuantajGun, type TakipDonem } from "../types";
 
@@ -74,12 +73,12 @@ function needsDocument(durum: PuantajDurum | null | undefined) {
 }
 
 export function UnitTrackingPage() {
-  const confirm = useConfirm();
   const { basvuruId } = useParams();
+  const [searchParams] = useSearchParams();
   const id = Number(basvuruId);
   const now = new Date();
-  const [yil, setYil] = useState(now.getFullYear());
-  const [ay, setAy] = useState(now.getMonth() + 1);
+  const [yil, setYil] = useState(() => Number(searchParams.get("yil")) || now.getFullYear());
+  const [ay, setAy] = useState(() => Number(searchParams.get("ay")) || now.getMonth() + 1);
   const [donem, setDonem] = useState<TakipDonem | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -170,23 +169,21 @@ export function UnitTrackingPage() {
     return date <= todayYmd && needsDocument(gun?.durum) && !gun?.belgeVar;
   });
   const futureWorkDays = testMode ? [] : [...workDays].filter((date) => date > todayYmd);
-  const canSubmit = !locked
+  const incompleteWeeks = weekPlans.filter((week) => week.selected < week.required).length;
+  const studentReady = !locked
     && (testMode || (donem?.ekuantUyarilari.length ?? 0) === 0)
     && missingPuantaj.length === 0
     && missingDocs.length === 0
     && futureWorkDays.length === 0
     && workDays.size > 0;
-  const incompleteWeeks = weekPlans.filter((week) => week.selected < week.required).length;
-  const viewingOpen = new Date(yil, ay - 1, 1) >= new Date(now.getFullYear(), now.getMonth(), 1);
-  const submissionSummary = canSubmit
-    ? (testMode ? "Test modu: EK-6 ve puantaj tamam, istediğiniz zaman gönderebilirsiniz." : "Tüm kontroller tamamlandı. Ayı gönderime hazır.")
+  const draftHint = studentReady
+    ? "Bu öğrenci için kayıt tamam. Tüm öğrenciler hazır olduğunda Aylık rapor ekranından ayı gönderin."
     : [
         !testMode && incompleteWeeks > 0 ? `${incompleteWeeks} haftanın EK-6 planı eksik` : "",
-        !testMode && !viewingOpen && quotaCount !== quotaLimit ? `aylık kota ${quotaCount}/${quotaLimit}` : "",
         missingPuantaj.length > 0 ? `${missingPuantaj.length} puantaj eksik` : "",
         futureWorkDays.length > 0 ? `${futureWorkDays.length} gelecek gün seçili` : "",
         missingDocs.length > 0 ? `${missingDocs.length} belge eksik` : ""
-      ].filter(Boolean).join(" · ");
+      ].filter(Boolean).join(" · ") || "EK-6 günlerini seçip puantajı işaretleyin.";
 
   function shiftMonth(delta: number) {
     const next = new Date(yil, ay - 1 + delta, 1);
@@ -270,18 +267,6 @@ export function UnitTrackingPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Belge açılamadı.");
     }
-  }
-
-  async function submit() {
-    if (!canSubmit) return;
-    if (!await confirm({
-      title: "Ayı gönder",
-      message: `${MONTHS[ay - 1]} ${yil} EK-6 ve puantaj kaydı SKS yöneticisine gönderilecek. Gönderilen ay değiştirilemez.`,
-      confirmLabel: "Gönder"
-    })) {
-      return;
-    }
-    await run(() => api.gonderTakip(id, yil, ay), "Ay gönderildi.");
   }
 
   return (
@@ -452,14 +437,14 @@ export function UnitTrackingPage() {
         </section>
       )}
 
-      <section className={`submit-bar card ${canSubmit ? "ready" : ""}`} aria-live="polite">
+      <section className={`submit-bar card ${studentReady ? "ready" : ""}`} aria-live="polite">
         <div>
-          <b>{canSubmit ? "Gönderime hazır" : "Gönderim için kalanlar"}</b>
-          <span>{submissionSummary || "EK-6 günlerini seçerek başlayın."}</span>
+          <b>{studentReady ? "Öğrenci kaydı tamam" : "Bu öğrenci için kalanlar"}</b>
+          <span>{draftHint}</span>
         </div>
-        <button className="btn btn-gold" disabled={!canSubmit || busy} onClick={submit}>
-          {busy ? "Kaydediliyor..." : "Yöneticiye gönder"}
-        </button>
+        <Link className="btn btn-gold" to={`/birim/rapor?yil=${yil}&ay=${ay}`}>
+          Aylık rapor / gönder
+        </Link>
       </section>
     </Shell>
   );

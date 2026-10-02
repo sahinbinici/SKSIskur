@@ -12,9 +12,11 @@ public record BirimAylikRaporResponse(
         String birimAdi,
         BigDecimal gunlukSaat,
         boolean yazdirilabilir,
+        boolean gonderilebilir,
         int onayliOgrenci,
         int onayBekleyenOgrenci,
         int gonderilmeyenOgrenci,
+        int tamamlanmamisOgrenci,
         List<RaporOgrenci> ogrenciler
 ) {
     public record RaporOgrenci(

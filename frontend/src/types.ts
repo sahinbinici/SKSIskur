@@ -371,9 +371,11 @@ export type BirimAylikRapor = {
   birimAdi: string;
   gunlukSaat: number;
   yazdirilabilir: boolean;
+  gonderilebilir: boolean;
   onayliOgrenci: number;
   onayBekleyenOgrenci: number;
   gonderilmeyenOgrenci: number;
+  tamamlanmamisOgrenci: number;
   ogrenciler: BirimRaporOgrenci[];
 };
 

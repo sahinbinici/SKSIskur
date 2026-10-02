@@ -14,6 +14,7 @@ import com.sks.sksiskur.repository.TakipDonemRepository;
 import com.sks.sksiskur.repository.TakipKapaliGunRepository;
 import com.sks.sksiskur.takip.WorkScheduleRules;
 import com.sks.sksiskur.web.dto.AdminTakipOzetResponse;
+import com.sks.sksiskur.web.dto.BirimAyGonderResponse;
 import com.sks.sksiskur.web.dto.BirimAylikRaporResponse;
 import com.sks.sksiskur.web.dto.BirimOgrenciResponse;
 import com.sks.sksiskur.web.dto.EkuantKaydetRequest;
@@ -116,7 +117,7 @@ public class TakipService {
     public BirimAylikRaporResponse monthlyReport(String birimKodu, int yil, int ay) {
         YearMonth month = requireMonth(yil, ay);
         List<Basvuru> basvurular = assignedKesin(birimKodu, basvuruDonemiService.requireActive()).stream()
-                .filter(basvuru -> basvuru.canWorkIn(month))
+                .filter(basvuru -> isRelaxedBirim(birimKodu) || basvuru.canWorkIn(month))
                 .toList();
         String birimAdi = basvurular.stream()
                 .map(Basvuru::getAtananBirimAdi)
@@ -323,10 +324,15 @@ public class TakipService {
         int onayli = 0;
         int onayBekleyen = 0;
         int gonderilmeyen = 0;
+        int tamamlanmamis = 0;
+        String birimKodu = basvurular.isEmpty() ? null : basvurular.getFirst().getAtananBirimKodu();
         for (Basvuru basvuru : basvurular) {
             TakipDonem donem = donemler.get(basvuru.getId());
             if (donem == null || donem.getStatus() == TakipStatus.DRAFT) {
                 gonderilmeyen++;
+                if (!readyToSubmit(donem, basvuru, YearMonth.of(yil, ay), birimKodu)) {
+                    tamamlanmamis++;
+                }
             } else if (donem.getStatus() == TakipStatus.SUBMITTED) {
                 onayBekleyen++;
             } else if (donem.getStatus() == TakipStatus.APPROVED) {
@@ -334,6 +340,7 @@ public class TakipService {
             }
         }
         boolean yazdirilabilir = !basvurular.isEmpty() && onayli == basvurular.size();
+        boolean gonderilebilir = !basvurular.isEmpty() && gonderilmeyen == basvurular.size() && tamamlanmamis == 0;
         List<BirimAylikRaporResponse.RaporOgrenci> rows = new ArrayList<>();
         int sira = 1;
         for (Basvuru basvuru : basvurular) {
@@ -372,9 +379,11 @@ public class TakipService {
                 birimAdi,
                 gunlukSaat.setScale(1, RoundingMode.HALF_UP),
                 birimView ? yazdirilabilir : true,
+                birimView && gonderilebilir,
                 onayli,
                 onayBekleyen,
                 gonderilmeyen,
+                birimView ? tamamlanmamis : 0,
                 rows
         );
     }
@@ -603,12 +612,70 @@ public class TakipService {
     }
 
     @Transactional
+    public BirimAyGonderResponse submitBirimAy(String birimKodu, int yil, int ay) {
+        YearMonth month = requireMonth(yil, ay);
+        List<Basvuru> basvurular = assignedKesin(birimKodu, basvuruDonemiService.requireActive()).stream()
+                .filter(basvuru -> isRelaxedBirim(birimKodu) || basvuru.canWorkIn(month))
+                .toList();
+        if (basvurular.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Bu ay için gönderilecek öğrenci yok.");
+        }
+        Map<Long, TakipDonem> donemler = loadDonemler(basvurular, yil, ay);
+        for (Basvuru basvuru : basvurular) {
+            TakipDonem donem = donemler.get(basvuru.getId());
+            if (donem != null && donem.isLocked()) {
+                throw new ApiException(HttpStatus.CONFLICT,
+                        "Bu ay için gönderilmiş veya onaylı kayıtlar var. Yeniden göndermek için SKS yöneticisinin iade etmesi gerekir.");
+            }
+        }
+        List<String> sorunlar = new ArrayList<>();
+        for (Basvuru basvuru : basvurular) {
+            TakipDonem donem = donemler.get(basvuru.getId());
+            if (!readyToSubmit(donem, basvuru, month, birimKodu)) {
+                sorunlar.add(basvuru.getStudent().getAdSoyad());
+            }
+        }
+        if (!sorunlar.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Tüm öğrencilerin EK-6 ve puantajı tamamlanmadan ay gönderilemez. Eksik veya hatalı: "
+                            + String.join(", ", sorunlar));
+        }
+        int count = 0;
+        for (Basvuru basvuru : basvurular) {
+            TakipDonem donem = getOrCreateEntity(birimKodu, basvuru.getId(), yil, ay);
+            assertEditable(donem);
+            finalizeSubmit(donem, month, birimKodu);
+            takipDonemRepository.save(donem);
+            count++;
+        }
+        return new BirimAyGonderResponse(yil, ay, count);
+    }
+
+    @Transactional
     public TakipDonemResponse submit(String birimKodu, Long basvuruId, int yil, int ay) {
         YearMonth month = requireMonth(yil, ay);
-        boolean relaxed = isRelaxedBirim(birimKodu);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, yil, ay);
         assertEditable(donem);
+        assertReadyToSubmit(donem, month, birimKodu);
+        finalizeSubmit(donem, month, birimKodu);
+        return toResponse(takipDonemRepository.save(donem), month);
+    }
+
+    private boolean readyToSubmit(TakipDonem donem, Basvuru basvuru, YearMonth month, String birimKodu) {
+        try {
+            assertReadyToSubmit(donem, month, birimKodu);
+            return true;
+        } catch (ApiException ex) {
+            return false;
+        }
+    }
+
+    private void assertReadyToSubmit(TakipDonem donem, YearMonth month, String birimKodu) {
+        boolean relaxed = isRelaxedBirim(birimKodu);
         LocalDate today = LocalDate.now(ZONE);
+        if (donem == null || donem.getGunler().isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Göndermeden önce EK-6 günleri seçilmelidir.");
+        }
         if (!relaxed) {
             if (month.isAfter(YearMonth.from(today))) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "Gelecek ay gönderilemez.");
@@ -623,9 +690,6 @@ public class TakipService {
             if (!weeklyErrors.isEmpty()) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, weeklyErrors.getFirst());
             }
-        }
-        if (donem.getGunler().isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "Göndermeden önce EK-6 günleri seçilmelidir.");
         }
         for (TakipGun gun : donem.getGunler()) {
             if (!relaxed && gun.getTarih().isAfter(today)) {
@@ -643,10 +707,13 @@ public class TakipService {
                         gun.getTarih() + " izinli/raporlu olduğu için dilekçe veya rapor yüklenmelidir.");
             }
         }
+    }
+
+    private void finalizeSubmit(TakipDonem donem, YearMonth month, String birimKodu) {
+        assertReadyToSubmit(donem, month, birimKodu);
         donem.setStatus(TakipStatus.SUBMITTED);
         donem.setGonderimTarihi(Instant.now());
         donem.setOnayTarihi(null);
-        return toResponse(takipDonemRepository.save(donem), month);
     }
 
     @Transactional

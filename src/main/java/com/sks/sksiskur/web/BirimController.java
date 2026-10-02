@@ -7,6 +7,7 @@ import com.sks.sksiskur.service.DocumentDownload;
 import com.sks.sksiskur.service.BirimDuyuruService;
 import com.sks.sksiskur.service.AdminExportService;
 import com.sks.sksiskur.service.TakipService;
+import com.sks.sksiskur.web.dto.BirimAyGonderResponse;
 import com.sks.sksiskur.web.dto.BirimAylikRaporResponse;
 import com.sks.sksiskur.web.dto.BirimDuyuruInboxResponse;
 import com.sks.sksiskur.web.dto.BirimOgrenciResponse;
@@ -157,6 +158,19 @@ public class BirimController {
     ) {
         DocumentDownload download = takipService.downloadBelge(birimKodu(authentication), basvuruId, yil, ay, tarih);
         return StudentController.fileResponse(download);
+    }
+
+    @PostMapping("/takip/gonder")
+    public BirimAyGonderResponse submitAy(
+            Authentication authentication,
+            @RequestBody TakipAyRequest request
+    ) {
+        String birimKodu = birimKodu(authentication);
+        BirimAyGonderResponse result = takipService.submitBirimAy(birimKodu, request.yil(), request.ay());
+        auditLogService.logBirim(authentication, birimKodu, IslemTuru.TAKIP_GONDER, "BIRIM", null,
+                "Aylık takip toplu gönderildi: " + request.yil() + "-" + String.format("%02d", request.ay()),
+                result.gonderilenOgrenci() + " öğrenci");
+        return result;
     }
 
     @PostMapping("/ogrenciler/{basvuruId}/gonder")
