@@ -34,6 +34,12 @@ function mondayOf(dateStr: string) {
   return toYmd(date);
 }
 
+function nextYearMonth(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  const next = new Date(y, m, 1);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function buildMonth(yil: number, ay: number): CalCell[] {
   const first = new Date(yil, ay - 1, 1);
   const startPad = (first.getDay() + 6) % 7;
@@ -114,41 +120,67 @@ export function UnitTrackingPage() {
       const key = mondayOf(cell.date);
       byWeek.set(key, [...(byWeek.get(key) ?? []), cell.date]);
     });
-    return [...byWeek.entries()].map(([week, dates]) => {
+    const thisYm = `${yil}-${String(ay).padStart(2, "0")}`;
+    const viewing = new Date(yil, ay - 1, 1);
+    const nowMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthOpen = viewing >= nowMonth;
+    const entries = [...byWeek.entries()];
+    const minima = entries.map(([, dates]) => {
+      const countable = dates.filter((date) => {
+        const day = Number(date.slice(8, 10));
+        const quotaYm = day >= 29 ? nextYearMonth(date.slice(0, 7)) : date.slice(0, 7);
+        if (quotaYm !== thisYm) return false;
+        if (!monthOpen) return true;
+        return date <= todayYmd;
+      });
+      return Math.min(DAYS_PER_WEEK, countable.length);
+    });
+    let sum = minima.reduce((total, value) => total + value, 0);
+    const quotaLimitDays = DAYS_PER_WEEK * 4;
+    for (let i = minima.length - 1; i >= 0 && sum > quotaLimitDays; i--) {
+      const cut = Math.min(minima[i], sum - quotaLimitDays);
+      minima[i] -= cut;
+      sum -= cut;
+    }
+    return entries.map(([week, dates], index) => {
       const first = dates[0];
       const last = dates[dates.length - 1];
       return {
         week,
         label: `${Number(first.slice(8, 10))}–${Number(last.slice(8, 10))} ${MONTHS[ay - 1]}`,
         selected: dates.filter((date) => workDays.has(date)).length,
-        required: Math.min(DAYS_PER_WEEK, dates.length),
+        required: minima[index],
         current: week === currentWeekMonday
       };
     });
-  }, [cells, workDays, currentWeekMonday, ay]);
+  }, [cells, workDays, currentWeekMonday, ay, yil, now, todayYmd]);
   const puantajDayOpen = (date: string) => !locked && workDays.has(date) && !closedDays.has(date) && date <= todayYmd;
   const puantajEditable = selected ? puantajDayOpen(selected) : false;
   const izinLimitiDolu = (donem?.toplamIzinGunu ?? 0) >= (donem?.izinGunLimiti ?? 10);
   const kullanilanIzin = donem?.toplamIzinGunu ?? 0;
   const izinLimiti = donem?.izinGunLimiti ?? 10;
   const kalanIzin = Math.max(0, izinLimiti - kullanilanIzin);
-  const missingPuantaj = [...workDays].filter((date) => !puantajByDate.get(date)?.durum);
+  const missingPuantaj = [...workDays].filter((date) => date <= todayYmd && !puantajByDate.get(date)?.durum);
   const missingDocs = [...workDays].filter((date) => {
     const gun = puantajByDate.get(date);
-    return needsDocument(gun?.durum) && !gun?.belgeVar;
+    return date <= todayYmd && needsDocument(gun?.durum) && !gun?.belgeVar;
   });
+  const futureWorkDays = [...workDays].filter((date) => date > todayYmd);
   const canSubmit = !locked
     && (donem?.ekuantUyarilari.length ?? 0) === 0
     && missingPuantaj.length === 0
     && missingDocs.length === 0
+    && futureWorkDays.length === 0
     && workDays.size > 0;
-  const incompleteWeeks = weekPlans.filter((week) => week.selected !== week.required).length;
+  const incompleteWeeks = weekPlans.filter((week) => week.selected < week.required).length;
+  const viewingOpen = new Date(yil, ay - 1, 1) >= new Date(now.getFullYear(), now.getMonth(), 1);
   const submissionSummary = canSubmit
     ? "Tüm kontroller tamamlandı. Ayı gönderime hazır."
     : [
         incompleteWeeks > 0 ? `${incompleteWeeks} haftanın EK-6 planı eksik` : "",
-        quotaCount !== quotaLimit ? `aylık kota ${quotaCount}/${quotaLimit}` : "",
+        !viewingOpen && quotaCount !== quotaLimit ? `aylık kota ${quotaCount}/${quotaLimit}` : "",
         missingPuantaj.length > 0 ? `${missingPuantaj.length} puantaj eksik` : "",
+        futureWorkDays.length > 0 ? `${futureWorkDays.length} gelecek gün seçili` : "",
         missingDocs.length > 0 ? `${missingDocs.length} belge eksik` : ""
       ].filter(Boolean).join(" · ");
 
@@ -270,8 +302,8 @@ export function UnitTrackingPage() {
       <section className="card help-tip" style={{ padding: 16, marginBottom: 18 }}>
         <b>Bu ay nasıl doldurulur?</b>
         <p style={{ margin: "6px 0 0", color: "var(--muted)", lineHeight: 1.55 }}>
-          Haftada en fazla 3 gün EK-6 seçin. Puantajda ay içindeki her EK-6 günü için geldi / gelmedi / izinli / raporlu işaretleyin.
-          İzin ve rapor günlerinde dilekçe yükleyin. Ay tamamlanınca kaydı yöneticiye gönderin.
+          Haftada en fazla 3 gün EK-6 seçin. Ayın 29–31. günleri sonraki ayın 12 günlük kotasına sayılır.
+          Puantaj yalnızca gelmiş günlere girilir; içinde bulunulan ay, bugüne kadarki haftalar tamamsa gönderilebilir.
         </p>
       </section>
       {locked && (

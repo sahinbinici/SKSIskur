@@ -681,9 +681,10 @@ public class AdminController {
                 month.getYear(),
                 month.getMonthValue()
         );
-        return excelAttachment(
+        return attachment(
                 iskurAylikRaporExportService.export(donemId, birimKodu, month.getYear(), month.getMonthValue()),
-                filename
+                filename,
+                "application/vnd.ms-excel.sheet.macroEnabled.12"
         );
     }
 

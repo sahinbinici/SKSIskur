@@ -31,6 +31,14 @@ public final class WorkScheduleRules {
     }
 
     public static List<String> validateMonthlyQuota(YearMonth quotaMonth, Set<LocalDate> selected, int daysPerWeek) {
+        return validateMonthlyQuota(quotaMonth, selected, daysPerWeek, null);
+    }
+
+    /**
+     * @param asOf today; {@code null} treats the quota month as closed (exact 12 days).
+     */
+    public static List<String> validateMonthlyQuota(
+            YearMonth quotaMonth, Set<LocalDate> selected, int daysPerWeek, LocalDate asOf) {
         List<String> errors = new ArrayList<>();
         int quota = monthlyQuota(daysPerWeek);
         for (LocalDate date : selected) {
@@ -40,7 +48,12 @@ public final class WorkScheduleRules {
         }
         if (selected.size() > quota) {
             errors.add(quotaMonth + " ayı için en fazla " + quota + " EK-6 günü seçilebilir (şu an " + selected.size() + ").");
-        } else if (selected.size() != quota) {
+            return errors;
+        }
+        if (quotaMonthOpen(quotaMonth, asOf)) {
+            return errors;
+        }
+        if (selected.size() != quota) {
             errors.add(quotaMonth + " ayı için 4 hafta × " + daysPerWeek + " gün, toplam " + quota
                     + " EK-6 günü seçilmelidir (şu an " + selected.size() + ").");
         }
@@ -48,7 +61,7 @@ public final class WorkScheduleRules {
     }
 
     public static boolean exceedsMonthlyQuota(YearMonth quotaMonth, Set<LocalDate> selected, int daysPerWeek) {
-        return validateMonthlyQuota(quotaMonth, selected, daysPerWeek).stream()
+        return validateMonthlyQuota(quotaMonth, selected, daysPerWeek, null).stream()
                 .anyMatch(message -> message.contains("en fazla"));
     }
 
@@ -61,6 +74,13 @@ public final class WorkScheduleRules {
     }
 
     public static List<String> validateEkuant(YearMonth month, Set<LocalDate> selected, int daysPerWeek) {
+        return validateEkuant(month, selected, daysPerWeek, null);
+    }
+
+    /**
+     * @param asOf today; {@code null} uses closed-month weekly minima (no future-day discount).
+     */
+    public static List<String> validateEkuant(YearMonth month, Set<LocalDate> selected, int daysPerWeek, LocalDate asOf) {
         List<String> errors = new ArrayList<>();
         for (LocalDate date : selected) {
             if (!YearMonth.from(date).equals(month)) {
@@ -71,21 +91,21 @@ public final class WorkScheduleRules {
         Map<LocalDate, Long> selectedByWeek = selected.stream()
                 .filter(d -> month.equals(YearMonth.from(d)))
                 .collect(Collectors.groupingBy(d -> d.with(DayOfWeek.MONDAY), Collectors.counting()));
+        int[] minima = weekMinima(month, daysByWeek, daysPerWeek, asOf);
 
+        int index = 0;
         for (Map.Entry<LocalDate, List<LocalDate>> entry : daysByWeek.entrySet()) {
             int available = entry.getValue().size();
-            int required = Math.min(daysPerWeek, available);
+            int maxAllowed = Math.min(daysPerWeek, available);
+            int required = minima[index++];
             int actual = selectedByWeek.getOrDefault(entry.getKey(), 0L).intValue();
-            if (actual > required) {
-                LocalDate start = entry.getKey();
-                LocalDate end = start.plusDays(6);
-                errors.add(start.format(WEEK_LABEL) + " - " + end.format(WEEK_LABEL)
-                        + " haftasında en fazla " + required + " gün seçilebilir (şu an " + actual + ").");
-            } else if (actual != required) {
-                LocalDate start = entry.getKey();
-                LocalDate end = start.plusDays(6);
-                errors.add(start.format(WEEK_LABEL) + " - " + end.format(WEEK_LABEL)
-                        + " haftasında " + required + " gün seçilmelidir (şu an " + actual + ").");
+            LocalDate start = entry.getKey();
+            LocalDate end = start.plusDays(6);
+            String week = start.format(WEEK_LABEL) + " - " + end.format(WEEK_LABEL);
+            if (actual > maxAllowed) {
+                errors.add(week + " haftasında en fazla " + maxAllowed + " gün seçilebilir (şu an " + actual + ").");
+            } else if (actual < required) {
+                errors.add(week + " haftasında " + required + " gün seçilmelidir (şu an " + actual + ").");
             }
         }
         return errors;
@@ -122,5 +142,46 @@ public final class WorkScheduleRules {
             date = date.plusDays(1);
         }
         return map;
+    }
+
+    static boolean quotaMonthOpen(YearMonth quotaMonth, LocalDate asOf) {
+        return asOf != null && !YearMonth.from(asOf).isAfter(quotaMonth);
+    }
+
+    static int[] weekMinima(YearMonth month, Map<LocalDate, List<LocalDate>> daysByWeek, int daysPerWeek, LocalDate asOf) {
+        int quota = monthlyQuota(daysPerWeek);
+        int[] minima = new int[daysByWeek.size()];
+        int index = 0;
+        for (List<LocalDate> weekDays : daysByWeek.values()) {
+            List<LocalDate> countable = weekDays.stream()
+                    .filter(date -> quotaMonth(date).equals(month))
+                    .filter(date -> countableForAsOf(date, month, asOf))
+                    .toList();
+            minima[index++] = Math.min(daysPerWeek, countable.size());
+        }
+        int sum = 0;
+        for (int min : minima) {
+            sum += min;
+        }
+        for (int i = minima.length - 1; i >= 0 && sum > quota; i--) {
+            int cut = Math.min(minima[i], sum - quota);
+            minima[i] -= cut;
+            sum -= cut;
+        }
+        return minima;
+    }
+
+    private static boolean countableForAsOf(LocalDate date, YearMonth month, LocalDate asOf) {
+        if (asOf == null) {
+            return true;
+        }
+        YearMonth asOfMonth = YearMonth.from(asOf);
+        if (asOfMonth.isBefore(month)) {
+            return false;
+        }
+        if (asOfMonth.equals(month)) {
+            return !date.isAfter(asOf);
+        }
+        return true;
     }
 }

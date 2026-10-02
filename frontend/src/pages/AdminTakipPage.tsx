@@ -76,6 +76,7 @@ export function AdminTakipPage() {
   const lastDay = new Date(yil, ay, 0).getDate();
   const periodLabel = selectedPeriod?.ad ?? "Dönem seçin";
   const birimLabel = birimKodu ? units.find((unit) => unit.kod === birimKodu)?.ad ?? birimKodu : "Tüm birimler";
+  const approvedCount = ozet?.ogrenciler.filter((row) => row.status === "APPROVED").length ?? 0;
   const ogrenciSayisi = pageTab === "cetvel" ? rapor?.ogrenciler.length ?? 0 : ozet?.ogrenciler.length ?? 0;
 
   async function saveClosedDays(next: string[]) {
@@ -155,11 +156,11 @@ export function AdminTakipPage() {
     return "—";
   }
 
-  function downloadIskurPaketi() {
-    const scope = birimKodu || "tum-birimler";
+  function downloadIskurPaketi(kod?: string) {
+    const scope = kod || "tum-birimler";
     const filename = `iskur-odeme_${scope}_${yil}-${String(ay).padStart(2, "0")}.xlsm`;
     void downloadAuthenticatedFile(
-      api.adminIskurPaketiExcelUrl(yil, ay, birimKodu || undefined, periodId),
+      api.adminIskurPaketiExcelUrl(yil, ay, kod || undefined, periodId),
       filename
     ).catch((err) => setError(err instanceof ApiError ? err.message : "İŞKUR paketi indirilemedi."));
   }
@@ -235,7 +236,7 @@ export function AdminTakipPage() {
       {pageTab === "paket" && (
         <ActionCard
           title="İŞKUR ödeme dosyası"
-          description="Onaylanan aylık puantajlara göre katılımcı listesi, devamsızlık formu ve devam gün çizelgesi doldurulur. Birim seçerseniz o birim, seçmezseniz tüm birimler yazılır. Bordro ve diğer sayfalar şimdilik boş bırakılır."
+          description="Yalnızca onaylı puantajlar yazılır. Dosya SKS-Onayli-Liste sekmesinde açılır; resmi KATILIMCI / Devamsızlık / Devam Gün Çizelgesi de doldurulur. Bordro boş kalır."
           meta={(
             <>
               <span className="meta-chip">{periodLabel}</span>
@@ -248,11 +249,45 @@ export function AdminTakipPage() {
         >
           <button
             className="btn btn-gold btn-lg"
-            disabled={!selectedPeriod || loading}
-            onClick={downloadIskurPaketi}
+            disabled={!selectedPeriod || loading || approvedCount === 0}
+            onClick={() => downloadIskurPaketi(birimKodu)}
           >
-            {birimKodu ? "Birim ödeme dosyasını indir" : "Tüm birimler ödeme dosyasını indir"}
+            {birimKodu ? "Seçili birimin ödeme dosyasını indir" : "Tüm birimler ödeme dosyasını indir"}
           </button>
+          {!birimKodu && (
+            <div className="card" style={{ marginTop: 16, overflow: "auto" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Birim</th>
+                    <th>Onaylı puantaj</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {units.map((unit) => {
+                    const count = ozet?.ogrenciler.filter((row) => row.birimKodu === unit.kod && row.status === "APPROVED").length ?? 0;
+                    return (
+                      <tr key={unit.kod}>
+                        <td>{unit.ad}<div className="muted">Kod {unit.kod}</div></td>
+                        <td>{count}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={loading || count === 0}
+                            onClick={() => downloadIskurPaketi(unit.kod)}
+                          >
+                            Bu birimi indir
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </ActionCard>
       )}
 

@@ -580,13 +580,17 @@ public class TakipService {
         YearMonth month = requireMonth(yil, ay);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, yil, ay);
         assertEditable(donem);
+        LocalDate today = LocalDate.now(ZONE);
+        if (month.isAfter(YearMonth.from(today))) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Gelecek ay gönderilemez.");
+        }
         Set<LocalDate> quotaDays = quotaDays(donem.getBasvuru(), month);
-        List<String> ekuantErrors = WorkScheduleRules.validateMonthlyQuota(month, quotaDays, daysPerWeek);
+        List<String> ekuantErrors = WorkScheduleRules.validateMonthlyQuota(month, quotaDays, daysPerWeek, today);
         if (!ekuantErrors.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, ekuantErrors.getFirst());
         }
         List<String> weeklyErrors = WorkScheduleRules.validateEkuant(
-                month, actualMonthDays(donem.getBasvuru(), month), daysPerWeek);
+                month, actualMonthDays(donem.getBasvuru(), month), daysPerWeek, today);
         if (!weeklyErrors.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, weeklyErrors.getFirst());
         }
@@ -594,6 +598,11 @@ public class TakipService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Göndermeden önce EK-6 günleri seçilmelidir.");
         }
         for (TakipGun gun : donem.getGunler()) {
+            if (gun.getTarih().isAfter(today)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST,
+                        "Gelecek günler için puantaj girilemez. " + gun.getTarih()
+                                + " tarihini EK-6'dan çıkarın veya ay ilerledikçe işaretleyin.");
+            }
             if (gun.getDurum() == null) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, gun.getTarih() + " için puantaj girilmedi.");
             }
@@ -785,9 +794,11 @@ public class TakipService {
     }
 
     private List<String> ekuantWarnings(Basvuru basvuru, YearMonth month) {
+        LocalDate today = LocalDate.now(ZONE);
         List<String> warnings = new ArrayList<>(
-                WorkScheduleRules.validateMonthlyQuota(month, quotaDays(basvuru, month), daysPerWeek));
-        warnings.addAll(WorkScheduleRules.validateEkuant(month, actualMonthDays(basvuru, month), daysPerWeek));
+                WorkScheduleRules.validateMonthlyQuota(month, quotaDays(basvuru, month), daysPerWeek, today));
+        warnings.addAll(WorkScheduleRules.validateEkuant(
+                month, actualMonthDays(basvuru, month), daysPerWeek, today));
         return warnings.stream().distinct().toList();
     }
 

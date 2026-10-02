@@ -57,6 +57,11 @@ public class IskurAylikRaporExportService {
                 .filter(student -> student.status() == TakipStatus.APPROVED)
                 .sorted(Comparator.comparing(student -> adSoyad(student).toUpperCase(Locale.forLanguageTag("tr-TR"))))
                 .toList();
+        if (ogrenciler.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Onaylanmış puantaj yok. Önce Aylık devam > Puantaj onayı ile kayıtları onaylayın. "
+                            + "Doldurulan sayfalar KATILIMCI LİSTESİ, Devamsızlık Formu ve Devam Gün Çizelgesi’dir; Bordro boş kalır.");
+        }
         return buildWorkbook(ogrenciler, YearMonth.of(yil, ay));
     }
 
@@ -66,9 +71,12 @@ public class IskurAylikRaporExportService {
                 throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "İŞKUR bordro şablonu bulunamadı.");
             }
             try (Workbook workbook = new XSSFWorkbook(input); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                fillSksOnayliListe(workbook, ogrenciler, month);
                 fillKatilimciListesi(workbook, ogrenciler);
                 fillDevamsizlikFormu(workbook, ogrenciler, month);
                 fillDevamGunCizelgesi(workbook, ogrenciler, month);
+                workbook.setActiveSheet(0);
+                workbook.setFirstVisibleTab(0);
                 workbook.setForceFormulaRecalculation(true);
                 workbook.write(output);
                 return output.toByteArray();
@@ -76,11 +84,59 @@ public class IskurAylikRaporExportService {
         } catch (ApiException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "İŞKUR aylık paket dosyası oluşturulamadı.");
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "İŞKUR aylık paket dosyası oluşturulamadı: " + ex.getMessage());
         }
     }
 
-    private void fillKatilimciListesi(Workbook workbook, List<BirimAylikRaporResponse.RaporOgrenci> ogrenciler) {
+    private void fillSksOnayliListe(
+            Workbook workbook,
+            List<BirimAylikRaporResponse.RaporOgrenci> ogrenciler,
+            YearMonth month
+    ) {
+        String name = "SKS-Onayli-Liste";
+        Sheet sheet = workbook.getSheet(name);
+        if (sheet == null) {
+            sheet = workbook.createSheet(name);
+        }
+        workbook.setSheetOrder(name, 0);
+        Row header = getOrCreateRow(sheet, 0);
+        setCell(header, 0, "SIRA");
+        setCell(header, 1, "ADI SOYADI");
+        setCell(header, 2, "TC KIMLIK NO");
+        setCell(header, 3, "IBAN");
+        setCell(header, 4, "GELDI GUNLERI");
+        setCell(header, 5, "DONEM");
+        for (int i = 0; i < ogrenciler.size(); i++) {
+            BirimAylikRaporResponse.RaporOgrenci ogrenci = ogrenciler.get(i);
+            Row row = getOrCreateRow(sheet, i + 1);
+            setCell(row, 0, i + 1);
+            setCell(row, 1, adSoyad(ogrenci));
+            setCell(row, 2, nullToEmpty(ogrenci.tcKimlikNo()));
+            setCell(row, 3, nullToEmpty(ogrenci.iban()));
+            setCell(row, 4, formatDays(ogrenci.geldiGunler()));
+            setCell(row, 5, MONTHS_TR[month.getMonthValue() - 1] + " " + month.getYear());
+        }
+        for (int col = 0; col <= 5; col++) {
+            sheet.autoSizeColumn(col);
+        }
+    }
+
+    private String formatDays(List<LocalDate> dates) {
+        if (dates == null || dates.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (LocalDate date : dates) {
+            if (!sb.isEmpty()) {
+                sb.append(", ");
+            }
+            sb.append(date.getDayOfMonth());
+        }
+        return sb.toString();
+    }
+
+    private Sheet fillKatilimciListesi(Workbook workbook, List<BirimAylikRaporResponse.RaporOgrenci> ogrenciler) {
         Sheet sheet = requireSheet(workbook, SHEET_KATILIMCI);
         clearRows(sheet, 1, clearEndRow(1, ogrenciler.size()), 1, 3);
         int rowIndex = 1;
@@ -92,6 +148,7 @@ public class IskurAylikRaporExportService {
             setCell(row, 2, nullToEmpty(ogrenci.tcKimlikNo()));
             setCell(row, 3, nullToEmpty(ogrenci.iban()));
         }
+        return sheet;
     }
 
     private void fillDevamsizlikFormu(
@@ -175,10 +232,31 @@ public class IskurAylikRaporExportService {
 
     private Sheet requireSheet(Workbook workbook, String name) {
         Sheet sheet = workbook.getSheet(name);
-        if (sheet == null) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Şablonda '" + name + "' sayfası bulunamadı.");
+        if (sheet != null) {
+            return sheet;
         }
-        return sheet;
+        String needle = normalizeSheetName(name);
+        for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+            String candidate = normalizeSheetName(workbook.getSheetName(i));
+            if (candidate.contains(needle) || needle.contains(candidate)) {
+                return workbook.getSheetAt(i);
+            }
+        }
+        throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "Şablonda '" + name + "' sayfası bulunamadı.");
+    }
+
+    private static String normalizeSheetName(String name) {
+        if (name == null) {
+            return "";
+        }
+        return name.toUpperCase(Locale.forLanguageTag("tr-TR"))
+                .replace('İ', 'I')
+                .replace('Ş', 'S')
+                .replace('Ğ', 'G')
+                .replace('Ü', 'U')
+                .replace('Ö', 'O')
+                .replace('Ç', 'C')
+                .replaceAll("[^A-Z0-9]", "");
     }
 
     private int clearEndRow(int startRow, int studentCount) {

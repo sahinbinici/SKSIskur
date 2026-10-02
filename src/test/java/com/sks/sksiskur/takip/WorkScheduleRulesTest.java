@@ -77,6 +77,45 @@ class WorkScheduleRulesTest {
     }
 
     @Test
+    void september2026TwelveDaysWithoutLastWeekIsValid() {
+        YearMonth month = YearMonth.of(2026, 9);
+        Set<LocalDate> days = Set.of(
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 2), LocalDate.of(2026, 9, 3),
+                LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 8), LocalDate.of(2026, 9, 9),
+                LocalDate.of(2026, 9, 14), LocalDate.of(2026, 9, 15), LocalDate.of(2026, 9, 16),
+                LocalDate.of(2026, 9, 21), LocalDate.of(2026, 9, 22), LocalDate.of(2026, 9, 23));
+        assertTrue(WorkScheduleRules.validateEkuant(month, days, 3).isEmpty());
+        assertTrue(WorkScheduleRules.validateMonthlyQuota(month, days, 3).isEmpty());
+    }
+
+    @Test
+    void septemberLastWeekDaysTwentyNineThirtyDoNotFillThisMonthsQuota() {
+        YearMonth month = YearMonth.of(2026, 9);
+        Set<LocalDate> days = Set.of(
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 2), LocalDate.of(2026, 9, 3),
+                LocalDate.of(2026, 9, 7), LocalDate.of(2026, 9, 8), LocalDate.of(2026, 9, 9),
+                LocalDate.of(2026, 9, 14), LocalDate.of(2026, 9, 15), LocalDate.of(2026, 9, 16),
+                LocalDate.of(2026, 9, 21), LocalDate.of(2026, 9, 22), LocalDate.of(2026, 9, 23),
+                LocalDate.of(2026, 9, 29), LocalDate.of(2026, 9, 30));
+        assertTrue(WorkScheduleRules.validateEkuant(month, days, 3).isEmpty());
+        Set<LocalDate> septemberQuota = days.stream()
+                .filter(date -> WorkScheduleRules.quotaMonth(date).equals(month))
+                .collect(java.util.stream.Collectors.toSet());
+        assertEquals(12, septemberQuota.size());
+        assertTrue(WorkScheduleRules.validateMonthlyQuota(month, septemberQuota, 3).isEmpty());
+    }
+
+    @Test
+    void currentOctoberWeekOnlyNeedsPastDays() {
+        YearMonth month = YearMonth.of(2026, 10);
+        LocalDate asOf = LocalDate.of(2026, 10, 2);
+        Set<LocalDate> days = Set.of(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 2));
+        assertTrue(WorkScheduleRules.validateEkuant(month, days, 3, asOf).isEmpty());
+        assertTrue(WorkScheduleRules.validateMonthlyQuota(month, days, 3, asOf).isEmpty());
+        assertFalse(WorkScheduleRules.validateEkuant(month, Set.of(LocalDate.of(2026, 10, 1)), 3, asOf).isEmpty());
+    }
+
+    @Test
     void june2024HasFiveCalendarWeeks() {
         List<List<LocalDate>> weeks = WorkScheduleRules.calendarWeeks(YearMonth.of(2024, 6));
         assertEquals(5, weeks.size());
