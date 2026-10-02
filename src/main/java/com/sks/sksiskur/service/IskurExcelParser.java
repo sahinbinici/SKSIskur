@@ -29,6 +29,9 @@ public class IskurExcelParser {
     public record ParsedRow(String tcKimlikNo, String ad, String soyad, String ogrenciNo) {
     }
 
+    public record NameParts(String ad, String soyad, String tcKimlikNo) {
+    }
+
     public List<ParsedRow> parse(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Excel dosyası seçilmedi.");
@@ -46,29 +49,28 @@ public class IskurExcelParser {
             int headerRowIndex = findHeaderRow(sheet);
             Row headerRow = sheet.getRow(headerRowIndex);
             Map<Column, Integer> columns = mapColumns(headerRow);
-            if (columns.get(Column.AD) == null || columns.get(Column.SOYAD) == null) {
+            if (!hasNameColumns(columns)) {
                 throw new ApiException(HttpStatus.BAD_REQUEST,
-                        "Excel dosyasında Ad ve Soyad sütunları bulunamadı. İŞKUR listesindeki başlıkları kontrol edin.");
+                        "Excel dosyasında Ad/Soyad veya Adı Soyadı sütunu bulunamadı. İŞKUR listesindeki başlıkları kontrol edin.");
             }
 
             List<ParsedRow> rows = new ArrayList<>();
             for (int i = headerRowIndex + 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
-                if (row == null || isBlankRow(row)) {
+                if (row == null || isBlankRow(row) || isYedekRow(row)) {
                     continue;
                 }
-                String ad = cell(row, columns.get(Column.AD));
-                String soyad = cell(row, columns.get(Column.SOYAD));
-                if (ad.isBlank() && soyad.isBlank()) {
+                NameParts names = resolveNames(row, columns);
+                if (names == null) {
                     continue;
                 }
-                if (ad.isBlank() || soyad.isBlank()) {
+                if (names.ad().isBlank() || names.soyad().isBlank()) {
                     throw new ApiException(HttpStatus.BAD_REQUEST,
                             (i + 1) + ". satırda ad ve soyad birlikte dolu olmalıdır.");
                 }
-                String tc = normalizeTc(cell(row, columns.get(Column.TC)));
+                String tc = firstNonBlank(normalizeTc(cell(row, columns.get(Column.TC))), names.tcKimlikNo());
                 String ogrenciNo = normalizeOgrenciNo(cell(row, columns.get(Column.OGRENCi_NO)));
-                rows.add(new ParsedRow(tc, ad.trim(), soyad.trim(), ogrenciNo));
+                rows.add(new ParsedRow(tc, names.ad(), names.soyad(), ogrenciNo));
             }
             if (rows.isEmpty()) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "Excel dosyasında geçerli öğrenci kaydı bulunamadı.");
@@ -82,17 +84,17 @@ public class IskurExcelParser {
     }
 
     private enum Column {
-        TC, AD, SOYAD, OGRENCi_NO
+        TC, AD, SOYAD, AD_SOYAD, OGRENCi_NO
     }
 
     private int findHeaderRow(Sheet sheet) {
-        for (int i = sheet.getFirstRowNum(); i <= Math.min(sheet.getLastRowNum(), 10); i++) {
+        for (int i = sheet.getFirstRowNum(); i <= Math.min(sheet.getLastRowNum(), 15); i++) {
             Row row = sheet.getRow(i);
             if (row == null) {
                 continue;
             }
             Map<Column, Integer> columns = mapColumns(row);
-            if (columns.containsKey(Column.AD) && columns.containsKey(Column.SOYAD)) {
+            if (hasNameColumns(columns)) {
                 return i;
             }
         }
@@ -108,6 +110,11 @@ public class IskurExcelParser {
             }
             if (matches(header, Set.of("tckimlikno", "tckimlik", "tckn", "tc", "kimlikno", "tckimliknumarasi"))) {
                 columns.putIfAbsent(Column.TC, cell.getColumnIndex());
+            } else if (matches(header, Set.of(
+                    "adisoyadi", "adisoyad", "adsoyad", "advesoyad",
+                    "katilimcininadisoyadi", "ogrenciadisoyadi"
+            ))) {
+                columns.putIfAbsent(Column.AD_SOYAD, cell.getColumnIndex());
             } else if (matches(header, Set.of("ad", "adi", "ogrenciadi", "isim"))) {
                 columns.putIfAbsent(Column.AD, cell.getColumnIndex());
             } else if (matches(header, Set.of("soyad", "soyadi", "ogrencisoyadi", "soyisim"))) {
@@ -117,6 +124,66 @@ public class IskurExcelParser {
             }
         }
         return columns;
+    }
+
+    private static boolean hasNameColumns(Map<Column, Integer> columns) {
+        return columns.containsKey(Column.AD_SOYAD)
+                || (columns.containsKey(Column.AD) && columns.containsKey(Column.SOYAD));
+    }
+
+    private NameParts resolveNames(Row row, Map<Column, Integer> columns) {
+        if (columns.containsKey(Column.AD_SOYAD)) {
+            String raw = cell(row, columns.get(Column.AD_SOYAD));
+            if (raw.isBlank()) {
+                return null;
+            }
+            return splitIdentity(raw);
+        }
+        String ad = cell(row, columns.get(Column.AD));
+        String soyad = cell(row, columns.get(Column.SOYAD));
+        if (ad.isBlank() && soyad.isBlank()) {
+            return null;
+        }
+        NameParts fromAd = splitIdentity(ad);
+        if (soyad.isBlank()) {
+            return fromAd;
+        }
+        return new NameParts(fromAd.ad().isBlank() ? ad.trim() : fromAd.ad(), soyad.trim(), fromAd.tcKimlikNo());
+    }
+
+    static NameParts splitIdentity(String raw) {
+        String text = raw == null ? "" : raw.trim().replaceAll("\\s+", " ");
+        if (text.isBlank()) {
+            return new NameParts("", "", null);
+        }
+        String tc = null;
+        int space = text.indexOf(' ');
+        if (space > 0) {
+            String maybeTc = normalizeTc(text.substring(0, space));
+            if (maybeTc != null) {
+                tc = maybeTc;
+                text = text.substring(space + 1).trim();
+            }
+        }
+        int lastSpace = text.lastIndexOf(' ');
+        if (lastSpace <= 0) {
+            return new NameParts(text, "", tc);
+        }
+        return new NameParts(text.substring(0, lastSpace).trim(), text.substring(lastSpace + 1).trim(), tc);
+    }
+
+    private boolean isYedekRow(Row row) {
+        for (Cell cell : row) {
+            String value = NameNormalizer.fold(FORMATTER.formatCellValue(cell)).replace(" ", "");
+            if ("yedek".equals(value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String firstNonBlank(String first, String second) {
+        return first != null && !first.isBlank() ? first : second;
     }
 
     private static boolean matches(String header, Set<String> aliases) {

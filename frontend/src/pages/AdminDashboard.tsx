@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api";
+import { AdminProcessNav } from "../components/AdminProcessNav";
 import { PageHeader } from "../components/PageHeader";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { Shell, formatDate } from "../components/ui";
@@ -105,8 +106,9 @@ export function AdminDashboard() {
       <div className="no-print">
         <PageHeader
           title="Başvurular"
-          description="Başvuruları inceleyin, onaylayın veya filtreleyerek Excel ve belge listeleri indirin."
+          description="İncelemede olanları onaylayın. Süreçteki diğer işler üst menüde ve aşağıdaki bekleyen işlerde."
         />
+        <AdminProcessNav />
 
         {panoDuyurulari.map((duyuru) => (
           <div className="alert alert-wait admin-pano-duyuru" key={duyuru.id}>

@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
-import { api } from "../api";
-import type { AdminOzet, BasvuruDonemi, DagitimSonuc, KayitListesi } from "../types";
+import { useMemo } from "react";
+import { useAdminPeriodOps } from "../hooks/useAdminPeriodOps";
 
 type PendingItem = {
   title: string;
@@ -11,28 +10,7 @@ type PendingItem = {
 };
 
 export function AdminPendingTasks() {
-  const [period, setPeriod] = useState<BasvuruDonemi>();
-  const [ozet, setOzet] = useState<AdminOzet | null>(null);
-  const [kayit, setKayit] = useState<KayitListesi | null>(null);
-  const [dagitim, setDagitim] = useState<DagitimSonuc | null>(null);
-
-  useEffect(() => {
-    Promise.all([
-      api.basvuruDonemleri(),
-      api.kayitListesi().catch(() => null),
-      api.dagitim().catch(() => null)
-    ])
-      .then(async ([periods, kayitData, dagitimData]) => {
-        const active = periods.find((item) => item.aktif);
-        setPeriod(active);
-        setKayit(kayitData);
-        setDagitim(dagitimData);
-        if (active) {
-          setOzet(await api.adminSummary(active.id));
-        }
-      })
-      .catch(() => undefined);
-  }, []);
+  const { period, ozet, kayit, dagitim, takip } = useAdminPeriodOps();
 
   const items = useMemo(() => {
     const pending: PendingItem[] = [];
@@ -48,7 +26,7 @@ export function AdminPendingTasks() {
     if ((ozet?.onaylandi ?? 0) > 0 && !kayit?.kesinListeYuklendi) {
       pending.push({
         title: "İŞKUR nihai listesi",
-        detail: "Onaylı başvuruları gönderin, dönen listeyi yükleyin",
+        detail: "Onaylı listeyi indirin, dönen dosyayı yükleyin",
         count: ozet?.onaylandi ?? 0,
         link: "/admin/kayit"
       });
@@ -61,11 +39,22 @@ export function AdminPendingTasks() {
         link: "/admin/kayit"
       });
     }
+    const imzaBekleyen = kayit?.imzaBildirimiGonderildi
+      ? Math.max(0, (kayit.kesinListede ?? 0) - (dagitim?.onaylanan ?? 0))
+      : 0;
+    if (imzaBekleyen > 0) {
+      pending.push({
+        title: "Fiziksel imza",
+        detail: "İmza geldi / pasife al işlemi bekliyor",
+        count: imzaBekleyen,
+        link: "/admin/kayit"
+      });
+    }
     const atanmamis = Math.max(0, (dagitim?.onaylanan ?? 0) - (dagitim?.atanan ?? 0));
     if (kayit?.imzaBildirimiGonderildi && atanmamis > 0) {
       pending.push({
         title: "Birim ataması",
-        detail: "Sözleşme imzalayan öğrenci birime atanmayı bekliyor",
+        detail: "İmza gelen öğrenci birime atanmayı bekliyor",
         count: atanmamis,
         link: "/admin/dagitim"
       });
@@ -78,8 +67,17 @@ export function AdminPendingTasks() {
         link: "/admin/dagitim"
       });
     }
+    const puantajOnay = takip?.ogrenciler.filter((row) => row.status === "SUBMITTED").length ?? 0;
+    if (puantajOnay > 0) {
+      pending.push({
+        title: "Puantaj onayı",
+        detail: "Birimin gönderdiği EK-6 / puantaj bekliyor",
+        count: puantajOnay,
+        link: "/admin/takip"
+      });
+    }
     return pending;
-  }, [ozet, kayit, dagitim]);
+  }, [ozet, kayit, dagitim, takip]);
 
   const total = items.reduce((sum, item) => sum + item.count, 0);
 

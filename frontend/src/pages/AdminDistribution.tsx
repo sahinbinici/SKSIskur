@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api";
 import { useConfirm } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
+import { AdminProcessNav } from "../components/AdminProcessNav";
 import { OgrenciKimlikMeta, Shell, formatDate } from "../components/ui";
 import type { DagitimBirim, DagitimBirimi, DagitimSonuc } from "../types";
 
@@ -71,7 +72,9 @@ export function AdminDistribution() {
       <PageHeader
         title="Birim dağıtımı"
         description="Sözleşme imzalayan öğrenciler önce kendi fakülte/MYO birimine yerleştirilir; kontenjan dolarsa kalanlar diğer açık birimlere atanır."
-      />      {error && <div className="alert alert-error">{error}</div>}
+      />
+      <AdminProcessNav />
+      {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
       {data && !data.kesinListeOnaylandi && (
         <div className="alert alert-wait">
@@ -97,7 +100,7 @@ export function AdminDistribution() {
       </div>
       <div className="row" style={{ marginBottom: 16 }}>
         <button className="btn btn-gold" disabled={busy || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(false)}>Listeyi dağıt</button>
-        <button className="btn btn-primary" disabled={busy || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(true)}>Yeniden dağıt</button>
+        <button className="btn btn-danger" disabled={busy || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(true)}>Yeniden dağıt</button>
         <label style={{ display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
           <input type="checkbox" checked={onlyFilled} onChange={(e) => setOnlyFilled(e.target.checked)} style={{ width: "auto", margin: 0 }} />
           Yalnız dolu birimler

@@ -344,6 +344,7 @@ input:focus, textarea:focus, select:focus {
 
 .grid-2 { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 20px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
 .identity {
   padding: 24px;
@@ -813,6 +814,29 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 .report-table-list th, .report-table-list td { padding: 4px 6px; font-size: 11px; }
 .report-table-list .name { white-space: normal; }
 
+.process-nav {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 18px;
+}
+.process-nav-link {
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  background: #e8eef8;
+  border-radius: 999px;
+  padding: 7px 12px;
+}
+.process-nav-link:hover { color: var(--navy); background: #dce7f8; }
+.process-nav-link.is-active { background: var(--navy); color: #fff; }
+.process-nav-link.is-next:not(.is-active) {
+  background: var(--gold-soft);
+  color: var(--danger);
+  box-shadow: inset 0 0 0 1px #f3b4bf;
+}
+
 .page-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -1067,7 +1091,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 }
 
 @media (max-width: 900px) {
-  .login-layout, .grid-2, .identity, .upload-grid, .grid-4, .grid-5, .cal-pair { grid-template-columns: 1fr; }
+  .login-layout, .grid-2, .identity, .upload-grid, .grid-3, .grid-4, .grid-5, .cal-pair { grid-template-columns: 1fr; }
   .application-steps { grid-template-columns: 1fr; }
   .agreement-admin-layout { grid-template-columns: 1fr; }
   .agreement-dialog-actions, .agreement-editor-footer { align-items: stretch; flex-direction: column; }

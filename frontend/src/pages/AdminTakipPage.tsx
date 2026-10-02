@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, ApiError, downloadAuthenticatedFile } from "../api";
 import { FilterChips } from "../components/FilterChips";
 import { ActionCard, PageHeader } from "../components/PageHeader";
+import { AdminProcessNav } from "../components/AdminProcessNav";
 import { OgrenciKimlikMeta, Shell } from "../components/ui";
 import { EkuantSheet, MONTHS, PuantajSheet, calendarWeeks } from "./UnitReportPage";
 import type { AdminTakipOzet, BasvuruDonemi, BirimAylikRapor, IzinRaporOgrenci, WorkUnit } from "../types";
@@ -15,7 +16,7 @@ export function AdminTakipPage() {
   const [yil, setYil] = useState(now.getFullYear());
   const [ay, setAy] = useState(now.getMonth() + 1);
   const [birimKodu, setBirimKodu] = useState("");
-  const [pageTab, setPageTab] = useState<PageTab>("paket");
+  const [pageTab, setPageTab] = useState<PageTab>("ozet");
   const [cetvelKind, setCetvelKind] = useState<CetvelKind>("ekuant");
   const [units, setUnits] = useState<WorkUnit[]>([]);
   const [periods, setPeriods] = useState<BasvuruDonemi[]>([]);
@@ -173,8 +174,8 @@ export function AdminTakipPage() {
   return (
     <Shell home="/admin" full>
       <PageHeader
-        title="Aylık devam / İŞKUR"
-        description="Resmi İŞKUR paketi, devam özeti, ayarlar ve yazdırma cetvelleri tek ekranda."
+        title="Aylık devam ve ödeme"
+        description="Önce birimin gönderdiği puantajı onaylayın. Onaydan sonra ödeme Excel’ini indirin; birim onaylı cetveli yazdırır."
       />
 
       <div className="filter-bar no-print">
@@ -210,6 +211,7 @@ export function AdminTakipPage() {
           </select>
         </label>
       </div>
+      <AdminProcessNav />
 
       <FilterChips
         items={[
@@ -220,10 +222,10 @@ export function AdminTakipPage() {
       />
 
       <div className="page-tabs page-tabs-4 no-print">
-        <button type="button" className={pageTab === "paket" ? "active" : ""} onClick={() => setPageTab("paket")}>İŞKUR paketi</button>
-        <button type="button" className={pageTab === "ozet" ? "active" : ""} onClick={() => setPageTab("ozet")}>Özet</button>
+        <button type="button" className={pageTab === "ozet" ? "active" : ""} onClick={() => setPageTab("ozet")}>Puantaj onayı</button>
+        <button type="button" className={pageTab === "paket" ? "active" : ""} onClick={() => setPageTab("paket")}>Ödeme dosyası</button>
+        <button type="button" className={pageTab === "cetvel" ? "active" : ""} onClick={() => setPageTab("cetvel")}>Cetveller</button>
         <button type="button" className={pageTab === "ayarlar" ? "active" : ""} onClick={() => setPageTab("ayarlar")}>Ayarlar</button>
-        <button type="button" className={pageTab === "cetvel" ? "active" : ""} onClick={() => setPageTab("cetvel")}>Yazdırma cetvelleri</button>
       </div>
 
       {error && <div className="alert alert-error no-print">{error}</div>}

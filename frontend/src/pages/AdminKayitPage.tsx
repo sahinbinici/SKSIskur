@@ -4,6 +4,7 @@ import { api, ApiError, downloadAuthenticatedFile } from "../api";
 import { useConfirm } from "../components/ConfirmDialog";
 import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
+import { AdminProcessNav } from "../components/AdminProcessNav";
 import { Shell, formatDate } from "../components/ui";import { KayitListSheets } from "./AdminListReports";
 import type { KayitListeFiltre, KayitListesi, SozlesmeImzaBekleyen } from "../types";
 
@@ -73,7 +74,8 @@ export function AdminKayitPage() {
       message: "İŞKUR nihai listesindeki öğrencilere sayfa bildirimi ve başvuruda girilen e-posta ile imza çağrısı gider.",
       confirmLabel: "Gönder"
     });
-    if (!ok) return;    setBusy(true);
+    if (!ok) return;
+    setBusy(true);
     setError("");
     setMessage("");
     try {
@@ -94,7 +96,8 @@ export function AdminKayitPage() {
       confirmLabel: "Sıfırla",
       variant: "danger"
     });
-    if (!ok) return;    setBusy(true);
+    if (!ok) return;
+    setBusy(true);
     setError("");
     setMessage("");
     try {
@@ -158,8 +161,9 @@ export function AdminKayitPage() {
       <div className="no-print">
       <PageHeader
         title="Kesin kayıt ve sözleşme"
-        description="Onaylıları İŞKUR’a gönderin, dönen nihai listeyi yükleyin, imza daveti yollayın. İmza atanlar kesin listeye girer ve birimlere dağıtılır."
+        description="Onaylı listeyi İŞKUR’a gönderin, nihai listeyi yükleyin, imza daveti yollayın. İmza gelenler birim dağıtımına girer."
       />
+      <AdminProcessNav />
       {data?.aktifDalga && (
         <p style={{ color: "var(--muted)", marginTop: -8 }}>
           Aktif başvuru turu: <b>{data.aktifDalga.ad}</b>
@@ -179,7 +183,7 @@ export function AdminKayitPage() {
           {data.imzaBildirimiGonderimTarihi ? ` ${formatDate(data.imzaBildirimiGonderimTarihi)}` : ""}
         </div>
       )}
-      <div className="grid-5" style={{ marginBottom: 18 }}>
+      <div className="grid-3" style={{ marginBottom: 18 }}>
         <Stat title="Onaylı başvuru" value={data?.onayliBasvuru} />
         <Stat title="İmza daveti" value={data?.kesinListede} />
         <Stat title="İmza bekleyen" value={imzaBekleyen.length} />

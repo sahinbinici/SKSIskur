@@ -4,7 +4,7 @@ import { useAuth } from "../auth";
 import { isSuperAdmin, STATUS_LABEL, type ApplicationStatus } from "../types";
 import type { ReactNode } from "react";
 
-type NavMenuId = "operasyon" | "yonetim" | "diger";
+type NavMenuId = "yonetim" | "diger";
 
 function NavDropdown({
   id,
@@ -68,14 +68,6 @@ export function Shell({ children, home, wide, full }: { children: ReactNode; hom
   const superAdmin = isSuperAdmin(session);
   const [openMenu, setOpenMenu] = useState<NavMenuId | null>(null);
 
-  const operasyonLinks = (
-    <>
-      <NavLink to="/admin/kayit">Kesin kayıt</NavLink>
-      <NavLink to="/admin/dagitim">Birim dağıtımı</NavLink>
-      <NavLink to="/admin/duyurular">Duyurular</NavLink>
-    </>
-  );
-
   const yonetimLinks = (
     <>
       <NavLink to="/admin/donemler">Dönemler</NavLink>
@@ -101,15 +93,15 @@ export function Shell({ children, home, wide, full }: { children: ReactNode; hom
           {session?.role === "ADMIN" && (
             <>
               <AdminBasvuruNavLink />
-              <NavLink to="/admin/takip" className="nav-link nav-link-wide">Aylık İŞKUR</NavLink>
-              <NavDropdown id="operasyon" label="Operasyon" openMenu={openMenu} setOpenMenu={setOpenMenu} className="nav-desktop-only">
-                {operasyonLinks}
-              </NavDropdown>
+              <NavLink to="/admin/kayit" className="nav-link">Kesin kayıt</NavLink>
+              <NavLink to="/admin/dagitim" className="nav-link">Dağıtım</NavLink>
+              <NavLink to="/admin/takip" className="nav-link nav-link-wide">Aylık devam</NavLink>
+              <NavLink to="/admin/duyurular" className="nav-link nav-desktop-only">Duyurular</NavLink>
               <NavDropdown id="yonetim" label="Yönetim" openMenu={openMenu} setOpenMenu={setOpenMenu} className="nav-desktop-only">
                 {yonetimLinks}
               </NavDropdown>
               <NavDropdown id="diger" label="Menü" openMenu={openMenu} setOpenMenu={setOpenMenu} className="nav-compact-only">
-                {operasyonLinks}
+                <NavLink to="/admin/duyurular">Duyurular</NavLink>
                 {yonetimLinks}
               </NavDropdown>
             </>
