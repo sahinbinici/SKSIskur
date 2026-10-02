@@ -46,6 +46,10 @@ public class Basvuru {
     @JoinColumn(name = "basvuru_donemi_id")
     private BasvuruDonemi basvuruDonemi;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "basvuru_dalga_id")
+    private BasvuruDalga basvuruDalga;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ApplicationStatus status = ApplicationStatus.DRAFT;
@@ -61,6 +65,12 @@ public class Basvuru {
 
     @Column(name = "hesap_numarasi", length = 16)
     private String hesapNumarasi;
+
+    @Column(name = "iletisim_eposta", length = 160)
+    private String iletisimEposta;
+
+    @Column(name = "iletisim_gsm", length = 20)
+    private String iletisimGsm;
 
     @Column(name = "aylik_gelir", precision = 12, scale = 2)
     private BigDecimal aylikGelir;
@@ -130,8 +140,37 @@ public class Basvuru {
     @Column(name = "imza_bildirimi_eposta_gonderildi", nullable = false)
     private boolean imzaBildirimiEpostaGonderildi = false;
 
+    @Column(name = "sozlesme_imzalandi", nullable = false)
+    private boolean sozlesmeImzalandi = false;
+
+    @Column(name = "sozlesme_imza_tarihi")
+    private LocalDate sozlesmeImzaTarihi;
+
+    @Column(name = "sozlesme_imza_pasif", nullable = false)
+    private boolean sozlesmeImzaPasif = false;
+
+    @Column(name = "sozlesme_imza_pasif_tarihi")
+    private Instant sozlesmeImzaPasifTarihi;
+
+    @Column(name = "sozlesme_imza_pasif_admin", length = 80)
+    private String sozlesmeImzaPasifAdmin;
+
     @OneToMany(mappedBy = "basvuru", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<BasvuruBelgesi> belgeler = new ArrayList<>();
+
+    public String resolveIletisimEposta() {
+        if (iletisimEposta != null && !iletisimEposta.isBlank()) {
+            return iletisimEposta.trim();
+        }
+        return student == null ? null : student.getEposta();
+    }
+
+    public String resolveIletisimGsm() {
+        if (iletisimGsm != null && !iletisimGsm.isBlank()) {
+            return iletisimGsm.trim();
+        }
+        return student == null ? null : student.getGsm();
+    }
 
     public boolean isAssigned() {
         return atananBirimKodu != null && !atananBirimKodu.isBlank();

@@ -7,7 +7,7 @@ import com.sks.sksiskur.domain.BirimKullanici;
 import com.sks.sksiskur.domain.BasvuruDonemi;
 import com.sks.sksiskur.domain.DocumentType;
 import com.sks.sksiskur.domain.IskurBasvuruKaydi;
-import com.sks.sksiskur.domain.KayitListesi;
+import com.sks.sksiskur.domain.BasvuruDalga;
 import com.sks.sksiskur.domain.KayitTuru;
 import com.sks.sksiskur.domain.KesinKayitKaydi;
 import com.sks.sksiskur.domain.Student;
@@ -15,9 +15,9 @@ import com.sks.sksiskur.repository.BasvuruRepository;
 import com.sks.sksiskur.repository.BasvuruDonemiRepository;
 import com.sks.sksiskur.repository.BirimKullaniciRepository;
 import com.sks.sksiskur.repository.IskurBasvuruKaydiRepository;
-import com.sks.sksiskur.repository.KayitListesiRepository;
 import com.sks.sksiskur.repository.KesinKayitKaydiRepository;
 import com.sks.sksiskur.repository.StudentRepository;
+import com.sks.sksiskur.service.BasvuruDalgaService;
 import com.sks.sksiskur.service.IskurExcelParser;
 import com.sks.sksiskur.service.KesinListeService;
 import com.sks.sksiskur.sicil.WorkUnit;
@@ -60,7 +60,7 @@ public class DemoDataInitializer implements CommandLineRunner {
     private final BirimKullaniciRepository birimKullaniciRepository;
     private final IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository;
     private final KesinKayitKaydiRepository kesinKayitKaydiRepository;
-    private final KayitListesiRepository kayitListesiRepository;
+    private final BasvuruDalgaService basvuruDalgaService;
     private final KesinListeService kesinListeService;
     private final PasswordEncoder passwordEncoder;
     private final Path uploadRoot;
@@ -72,7 +72,7 @@ public class DemoDataInitializer implements CommandLineRunner {
             BirimKullaniciRepository birimKullaniciRepository,
             IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository,
             KesinKayitKaydiRepository kesinKayitKaydiRepository,
-            KayitListesiRepository kayitListesiRepository,
+            BasvuruDalgaService basvuruDalgaService,
             KesinListeService kesinListeService,
             PasswordEncoder passwordEncoder,
             @Value("${app.upload-dir}") String uploadDir
@@ -83,7 +83,7 @@ public class DemoDataInitializer implements CommandLineRunner {
         this.birimKullaniciRepository = birimKullaniciRepository;
         this.iskurBasvuruKaydiRepository = iskurBasvuruKaydiRepository;
         this.kesinKayitKaydiRepository = kesinKayitKaydiRepository;
-        this.kayitListesiRepository = kayitListesiRepository;
+        this.basvuruDalgaService = basvuruDalgaService;
         this.kesinListeService = kesinListeService;
         this.passwordEncoder = passwordEncoder;
         this.uploadRoot = Path.of(uploadDir).toAbsolutePath().normalize();
@@ -282,10 +282,12 @@ public class DemoDataInitializer implements CommandLineRunner {
         if (kesinBasvurular.isEmpty()) {
             return;
         }
+        BasvuruDalga dalga = basvuruDalgaService.ensureInitialDalga(donem);
         for (Basvuru basvuru : kesinBasvurular) {
             Student student = basvuru.getStudent();
             KesinKayitKaydi kayit = new KesinKayitKaydi();
             kayit.setBasvuruDonemi(donem);
+            kayit.setBasvuruDalga(dalga);
             kayit.setTcKimlikNo(student.getTcKimlikNo());
             kayit.setAd(student.getAd());
             kayit.setSoyad(student.getSoyad());
@@ -293,7 +295,7 @@ public class DemoDataInitializer implements CommandLineRunner {
             kayit.setAdSoyadAnahtar(IskurExcelParser.personKey(student.getAd(), student.getSoyad()));
             kesinKayitKaydiRepository.save(kayit);
         }
-        kesinListeService.applyComparison(donem);
+        kesinListeService.applyComparison(donem, dalga);
 
         basvuruRepository.findByStatusAndBasvuruDonemiId(ApplicationStatus.APPROVED, donem.getId()).stream()
                 .filter(b -> "99010003".equals(b.getStudent().getOgrenciNo()))
@@ -305,17 +307,12 @@ public class DemoDataInitializer implements CommandLineRunner {
                     basvuruRepository.save(b);
                 });
 
-        KayitListesi liste = kayitListesiRepository.findByBasvuruDonemiId(donem.getId()).orElseGet(() -> {
-            KayitListesi created = new KayitListesi();
-            created.setBasvuruDonemi(donem);
-            return created;
-        });
-        liste.setKesinListeYuklemeTarihi(Instant.now());
-        liste.setKesinListeYukleyenAdmin("admin");
-        liste.setKesinOnaylandi(true);
-        liste.setOnayTarihi(Instant.now());
-        liste.setOnaylayanAdmin("admin");
-        kayitListesiRepository.save(liste);
+        dalga.setKesinListeYuklemeTarihi(Instant.now());
+        dalga.setKesinListeYukleyenAdmin("admin");
+        dalga.setKesinOnaylandi(true);
+        dalga.setOnayTarihi(Instant.now());
+        dalga.setOnaylayanAdmin("admin");
+        basvuruDalgaService.saveDalga(dalga);
     }
 
     private void seedIskurListesi() {
@@ -323,6 +320,7 @@ public class DemoDataInitializer implements CommandLineRunner {
         if (donem == null) {
             return;
         }
+        BasvuruDalga dalga = basvuruDalgaService.ensureInitialDalga(donem);
         boolean added = false;
         for (Student student : studentRepository.findAll()) {
             if (student.getDemoSifreHash() == null || student.getDemoSifreHash().isBlank()) {
@@ -333,6 +331,7 @@ public class DemoDataInitializer implements CommandLineRunner {
             }
             IskurBasvuruKaydi kayit = new IskurBasvuruKaydi();
             kayit.setBasvuruDonemi(donem);
+            kayit.setBasvuruDalga(dalga);
             kayit.setTcKimlikNo(student.getTcKimlikNo());
             kayit.setAd(student.getAd());
             kayit.setSoyad(student.getSoyad());

@@ -162,10 +162,11 @@ export function AdminDetail() {
             <Field label="Doğum" value={[student?.dogumTarihi, student?.dogumYeri].filter(Boolean).join(" / ")} />
             <Field label="Fakülte" value={student?.fakulte} />
             <Field label="Atanan birim" value={basvuru?.atananBirimAdi} />
-            <Field label="Kesin liste" value={basvuru ? (basvuru.kesinListede === true ? "Kesin listede" : basvuru.kesinListede === false ? "Kesin listede değil" : basvuru.status === "APPROVED" ? "Karşılaştırma bekliyor" : "—") : undefined} />
+            <Field label="İŞKUR nihai liste" value={basvuru ? (basvuru.kesinListede === true ? "Nihai listede" : basvuru.kesinListede === false ? "Nihai listede yok" : basvuru.status === "APPROVED" ? "İŞKUR nihai listesi bekleniyor" : "—") : undefined} />
             <Field label="Program" value={student?.program} />
             <Field label="Sınıf" value={student?.sinif} />
-            <Field label="İletişim" value={[student?.eposta, student?.gsm].filter(Boolean).join(" · ")} />
+            <Field label="E-posta (başvuru)" value={basvuru?.iletisimEposta ?? student?.eposta} />
+            <Field label="Cep telefonu (başvuru)" value={basvuru?.iletisimGsm ?? student?.gsm} />
             <Field label="IBAN" value={basvuru?.iban} />
             <Field label="Banka şube kodu" value={basvuru?.bankaSubeKodu} />
             <Field label="Hesap numarası" value={basvuru?.hesapNumarasi} />

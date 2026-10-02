@@ -41,8 +41,14 @@ export function UnitDashboardSummary({ items, unreadDuyuru, report, birimAdi }: 
           <span>Puantaj girişi</span>
         </article>
         <Link to="/birim/rapor" className="dashboard-pending-card dashboard-stat-card dashboard-stat-link">
-          <strong>{eksikPuantaj}</strong>
-          <span>Eksik puantaj · Rapor →</span>
+          <strong>{report?.yazdirilabilir ? "Hazır" : report?.onayBekleyenOgrenci ?? eksikPuantaj}</strong>
+          <span>
+            {report?.yazdirilabilir
+              ? "Cetvel onaylı · Yazdır →"
+              : report && report.onayBekleyenOgrenci > 0
+                ? "Onay bekliyor · Rapor →"
+                : "Eksik gönderim · Rapor →"}
+          </span>
         </Link>
       </div>
     </section>

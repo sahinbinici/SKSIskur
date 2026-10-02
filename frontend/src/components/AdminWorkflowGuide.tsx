@@ -8,9 +8,9 @@ type StepState = "done" | "current" | "pending";
 const STEPS = [
   { n: 1, title: "Dönem aç & İŞKUR listesi yükle", link: "/admin/donemler", detail: "Öğrenci girişi ve başvuru kapısı" },
   { n: 2, title: "Başvuruları incele", link: "/admin", detail: "Onay, red, iade" },
-  { n: 3, title: "Kesin liste & karşılaştırma", link: "/admin/kayit", detail: "İŞKUR'dan dönen liste" },
-  { n: 4, title: "İmza bildirimi gönder", link: "/admin/kayit", detail: "Dağıtımdan önce zorunlu" },
-  { n: 5, title: "Birim dağıtımı", link: "/admin/dagitim", detail: "Kontenjana göre atama" },
+  { n: 3, title: "Onaylıları İŞKUR'a gönder", link: "/admin/kayit", detail: "Excel indir, nihai listeyi yükle" },
+  { n: 4, title: "Sözleşme imzası", link: "/admin/kayit", detail: "Davet e-postası, imza geldi / pasif" },
+  { n: 5, title: "Birim dağıtımı", link: "/admin/dagitim", detail: "İmza atanların kontenjana göre ataması" },
   { n: 6, title: "Aylık devam & İŞKUR paketi", link: "/admin/takip", detail: "EK-6, puantaj, resmi Excel" }
 ] as const;
 

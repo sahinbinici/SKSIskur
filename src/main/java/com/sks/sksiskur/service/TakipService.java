@@ -109,13 +109,19 @@ public class TakipService {
                 .filter(ad -> ad != null && !ad.isBlank())
                 .findFirst()
                 .orElse("");
-        return monthlyReportFor(basvurular, yil, ay, birimAdi);
+        return monthlyReportFor(basvurular, yil, ay, birimAdi, true);
     }
 
     @Transactional(readOnly = true)
     public BirimAylikRaporResponse adminMonthlyReport(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
         BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
-        return monthlyReportFor(assignedKesin(blankToNull(birimKodu), donem), yil, ay, reportBirimAdi(birimKodu, donem));
+        return monthlyReportFor(
+                assignedKesin(blankToNull(birimKodu), donem),
+                yil,
+                ay,
+                reportBirimAdi(birimKodu, donem),
+                false
+        );
     }
 
     @Transactional(readOnly = true)
@@ -148,6 +154,7 @@ public class TakipService {
             rows.add(new AdminTakipOzetResponse.Satir(
                     basvuru.getId(),
                     basvuru.getStudent().getOgrenciNo(),
+                    basvuru.getStudent().getTcKimlikNo(),
                     basvuru.getStudent().getAdSoyad(),
                     basvuru.getAtananBirimKodu(),
                     basvuru.getAtananBirimAdi(),
@@ -165,6 +172,7 @@ public class TakipService {
 
     public record TerminatedStudentRow(
             String ogrenciNo,
+            String tcKimlikNo,
             String adSoyad,
             String birimAdi,
             java.time.LocalDate iliskiBitisTarihi
@@ -179,6 +187,7 @@ public class TakipService {
                 .filter(basvuru -> normalizedUnit == null || normalizedUnit.equals(basvuru.getAtananBirimKodu()))
                 .map(basvuru -> new TerminatedStudentRow(
                         basvuru.getStudent().getOgrenciNo(),
+                        basvuru.getStudent().getTcKimlikNo(),
                         basvuru.getStudent().getAdSoyad(),
                         basvuru.getAtananBirimAdi(),
                         basvuru.getIliskiBitisTarihi()
@@ -189,8 +198,9 @@ public class TakipService {
     @Transactional(readOnly = true)
     public byte[] terminatedStudentsCsv(Long basvuruDonemiId, String birimKodu) {
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
-        StringBuilder csv = new StringBuilder("\uFEFFÖğrenci No;Ad Soyad;Birim;İlişki Kesilme Tarihi;Başvuru Dönemi\r\n");
+        StringBuilder csv = new StringBuilder("\uFEFFÖğrenci No;T.C. Kimlik;Ad Soyad;Birim;İlişki Kesilme Tarihi;Başvuru Dönemi\r\n");
         terminatedStudents(basvuruDonemiId, birimKodu).forEach(row -> csv.append(csvValue(row.ogrenciNo())).append(';')
+                .append(csvValue(row.tcKimlikNo())).append(';')
                 .append(csvValue(row.adSoyad())).append(';')
                 .append(csvValue(row.birimAdi())).append(';')
                 .append(row.iliskiBitisTarihi()).append(';')
@@ -203,6 +213,7 @@ public class TakipService {
         return leaveAndReportRecords(basvuruDonemiId, birimKodu, yil, ay).stream()
                 .map(record -> new IzinRaporOgrenciResponse(
                         record.basvuru().getId(), record.basvuru().getStudent().getOgrenciNo(),
+                        record.basvuru().getStudent().getTcKimlikNo(),
                         record.basvuru().getStudent().getAdSoyad(), record.basvuru().getAtananBirimAdi(),
                         record.gun().getTarih(), record.gun().getDurum(), record.gun().getBelgeYolu() != null,
                         record.gun().getBelgeAdi()
@@ -211,9 +222,10 @@ public class TakipService {
 
     @Transactional(readOnly = true)
     public byte[] leaveAndReportCsv(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
-        StringBuilder csv = new StringBuilder("\uFEFFÖğrenci No;Ad Soyad;Birim;Tarih;Durum;Belge\r\n");
+        StringBuilder csv = new StringBuilder("\uFEFFÖğrenci No;T.C. Kimlik;Ad Soyad;Birim;Tarih;Durum;Belge\r\n");
         leaveAndReportStudents(basvuruDonemiId, birimKodu, yil, ay).forEach(row -> csv
                 .append(csvValue(row.ogrenciNo())).append(';')
+                .append(csvValue(row.tcKimlikNo())).append(';')
                 .append(csvValue(row.adSoyad())).append(';')
                 .append(csvValue(row.birimAdi())).append(';')
                 .append(row.tarih()).append(';')
@@ -285,9 +297,29 @@ public class TakipService {
                 .orElseGet(() -> emptyDraft(basvuru, month));
     }
 
-    private BirimAylikRaporResponse monthlyReportFor(List<Basvuru> basvurular, int yil, int ay, String birimAdi) {
+    private BirimAylikRaporResponse monthlyReportFor(
+            List<Basvuru> basvurular,
+            int yil,
+            int ay,
+            String birimAdi,
+            boolean birimView
+    ) {
         requireMonth(yil, ay);
         Map<Long, TakipDonem> donemler = loadDonemler(basvurular, yil, ay);
+        int onayli = 0;
+        int onayBekleyen = 0;
+        int gonderilmeyen = 0;
+        for (Basvuru basvuru : basvurular) {
+            TakipDonem donem = donemler.get(basvuru.getId());
+            if (donem == null || donem.getStatus() == TakipStatus.DRAFT) {
+                gonderilmeyen++;
+            } else if (donem.getStatus() == TakipStatus.SUBMITTED) {
+                onayBekleyen++;
+            } else if (donem.getStatus() == TakipStatus.APPROVED) {
+                onayli++;
+            }
+        }
+        boolean yazdirilabilir = !basvurular.isEmpty() && onayli == basvurular.size();
         List<BirimAylikRaporResponse.RaporOgrenci> rows = new ArrayList<>();
         int sira = 1;
         for (Basvuru basvuru : basvurular) {
@@ -296,11 +328,10 @@ public class TakipService {
                     .map(TakipGun::getTarih)
                     .sorted()
                     .toList();
-            List<LocalDate> geldi = donem == null ? List.of() : donem.getGunler().stream()
-                    .filter(gun -> gun.getDurum() == PuantajDurum.GELDI)
-                    .map(TakipGun::getTarih)
-                    .sorted()
-                    .toList();
+            List<LocalDate> geldi = datesWithStatus(donem, PuantajDurum.GELDI);
+            List<LocalDate> gelmedi = datesWithStatus(donem, PuantajDurum.GELMEDI);
+            List<LocalDate> izinli = datesWithStatus(donem, PuantajDurum.IZINLI);
+            List<LocalDate> raporlu = datesWithStatus(donem, PuantajDurum.RAPORLU);
             BigDecimal toplamSaat = gunlukSaat.multiply(BigDecimal.valueOf(geldi.size()))
                     .setScale(1, RoundingMode.HALF_UP);
             rows.add(new BirimAylikRaporResponse.RaporOgrenci(
@@ -313,11 +344,36 @@ public class TakipService {
                     basvuru.getIban(),
                     ekuant,
                     geldi,
+                    gelmedi,
+                    izinli,
+                    raporlu,
                     geldi.size(),
-                    toplamSaat
+                    toplamSaat,
+                    donem == null ? null : donem.getStatus()
             ));
         }
-        return new BirimAylikRaporResponse(yil, ay, birimAdi, gunlukSaat.setScale(1, RoundingMode.HALF_UP), rows);
+        return new BirimAylikRaporResponse(
+                yil,
+                ay,
+                birimAdi,
+                gunlukSaat.setScale(1, RoundingMode.HALF_UP),
+                birimView ? yazdirilabilir : true,
+                onayli,
+                onayBekleyen,
+                gonderilmeyen,
+                rows
+        );
+    }
+
+    private List<LocalDate> datesWithStatus(TakipDonem donem, PuantajDurum durum) {
+        if (donem == null) {
+            return List.of();
+        }
+        return donem.getGunler().stream()
+                .filter(gun -> gun.getDurum() == durum)
+                .map(TakipGun::getTarih)
+                .sorted()
+                .toList();
     }
 
     private Map<Long, TakipDonem> loadDonemler(List<Basvuru> students, int yil, int ay) {
@@ -433,7 +489,7 @@ public class TakipService {
                     throw new ApiException(HttpStatus.BAD_REQUEST, kayit.tarih() + " EK-6 günü değil.");
                 }
                 assertEntryOpen(donem.getBasvuru(), kayit.tarih());
-                assertCurrentWeek(kayit.tarih());
+                assertPuantajDate(kayit.tarih());
                 PuantajDurum onceki = gun.getDurum();
                 gun.setDurum(kayit.durum());
                 if (kayit.durum() == PuantajDurum.GELMEDI && donem.getBasvuru().getIliskiBitisTarihi() == null) {
@@ -468,7 +524,7 @@ public class TakipService {
                 .filter(item -> item.getTarih().equals(tarih))
                 .findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Önce EK-6 günü seçilmelidir."));
-        assertCurrentWeek(tarih);
+        assertPuantajDate(tarih);
         if (gun.getDurum() != PuantajDurum.IZINLI && gun.getDurum() != PuantajDurum.RAPORLU) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Belge yalnızca izinli veya raporlu gün için yüklenir.");
         }
@@ -549,7 +605,56 @@ public class TakipService {
         }
         donem.setStatus(TakipStatus.SUBMITTED);
         donem.setGonderimTarihi(Instant.now());
+        donem.setOnayTarihi(null);
         return toResponse(takipDonemRepository.save(donem), month);
+    }
+
+    @Transactional
+    public TakipDonemResponse adminApprove(Long basvuruDonemiId, Long basvuruId, int yil, int ay) {
+        YearMonth month = requireMonth(yil, ay);
+        BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
+        Basvuru basvuru = basvuruRepository.findDetailedById(basvuruId)
+                .filter(item -> item.isAssigned()
+                        && item.getBasvuruDonemi() != null
+                        && item.getBasvuruDonemi().getId().equals(period.getId()))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Birime atanmış öğrenci bulunamadı."));
+        TakipDonem donem = takipDonemRepository.findByBasvuruIdAndYilAndAy(basvuruId, yil, ay)
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Öğrenci bu ay için kayıt göndermedi."));
+        if (donem.getStatus() != TakipStatus.SUBMITTED) {
+            throw new ApiException(HttpStatus.CONFLICT, "Yalnızca gönderilmiş kayıtlar onaylanabilir.");
+        }
+        donem.setStatus(TakipStatus.APPROVED);
+        donem.setOnayTarihi(Instant.now());
+        return toResponse(takipDonemRepository.save(donem), month);
+    }
+
+    @Transactional
+    public int adminApproveSubmitted(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
+        YearMonth month = requireMonth(yil, ay);
+        BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
+        String normalizedUnit = blankToNull(birimKodu);
+        if (normalizedUnit == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Toplu onay için birim seçilmelidir.");
+        }
+        List<Basvuru> students = assignedKesin(normalizedUnit, period).stream()
+                .filter(basvuru -> basvuru.canWorkIn(month))
+                .toList();
+        Map<Long, TakipDonem> donemler = loadDonemler(students, yil, ay);
+        Instant now = Instant.now();
+        int count = 0;
+        for (Basvuru basvuru : students) {
+            TakipDonem donem = donemler.get(basvuru.getId());
+            if (donem != null && donem.getStatus() == TakipStatus.SUBMITTED) {
+                donem.setStatus(TakipStatus.APPROVED);
+                donem.setOnayTarihi(now);
+                count++;
+            }
+        }
+        if (count == 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Onaylanacak gönderilmiş kayıt bulunamadı.");
+        }
+        takipDonemRepository.saveAll(donemler.values());
+        return count;
     }
 
     private TakipDonem getOrCreateEntity(String birimKodu, Long basvuruId, int yil, int ay) {
@@ -577,11 +682,10 @@ public class TakipService {
         }
     }
 
-    private void assertCurrentWeek(LocalDate date) {
+    private void assertPuantajDate(LocalDate date) {
         LocalDate today = LocalDate.now(ZONE);
-        if (!WorkScheduleRules.isInCurrentWeek(date, today)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "Puantaj yalnızca içinde bulunulan hafta için girilebilir.");
+        if (date.isAfter(today)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Gelecek günler için puantaj girilemez.");
         }
     }
 
@@ -608,7 +712,7 @@ public class TakipService {
                 closedDays(basvuru.getBasvuruDonemi().getId(), month),
                 quotaDays(basvuru, month).size(),
                 WorkScheduleRules.monthlyQuota(daysPerWeek),
-                0,
+                countPermissionDays(basvuru.getId()),
                 MAX_IZIN_GUNU,
                 toOgrenci(basvuru)
         );
@@ -728,13 +832,14 @@ public class TakipService {
             if (!currentMonthDays.containsKey(change.tarih())) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, change.tarih() + " EK-6 günü değil.");
             }
-            assertCurrentWeek(change.tarih());
+            assertPuantajDate(change.tarih());
             statuses.put(change.tarih(), change.durum());
         }
         long izinGunleri = statuses.values().stream().filter(PuantajDurum.IZINLI::equals).count();
         if (izinGunleri > MAX_IZIN_GUNU) {
             throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "Bir öğrenci için en fazla " + MAX_IZIN_GUNU + " gün izin girilebilir.");
+                    "Öğrencinin izin hakkı dolmuştur. Dönem boyunca en fazla " + MAX_IZIN_GUNU
+                            + " gün izin girilebilir; yeni izin günü eklenemez.");
         }
     }
 
@@ -815,12 +920,13 @@ public class TakipService {
         return new BirimOgrenciResponse(
                 basvuru.getId(),
                 basvuru.getStudent().getOgrenciNo(),
+                basvuru.getStudent().getTcKimlikNo(),
                 basvuru.getStudent().getAdSoyad(),
                 basvuru.getStudent().getFakulte(),
                 basvuru.getStudent().getBolum(),
                 basvuru.getStudent().getProgram(),
-                basvuru.getStudent().getEposta(),
-                basvuru.getStudent().getGsm(),
+                basvuru.resolveIletisimEposta(),
+                basvuru.resolveIletisimGsm(),
                 kullanilanIzin,
                 MAX_IZIN_GUNU,
                 Math.max(0, MAX_IZIN_GUNU - kullanilanIzin)

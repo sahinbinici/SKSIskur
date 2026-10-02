@@ -6,14 +6,12 @@ import com.sks.sksiskur.domain.BasvuruBelgesi;
 import com.sks.sksiskur.domain.BasvuruDonemi;
 import com.sks.sksiskur.domain.DocumentType;
 import com.sks.sksiskur.domain.IslemTuru;
-import com.sks.sksiskur.domain.KayitListesi;
 import com.sks.sksiskur.domain.KayitTuru;
 import com.sks.sksiskur.domain.KesinKayitKaydi;
 import com.sks.sksiskur.domain.Role;
 import com.sks.sksiskur.exception.ApiException;
 import com.sks.sksiskur.repository.BasvuruBelgesiRepository;
 import com.sks.sksiskur.repository.BasvuruRepository;
-import com.sks.sksiskur.repository.KayitListesiRepository;
 import com.sks.sksiskur.web.dto.AdminOzetResponse;
 import com.sks.sksiskur.web.dto.BasvuruResponse;
 import com.sks.sksiskur.web.dto.BelgeYuklemeFiltre;
@@ -39,35 +37,35 @@ public class AdminApplicationService {
 
     private final BasvuruRepository basvuruRepository;
     private final BasvuruBelgesiRepository belgeRepository;
-    private final KayitListesiRepository kayitListesiRepository;
     private final FileStorageService fileStorageService;
     private final DtoMapper mapper;
     private final BasvuruDonemiService basvuruDonemiService;
     private final KesinListeService kesinListeService;
     private final ImzaBildirimiService imzaBildirimiService;
+    private final BasvuruDalgaService basvuruDalgaService;
     private final AuditLogService auditLogService;
     private final AdminBelgeOcrService adminBelgeOcrService;
 
     public AdminApplicationService(
             BasvuruRepository basvuruRepository,
             BasvuruBelgesiRepository belgeRepository,
-            KayitListesiRepository kayitListesiRepository,
             FileStorageService fileStorageService,
             DtoMapper mapper,
             BasvuruDonemiService basvuruDonemiService,
             KesinListeService kesinListeService,
             ImzaBildirimiService imzaBildirimiService,
+            BasvuruDalgaService basvuruDalgaService,
             AuditLogService auditLogService,
             AdminBelgeOcrService adminBelgeOcrService
     ) {
         this.basvuruRepository = basvuruRepository;
         this.belgeRepository = belgeRepository;
-        this.kayitListesiRepository = kayitListesiRepository;
         this.fileStorageService = fileStorageService;
         this.mapper = mapper;
         this.basvuruDonemiService = basvuruDonemiService;
         this.kesinListeService = kesinListeService;
         this.imzaBildirimiService = imzaBildirimiService;
+        this.basvuruDalgaService = basvuruDalgaService;
         this.auditLogService = auditLogService;
         this.adminBelgeOcrService = adminBelgeOcrService;
     }
@@ -75,8 +73,8 @@ public class AdminApplicationService {
     @Transactional(readOnly = true)
     public AdminOzetResponse ozet(Long donemId) {
         BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
-        KayitListesi liste = kayitListesiRepository.findByBasvuruDonemiId(donem.getId()).orElse(null);
-        boolean kesinListeOnaylandi = liste != null && liste.isKesinOnaylandi();
+        var dalga = basvuruDalgaService.requireAktifDalga(donem);
+        boolean kesinListeOnaylandi = dalga.isKesinOnaylandi();
         List<Basvuru> approved = basvuruRepository.findByStatusAndBasvuruDonemiId(ApplicationStatus.APPROVED, donem.getId());
         long kesin = approved.stream().filter(b -> Boolean.TRUE.equals(b.getKesinListede())).count();
         long kesinListedeDegil = approved.stream().filter(b -> Boolean.FALSE.equals(b.getKesinListede())).count();
@@ -260,8 +258,8 @@ public class AdminApplicationService {
     @Transactional
     public KayitListesiResponse onaylaKesinListe(String adminUsername) {
         BasvuruDonemi donem = basvuruDonemiService.requireActive();
-        KayitListesi liste = currentListe(donem);
-        if (liste.isKesinOnaylandi()) {
+        var dalga = basvuruDalgaService.requireAktifDalga(donem);
+        if (dalga.isKesinOnaylandi()) {
             return toKayitResponse(donem, KayitListeFiltre.TUMU);
         }
         if (kesinListeService.countUploaded(donem.getId()) == 0) {
@@ -272,20 +270,20 @@ public class AdminApplicationService {
         if (kesin == 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Kesin listede eşleşen en az bir onaylı başvuru olmalıdır.");
         }
-        liste.setKesinOnaylandi(true);
-        liste.setOnayTarihi(Instant.now());
-        liste.setOnaylayanAdmin(adminUsername);
-        kayitListesiRepository.save(liste);
+        dalga.setKesinOnaylandi(true);
+        dalga.setOnayTarihi(Instant.now());
+        dalga.setOnaylayanAdmin(adminUsername);
+        basvuruDalgaService.saveDalga(dalga);
         auditLogService.log(Role.ADMIN, adminUsername, adminUsername, IslemTuru.KESIN_LISTE_ONAY, "DONEM", donem.getId(),
-                "Kesin liste onaylandı: " + donem.getAd(), null);
+                "Kesin liste onaylandı: " + dalga.getAd(), null);
         return toKayitResponse(donem, KayitListeFiltre.TUMU);
     }
 
     @Transactional
     public KayitListesiResponse geriAlKesinListe(String adminUsername) {
         BasvuruDonemi donem = basvuruDonemiService.requireActive();
-        KayitListesi liste = currentListe(donem);
-        if (!liste.isKesinOnaylandi()) {
+        var dalga = basvuruDalgaService.requireAktifDalga(donem);
+        if (!dalga.isKesinOnaylandi()) {
             kesinListeService.resetComparison(donem);
             return toKayitResponse(donem, KayitListeFiltre.TUMU);
         }
@@ -294,14 +292,17 @@ public class AdminApplicationService {
             throw new ApiException(HttpStatus.CONFLICT,
                     "Birim dağıtımı yapıldıktan sonra kesin liste onayı geri alınamaz.");
         }
-        liste.setKesinOnaylandi(false);
-        liste.setOnayTarihi(null);
-        liste.setOnaylayanAdmin(null);
-        kayitListesiRepository.save(liste);
+        dalga.setKesinOnaylandi(false);
+        dalga.setOnayTarihi(null);
+        dalga.setOnaylayanAdmin(null);
+        dalga.setImzaBildirimiGonderildi(false);
+        dalga.setImzaBildirimiGonderimTarihi(null);
+        dalga.setImzaBildirimiGonderenAdmin(null);
+        basvuruDalgaService.saveDalga(dalga);
         kesinListeService.resetComparison(donem);
-        imzaBildirimiService.resetForDonem(donem);
+        imzaBildirimiService.resetForActiveDalga(donem);
         auditLogService.log(Role.ADMIN, adminUsername, adminUsername, IslemTuru.KESIN_LISTE_GERI_AL, "DONEM", donem.getId(),
-                "Kesin liste onayı geri alındı: " + donem.getAd(), null);
+                "Kesin liste onayı geri alındı: " + dalga.getAd(), null);
         return toKayitResponse(donem, KayitListeFiltre.TUMU);
     }
 
@@ -320,17 +321,8 @@ public class AdminApplicationService {
         );
     }
 
-    private KayitListesi currentListe(BasvuruDonemi donem) {
-        return kayitListesiRepository.findByBasvuruDonemiId(donem.getId()).orElseGet(() -> {
-            KayitListesi created = new KayitListesi();
-            created.setBasvuruDonemi(donem);
-            created.setKesinOnaylandi(false);
-            return kayitListesiRepository.save(created);
-        });
-    }
-
     private KayitListesiResponse toKayitResponse(BasvuruDonemi donem, KayitListeFiltre filtre) {
-        KayitListesi liste = kayitListesiRepository.findByBasvuruDonemiId(donem.getId()).orElse(null);
+        var dalga = basvuruDalgaService.requireAktifDalga(donem);
         List<Basvuru> approved = basvuruRepository.findByStatusAndBasvuruDonemiId(ApplicationStatus.APPROVED, donem.getId());
         List<KayitListesiResponse.Satir> ogrenciler = approved.stream()
                 .sorted(Comparator
@@ -353,20 +345,21 @@ public class AdminApplicationService {
 
         return new KayitListesiResponse(
                 !uploaded.isEmpty(),
-                liste == null ? null : liste.getKesinListeYuklemeTarihi(),
-                liste == null ? null : liste.getKesinListeYukleyenAdmin(),
+                dalga.getKesinListeYuklemeTarihi(),
+                dalga.getKesinListeYukleyenAdmin(),
                 approved.size(),
                 kesin,
                 kesinListedeDegil,
                 bekleyen,
                 listedeEslesmeyenler.size(),
-                liste != null && liste.isKesinOnaylandi(),
-                liste == null ? null : liste.getOnayTarihi(),
-                liste == null ? null : liste.getOnaylayanAdmin(),
-                liste != null && liste.isKesinOnaylandi(),
-                liste != null && liste.isImzaBildirimiGonderildi(),
-                liste == null ? null : liste.getImzaBildirimiGonderimTarihi(),
-                liste == null ? null : liste.getImzaBildirimiGonderenAdmin(),
+                dalga.isKesinOnaylandi(),
+                dalga.getOnayTarihi(),
+                dalga.getOnaylayanAdmin(),
+                dalga.isKesinOnaylandi(),
+                dalga.isImzaBildirimiGonderildi(),
+                dalga.getImzaBildirimiGonderimTarihi(),
+                dalga.getImzaBildirimiGonderenAdmin(),
+                basvuruDalgaService.toResponse(dalga),
                 ogrenciler,
                 listedeEslesmeyenler
         );

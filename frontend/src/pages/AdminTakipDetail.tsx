@@ -122,7 +122,9 @@ export function AdminTakipDetail() {
       </div>
       {error && <div className="alert alert-error">{error}</div>}
       <p style={{ color: "var(--muted)" }}>
-        {donem?.ogrenci.ogrenciNo} · Bu ekran yalnız görüntülemedir; puantajı birim kullanıcısı doldurur.
+        {donem?.ogrenci.ogrenciNo}
+        {donem?.ogrenci.tcKimlikNo ? ` · T.C. ${donem.ogrenci.tcKimlikNo}` : ""}
+        {" · "}Bu ekran yalnız görüntülemedir; puantajı birim kullanıcısı doldurur.
         İzinli veya raporlu güne tıklayınca yüklenen dilekçe / raporu açabilirsiniz.
       </p>
       <div className="cal-pair">

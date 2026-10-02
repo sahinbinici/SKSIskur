@@ -14,6 +14,7 @@ public record AdminTakipOzetResponse(
     public record Satir(
             Long basvuruId,
             String ogrenciNo,
+            String tcKimlikNo,
             String adSoyad,
             String birimKodu,
             String birimAdi,

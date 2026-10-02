@@ -11,6 +11,10 @@ public interface IskurBasvuruKaydiRepository extends JpaRepository<IskurBasvuruK
 
     void deleteByBasvuruDonemiId(Long basvuruDonemiId);
 
+    void deleteByBasvuruDalgaId(Long basvuruDalgaId);
+
+    long countByBasvuruDalgaId(Long basvuruDalgaId);
+
     List<IskurBasvuruKaydi> findTop50ByBasvuruDonemiIdOrderByAdAscSoyadAsc(Long basvuruDonemiId);
 
     List<IskurBasvuruKaydi> findByBasvuruDonemiIdOrderByAdAscSoyadAsc(Long basvuruDonemiId);

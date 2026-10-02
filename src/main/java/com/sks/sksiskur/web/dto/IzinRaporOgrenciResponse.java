@@ -7,6 +7,7 @@ import java.time.LocalDate;
 public record IzinRaporOgrenciResponse(
         Long basvuruId,
         String ogrenciNo,
+        String tcKimlikNo,
         String adSoyad,
         String birimAdi,
         LocalDate tarih,

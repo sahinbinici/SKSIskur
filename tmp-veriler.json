@@ -1,0 +1,265 @@
+{
+  "!!! VERİLER !!!": {
+    "dimension": "A1:Q264",
+    "rows": [
+      {
+        "row": 1,
+        "cells": {
+          "1": "CEP HARÇLIĞI TUTARI",
+          "2": "1083",
+          "4": null,
+          "5": null,
+          "6": null,
+          "7": null,
+          "8": null,
+          "10": "ASGARİ GEÇİM İNDİRİMİ YILIN İLK ALTI AYI İÇİN BELİRLENEN ASGARİ ÜCRET TUTARI GİRİLEREK GÜNCELLENECEK",
+          "11": null,
+          "12": null
+        }
+      },
+      {
+        "row": 2,
+        "cells": {
+          "1": "Kısa Vadeli Sigorta Kolları Primi",
+          "2": "0.01",
+          "4": "Genel Sağlık Sigortası Primi",
+          "5": "4.4999999999999998E-2",
+          "6": null,
+          "7": null,
+          "8": null,
+          "10": null,
+          "11": null,
+          "12": null
+        }
+      },
+      {
+        "row": 3,
+        "cells": {
+          "1": null,
+          "2": null,
+          "6": null,
+          "7": null,
+          "8": null,
+          "10": null,
+          "11": null,
+          "12": null
+        }
+      },
+      {
+        "row": 4,
+        "cells": {
+          "1": "İŞ YERİ UNVANI",
+          "2": "XXXXX GAZİANTEP ÜNİVERSİTESİ ",
+          "3": null,
+          "4": null,
+          "5": null,
+          "6": "PROGRAM PORTAL NUMARASINI ALTA YAZINIZ",
+          "7": null,
+          "8": null,
+          "10": "ASGARİ GEÇİM İNDİRİMİNE ESAS  \nBRÜT ASGARİ ÜCRET",
+          "11": null,
+          "12": null
+        }
+      },
+      {
+        "row": 5,
+        "cells": {
+          "1": "İŞ YERİ İMZA YETKİLİSİ ADI SOYADI",
+          "2": "YYYYYY YYYYY",
+          "3": "İŞ YERİ İMZA YETKİLİSİ UNVANI",
+          "4": "YYYY",
+          "5": null,
+          "6": null,
+          "7": null,
+          "8": null,
+          "10": null,
+          "11": null,
+          "12": null,
+          "14": "İŞKUR Gençlik Programı"
+        }
+      },
+      {
+        "row": 6,
+        "cells": {
+          "1": "PROJE KOORDİNATÖRÜ ADI SOYADI",
+          "2": "KKKKKKK K KKKKK",
+          "3": "KOORDİNATÖR UNVANI",
+          "4": "KKKK",
+          "5": null,
+          "6": null,
+          "7": null,
+          "8": null,
+          "10": "0.15",
+          "11": "20002.5",
+          "12": "=L6*12",
+          "14": "Ağaçlandırma faaliyetlerinin desteklenmesi"
+        }
+      },
+      {
+        "row": 7,
+        "cells": {
+          "1": "İŞ YERİ SGK SİCİL NUMARASI",
+          "2": "",
+          "3": null,
+          "4": null,
+          "5": null,
+          "6": null,
+          "7": null,
+          "8": null,
+          "10": "1",
+          "11": "BEKAR",
+          "12": "=ROUND(M6*N7*K6/12,2)",
+          "13": "0.5",
+          "14": "Geri dönüşüm ve atık imha faaliyetlerinin desteklenmesi",
+          "16": "ADANA"
+        }
+      },
+      {
+        "row": 8,
+        "cells": {
+          "1": "İŞ YERİ BANKA HESAP NUMARASI",
+          "2": "TR………..",
+          "3": null,
+          "4": null,
+          "5": null,
+          "6": null,
+          "7": null,
+          "8": null,
+          "10": "2",
+          "11": "EVLİ EŞİ ÇALIŞAN",
+          "12": "=ROUND(M6*K6*N8/12,2)",
+          "13": "0.5",
+          "14": "Biyolojik çeşitliliğin korunması ve doğal yaşam alanlarının restorasyon faaliyetlerinin desteklenmesi",
+          "16": "ADIYAMAN"
+        }
+      },
+      {
+        "row": 9,
+        "cells": {
+          "1": "İŞ YERİ BANKA ŞUBESİ",
+          "2": "T.C. ZİRAAT BANKASI",
+          "3": null,
+          "4": "MERKEZ ŞUBESİ",
+          "6": "PPPP",
+          "7": null,
+          "8": null,
+          "10": "3",
+          "11": "EVLİ EŞİ ÇALIŞAN 1 ÇOCUKLU",
+          "12": "=ROUND(M6*N9*K6/12,2)",
+          "13": "0.57499999999999996",
+          "14": "Çocuk bakım işlerine yönelik faaliyetlerin desteklenmesi",
+          "16": "AFYON"
+        }
+      },
+      {
+        "row": 10,
+        "cells": {
+          "1": "İŞ YERİ Adresi",
+          "2": "……………... Merkez / GAZİANTEP",
+          "3": null,
+          "4": null,
+          "6": null,
+          "7": null,
+          "8": null,
+          "10": "4",
+          "11": "EVLİ EŞİ ÇALIŞAN 2 ÇOCUKLU",
+          "12": "=ROUND(M6*K6*N10/12,2)",
+          "13": "0.65",
+          "14": "Engelli, yaşlı ve hasta bakımına yönelik faaliyetlerin desteklenmesi",
+          "16": "AĞRI"
+        }
+      },
+      {
+        "row": 11,
+        "cells": {
+          "1": "İŞ YERİ Telefon Numarası",
+          "2": "0342 XXX XX XX",
+          "3": null,
+          "4": null,
+          "6": null,
+          "7": null,
+          "8": null,
+          "10": "5",
+          "11": "EVLİ EŞİ ÇALIŞAN 3 ÇOCUKLU",
+          "12": "=ROUND(M6*N11*K6/12,2)",
+          "13": "0.75",
+          "14": "Tarımsal Üretim Uygulamaları ve Hayvancılık Faaliyetlerinin Desteklenmesi",
+          "16": "AKSARAY"
+        }
+      },
+      {
+        "row": 12,
+        "cells": {
+          "1": "İŞ YERİ Fax Numarası",
+          "2": "0342 XXX XX XX",
+          "3": null,
+          "4": null,
+          "6": "Sözleşme Tarihi",
+          "7": null,
+          "8": null,
+          "10": "6",
+          "11": "EVLİ EŞİ ÇALIŞAN 4 ÇOCUKLU",
+          "12": "=ROUND(M6*K6*N12/12,2)",
+          "13": "0.8",
+          "14": "Kamusal Alanların Temizlik, Bakım ve Onarım Faaliyetlerinin Desteklenmesi",
+          "16": "AMASYA"
+        }
+      },
+      {
+        "row": 13,
+        "cells": {
+          "1": "İŞ YERİ Eposta Adresi",
+          "2": "…………..@.......",
+          "3": null,
+          "4": null,
+          "6": "03.09.2024",
+          "7": null,
+          "8": null,
+          "10": "7",
+          "11": "EVLİ EŞİ ÇALIŞAN 5 ÇOCUKLU",
+          "12": "=ROUND(M6*K6*N13/12,2)",
+          "13": "0.85",
+          "14": "Spor ve kültür faaliyetlerinin desteklenmesi",
+          "16": "ANKARA"
+        }
+      },
+      {
+        "row": 14,
+        "cells": {
+          "1": "Program Başlama Tarihi",
+          "2": "03.03.2025",
+          "3": null,
+          "4": null,
+          "6": "Sözleşme No",
+          "7": null,
+          "8": null,
+          "10": "8",
+          "11": "EVLİ EŞİ ÇALIŞMAYAN",
+          "12": "=ROUND(M6*N14*K6/12,2)",
+          "13": "0.6",
+          "14": "Parkların ve yeşil alanların korunması ve geliştirilmesi faaliyetlerinin desteklenmesi",
+          "16": "ANTALYA"
+        }
+      },
+      {
+        "row": 15,
+        "cells": {
+          "0": null,
+          "1": "Program Bitiş Tarihi",
+          "2": "30.06.2025",
+          "3": null,
+          "4": null,
+          "6": "2025/……….",
+          "7": null,
+          "8": null,
+          "10": "9",
+          "11": "EVLİ EŞİ ÇALIŞMAYAN 1 ÇOCUKLU",
+          "12": "=ROUND(M6*N15*K6/12,2)",
+          "13": "0.67500000000000004",
+          "14": "Toplum sağlığı ve hijyen faaliyetlerinin desteklenmesi",
+          "16": "ARDAHAN"
+        }
+      }
+    ]
+  }
+}

@@ -3,6 +3,7 @@ package com.sks.sksiskur.web.dto;
 public record BirimOgrenciResponse(
         Long basvuruId,
         String ogrenciNo,
+        String tcKimlikNo,
         String adSoyad,
         String fakulte,
         String bolum,

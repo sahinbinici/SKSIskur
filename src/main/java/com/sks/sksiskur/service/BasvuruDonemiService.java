@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -20,13 +19,16 @@ public class BasvuruDonemiService {
 
     private final BasvuruDonemiRepository repository;
     private final IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository;
+    private final BasvuruDalgaService basvuruDalgaService;
 
     public BasvuruDonemiService(
             BasvuruDonemiRepository repository,
-            IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository
+            IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository,
+            BasvuruDalgaService basvuruDalgaService
     ) {
         this.repository = repository;
         this.iskurBasvuruKaydiRepository = iskurBasvuruKaydiRepository;
+        this.basvuruDalgaService = basvuruDalgaService;
     }
 
     @Transactional(readOnly = true)
@@ -63,7 +65,9 @@ public class BasvuruDonemiService {
         donem.setOgrenciBaslangicTarihi(request.ogrenciBaslangicTarihi());
         donem.setOgrenciBitisTarihi(request.ogrenciBitisTarihi());
         donem.setAylikGelirLimiti(request.aylikGelirLimiti().setScale(2));
-        return toResponse(repository.save(donem));
+        BasvuruDonemi saved = repository.save(donem);
+        basvuruDalgaService.ensureInitialDalga(saved);
+        return toResponse(saved);
     }
 
     @Transactional
@@ -114,14 +118,6 @@ public class BasvuruDonemiService {
     }
 
     private boolean isStudentAccessOpen(BasvuruDonemi donem) {
-        if (!donem.isAktif()) {
-            return false;
-        }
-        // Tarihi tanımlanmamış eski dönemler, yönetici kapatana kadar erişilebilir kalır.
-        if (donem.getOgrenciBaslangicTarihi() == null || donem.getOgrenciBitisTarihi() == null) {
-            return true;
-        }
-        LocalDate today = LocalDate.now();
-        return !today.isBefore(donem.getOgrenciBaslangicTarihi()) && !today.isAfter(donem.getOgrenciBitisTarihi());
+        return basvuruDalgaService.isStudentAccessOpen(donem);
     }
 }

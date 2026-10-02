@@ -1,14 +1,15 @@
 package com.sks.sksiskur.service;
 
+import com.sks.sksiskur.domain.TakipStatus;
 import com.sks.sksiskur.exception.ApiException;
 import com.sks.sksiskur.takip.WorkScheduleRules;
 import com.sks.sksiskur.web.dto.BirimAylikRaporResponse;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -17,19 +18,24 @@ import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 @Service
 public class IskurAylikRaporExportService {
 
-    private static final String TEMPLATE = "/templates/iskur-aylik-rapor-sablonu.xlsx";
-    private static final String MARK = "██";
+    private static final String TEMPLATE = "/templates/iskur-aylik-bordro-sablonu.xlsm";
+    private static final String MARK_GELDI = "██";
+    private static final String MARK_GELMEDI = "D";
+    private static final String MARK_IZIN = "Ü";
+    private static final String MARK_RAPOR = "S";
+    private static final String MARK_EK6 = "X";
     private static final String SHEET_KATILIMCI = "!!!KATILIMCI LİSTESİ!!!";
     private static final String SHEET_DEVAMSIZLIK = "1-Devamsızlık Formu (Ek-4)";
-    private static final String SHEET_BANKA = "5-Banka Listesi";
     private static final String SHEET_EK6 = "6-Devam Gün Çizelgesi";
 
     private static final String[] MONTHS_TR = {
@@ -37,19 +43,9 @@ public class IskurAylikRaporExportService {
             "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"
     };
 
+    private static final int TEMPLATE_SAMPLE_ROWS = 150;
+
     private final TakipService takipService;
-
-    @Value("${app.iskur.cep-harciligi:1375}")
-    private int cepHarciligi;
-
-    @Value("${app.iskur.kurum-adi:GAZİANTEP REKTÖRLÜĞÜ}")
-    private String kurumAdi;
-
-    @Value("${app.iskur.banka-subesi:T.C. HALK BANKASI ÜNİVERSİTE UYDU ŞUBESİ}")
-    private String bankaSubesi;
-
-    @Value("${app.iskur.banka-hesap:TR310001200133800004000406}")
-    private String bankaHesap;
 
     public IskurAylikRaporExportService(TakipService takipService) {
         this.takipService = takipService;
@@ -58,6 +54,7 @@ public class IskurAylikRaporExportService {
     public byte[] export(Long donemId, String birimKodu, int yil, int ay) {
         BirimAylikRaporResponse rapor = takipService.adminMonthlyReport(donemId, birimKodu, yil, ay);
         List<BirimAylikRaporResponse.RaporOgrenci> ogrenciler = rapor.ogrenciler().stream()
+                .filter(student -> student.status() == TakipStatus.APPROVED)
                 .sorted(Comparator.comparing(student -> adSoyad(student).toUpperCase(Locale.forLanguageTag("tr-TR"))))
                 .toList();
         return buildWorkbook(ogrenciler, YearMonth.of(yil, ay));
@@ -66,14 +63,13 @@ public class IskurAylikRaporExportService {
     private byte[] buildWorkbook(List<BirimAylikRaporResponse.RaporOgrenci> ogrenciler, YearMonth month) {
         try (InputStream input = getClass().getResourceAsStream(TEMPLATE)) {
             if (input == null) {
-                throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "İŞKUR rapor şablonu bulunamadı.");
+                throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "İŞKUR bordro şablonu bulunamadı.");
             }
             try (Workbook workbook = new XSSFWorkbook(input); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
                 fillKatilimciListesi(workbook, ogrenciler);
                 fillDevamsizlikFormu(workbook, ogrenciler, month);
-                fillBankaListesi(workbook, ogrenciler, month);
                 fillDevamGunCizelgesi(workbook, ogrenciler, month);
-                workbook.setForceFormulaRecalculation(false);
+                workbook.setForceFormulaRecalculation(true);
                 workbook.write(output);
                 return output.toByteArray();
             }
@@ -84,11 +80,9 @@ public class IskurAylikRaporExportService {
         }
     }
 
-    private static final int TEMPLATE_SAMPLE_ROWS = 150;
-
     private void fillKatilimciListesi(Workbook workbook, List<BirimAylikRaporResponse.RaporOgrenci> ogrenciler) {
         Sheet sheet = requireSheet(workbook, SHEET_KATILIMCI);
-        clearRows(sheet, 1, clearEndRow(1, ogrenciler.size()), 0, 3);
+        clearRows(sheet, 1, clearEndRow(1, ogrenciler.size()), 1, 3);
         int rowIndex = 1;
         for (int i = 0; i < ogrenciler.size(); i++) {
             BirimAylikRaporResponse.RaporOgrenci ogrenci = ogrenciler.get(i);
@@ -108,49 +102,21 @@ public class IskurAylikRaporExportService {
         Sheet sheet = requireSheet(workbook, SHEET_DEVAMSIZLIK);
         setCell(getOrCreateRow(sheet, 0), 2, month.getYear());
         setCell(getOrCreateRow(sheet, 0), 15, MONTHS_TR[month.getMonthValue() - 1]);
-        clearRows(sheet, 7, clearEndRow(7, ogrenciler.size()), 0, 34);
-        int rowIndex = 7;
+        clearRows(sheet, 6, clearEndRow(6, ogrenciler.size()), 1, 33);
+        int rowIndex = 6;
         for (int i = 0; i < ogrenciler.size(); i++) {
             BirimAylikRaporResponse.RaporOgrenci ogrenci = ogrenciler.get(i);
             Row row = getOrCreateRow(sheet, rowIndex++);
             setCell(row, 0, i + 1);
             setCell(row, 1, nullToEmpty(ogrenci.tcKimlikNo()));
             setCell(row, 2, adSoyad(ogrenci));
-            Set<Integer> geldiGunler = new HashSet<>();
-            for (LocalDate date : ogrenci.geldiGunler()) {
-                geldiGunler.add(date.getDayOfMonth());
-            }
+            Map<Integer, String> marks = dayMarks(ogrenci);
             for (int day = 1; day <= month.lengthOfMonth(); day++) {
-                if (geldiGunler.contains(day)) {
-                    setCell(row, 2 + day, MARK);
+                String mark = marks.get(day);
+                if (mark != null) {
+                    setCell(row, 2 + day, mark);
                 }
             }
-        }
-    }
-
-    private void fillBankaListesi(
-            Workbook workbook,
-            List<BirimAylikRaporResponse.RaporOgrenci> ogrenciler,
-            YearMonth month
-    ) {
-        Sheet sheet = requireSheet(workbook, SHEET_BANKA);
-        setCell(getOrCreateRow(sheet, 1), 3, kurumAdi);
-        setCell(getOrCreateRow(sheet, 2), 3, bankaSubesi);
-        setCell(getOrCreateRow(sheet, 2), 7, MONTHS_TR[month.getMonthValue() - 1] + " " + month.getYear());
-        setCell(getOrCreateRow(sheet, 3), 3, bankaHesap);
-        clearRows(sheet, 5, clearEndRow(5, ogrenciler.size()), 1, 7);
-        int rowIndex = 5;
-        for (int i = 0; i < ogrenciler.size(); i++) {
-            BirimAylikRaporResponse.RaporOgrenci ogrenci = ogrenciler.get(i);
-            int normalMaas = ogrenci.toplamGun() * cepHarciligi;
-            Row row = getOrCreateRow(sheet, rowIndex++);
-            setCell(row, 1, i + 1);
-            setCell(row, 2, adSoyad(ogrenci));
-            setCell(row, 3, nullToEmpty(ogrenci.tcKimlikNo()));
-            setCell(row, 4, nullToEmpty(ogrenci.iban()));
-            setCell(row, 5, normalMaas);
-            setCell(row, 6, 0);
-            setCell(row, 7, normalMaas);
         }
     }
 
@@ -162,28 +128,48 @@ public class IskurAylikRaporExportService {
         Sheet sheet = requireSheet(workbook, SHEET_EK6);
         setCell(getOrCreateRow(sheet, 3), 2, MONTHS_TR[month.getMonthValue() - 1]);
         setCell(getOrCreateRow(sheet, 4), 2, month.getYear());
-        clearRows(sheet, 8, clearEndRow(8, ogrenciler.size()), 0, 39);
+        clearRows(sheet, 8, clearEndRow(8, ogrenciler.size()), 3, 37);
         List<List<LocalDate>> weeks = WorkScheduleRules.calendarWeeks(month);
         int rowIndex = 8;
         for (int i = 0; i < ogrenciler.size(); i++) {
             BirimAylikRaporResponse.RaporOgrenci ogrenci = ogrenciler.get(i);
             Row row = getOrCreateRow(sheet, rowIndex++);
-            Set<LocalDate> selected = new HashSet<>(ogrenci.ekuantGunler());
             setCell(row, 0, i + 1);
-            setCell(row, 1, nullToEmpty(ogrenci.tcKimlikNo()));
-            setCell(row, 2, adSoyad(ogrenci));
+            if (row.getCell(1) == null || row.getCell(1).getCellType() != CellType.FORMULA) {
+                setCell(row, 1, nullToEmpty(ogrenci.tcKimlikNo()));
+                setCell(row, 2, adSoyad(ogrenci));
+            }
+            Set<LocalDate> geldi = new HashSet<>(ogrenci.geldiGunler() == null ? List.of() : ogrenci.geldiGunler());
             int col = 3;
             for (List<LocalDate> week : weeks) {
                 for (LocalDate day : week) {
-                    if (col > 39) {
+                    if (col > 37) {
                         break;
                     }
-                    if (day != null && selected.contains(day)) {
-                        setCell(row, col, MARK);
+                    if (day != null && geldi.contains(day)) {
+                        setCell(row, col, MARK_EK6);
                     }
                     col++;
                 }
             }
+        }
+    }
+
+    private Map<Integer, String> dayMarks(BirimAylikRaporResponse.RaporOgrenci ogrenci) {
+        Map<Integer, String> marks = new HashMap<>();
+        putDays(marks, ogrenci.geldiGunler(), MARK_GELDI);
+        putDays(marks, ogrenci.gelmediGunler(), MARK_GELMEDI);
+        putDays(marks, ogrenci.izinliGunler(), MARK_IZIN);
+        putDays(marks, ogrenci.raporluGunler(), MARK_RAPOR);
+        return marks;
+    }
+
+    private void putDays(Map<Integer, String> marks, List<LocalDate> dates, String mark) {
+        if (dates == null) {
+            return;
+        }
+        for (LocalDate date : dates) {
+            marks.put(date.getDayOfMonth(), mark);
         }
     }
 

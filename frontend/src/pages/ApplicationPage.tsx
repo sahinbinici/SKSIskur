@@ -41,6 +41,21 @@ function onlyDigits(value: string) {
   return value.replaceAll(/\D/g, "");
 }
 
+function isValidEmail(value: string) {
+  const trimmed = value.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+
+function isValidGsm(value: string) {
+  const digits = onlyDigits(value);
+  const normalized = digits.startsWith("90") && digits.length === 12
+    ? digits.slice(2)
+    : digits.length === 11 && digits.startsWith("0")
+      ? digits.slice(1)
+      : digits;
+  return normalized.length === 10 && normalized.startsWith("5");
+}
+
 export function ApplicationPage() {
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [basvuru, setBasvuru] = useState<Basvuru | null>(null);
@@ -48,6 +63,8 @@ export function ApplicationPage() {
   const [bankaSubeKodu, setBankaSubeKodu] = useState("");
   const [hesapNumarasi, setHesapNumarasi] = useState("");
   const [hesapSahibi, setHesapSahibi] = useState("");
+  const [eposta, setEposta] = useState("");
+  const [gsm, setGsm] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -61,6 +78,8 @@ export function ApplicationPage() {
     setBankaSubeKodu(data.bankaSubeKodu ?? "");
     setHesapNumarasi(data.hesapNumarasi ?? "");
     setHesapSahibi(data.hesapSahibi ?? data.student.adSoyad);
+    setEposta(data.iletisimEposta ?? data.student.eposta ?? "");
+    setGsm(data.iletisimGsm ?? data.student.gsm ?? "");
   }
 
   useEffect(() => {
@@ -83,6 +102,7 @@ export function ApplicationPage() {
   const ibanCheck = checkHalkbankIban(iban);
   const normalizedSubeKodu = onlyDigits(bankaSubeKodu);
   const normalizedHesapNumarasi = onlyDigits(hesapNumarasi);
+  const iletisimHazir = Boolean(basvuru?.iletisimEposta && basvuru?.iletisimGsm);
   const hesapBilgisiHazir = Boolean(basvuru?.iban && basvuru?.bankaSubeKodu && basvuru?.hesapNumarasi);
   const pendingAgreement = agreements?.find((agreement) => !agreement.kabulEdildi);
 
@@ -120,6 +140,22 @@ export function ApplicationPage() {
       setError(ibanCheck.message || "Geçerli bir Halkbank IBAN giriniz.");
       return;
     }
+    if (!eposta.trim() && submit) {
+      setError("E-posta adresi zorunludur.");
+      return;
+    }
+    if (eposta.trim() && !isValidEmail(eposta)) {
+      setError("Geçerli bir e-posta adresi giriniz.");
+      return;
+    }
+    if (!gsm.trim() && submit) {
+      setError("Cep telefonu numarası zorunludur.");
+      return;
+    }
+    if (gsm.trim() && !isValidGsm(gsm)) {
+      setError("Geçerli bir cep telefonu giriniz (05xx xxx xx xx).");
+      return;
+    }
     if (submit) {
       if (normalizedSubeKodu.length !== 4) {
         setError("Banka şube kodu 4 haneli olmalıdır.");
@@ -138,7 +174,9 @@ export function ApplicationPage() {
         iban: ibanCheck.normalized || iban,
         hesapSahibi,
         bankaSubeKodu: normalizedSubeKodu,
-        hesapNumarasi: normalizedHesapNumarasi
+        hesapNumarasi: normalizedHesapNumarasi,
+        eposta: eposta.trim(),
+        gsm: gsm.trim()
       };
       const data = submit ? await api.submit(payload) : await api.saveDraft(payload);
       setBasvuru(data);
@@ -214,9 +252,9 @@ export function ApplicationPage() {
       {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
       {!agreements && !error && <div className="card" style={{ padding: 22 }}>Sözleşmeler yükleniyor…</div>}
-      {basvuru?.imzaBildirimiGonderildi && !basvuru.imzaBildirimiOkundu && !basvuru.atananBirimAdi && (
+      {basvuru?.imzaBildirimiGonderildi && !basvuru.imzaBildirimiOkundu && !basvuru.atananBirimAdi && !basvuru.sozlesmeImzalandi && (
         <div className="alert alert-wait">
-          <strong>İmza bildirimi.</strong> {basvuru.imzaBildirimiMesaji}
+          <strong>Sözleşme imza daveti.</strong> {basvuru.imzaBildirimiMesaji}
           <button
             type="button"
             className="btn btn-secondary btn-compact"
@@ -240,17 +278,23 @@ export function ApplicationPage() {
           </button>
         </div>
       )}
-      {basvuru?.status === "APPROVED" && basvuru.kesinListede === true && !basvuru.atananBirimAdi && !basvuru.imzaBildirimiGonderildi && (
-        <div className="alert alert-ok">İŞKUR kesin listesine alındınız. Birim ataması bekleniyor. Başvuru değiştirilemez.</div>
+      {basvuru?.sozlesmeImzaPasif && (
+        <div className="alert alert-wait">Sözleşme imzasına gelmediğiniz için kaydınız pasife alındı. Başvuru değiştirilemez.</div>
       )}
-      {basvuru?.status === "APPROVED" && basvuru.kesinListede === true && !basvuru.atananBirimAdi && basvuru.imzaBildirimiGonderildi && basvuru.imzaBildirimiOkundu && (
-        <div className="alert alert-ok">İmza bildiriminiz alındı. Birim ataması bekleniyor. Başvuru değiştirilemez.</div>
+      {basvuru?.status === "APPROVED" && basvuru.kesinListede === true && !basvuru.sozlesmeImzaPasif && !basvuru.atananBirimAdi && !basvuru.imzaBildirimiGonderildi && (
+        <div className="alert alert-ok">İŞKUR nihai listesine alındınız. Sözleşme imzası için davet gönderilecek. Başvuru değiştirilemez.</div>
       )}
-      {basvuru?.status === "APPROVED" && basvuru.kesinListede === false && (
-        <div className="alert alert-wait">Evrakınız onaylanmıştı ancak İŞKUR kesin kayıt listesinde yer almıyorsunuz. Başvuru değiştirilemez.</div>
+      {basvuru?.status === "APPROVED" && basvuru.kesinListede === true && !basvuru.sozlesmeImzaPasif && !basvuru.atananBirimAdi && basvuru.imzaBildirimiGonderildi && !basvuru.sozlesmeImzalandi && basvuru.imzaBildirimiOkundu && (
+        <div className="alert alert-wait">Sözleşme imzası için gelmeniz bekleniyor. {basvuru.imzaBildirimiMesaji}</div>
       )}
-      {basvuru?.status === "APPROVED" && basvuru.kesinListede == null && (
-        <div className="alert alert-ok">Evrakınız onaylandı. Başvurunuz İŞKUR incelemesi için gönderilecek; kesin kayıt listesi henüz açıklanmadı. Başvuru değiştirilemez.</div>
+      {basvuru?.sozlesmeImzalandi && !basvuru.atananBirimAdi && (
+        <div className="alert alert-ok">Sözleşme imzanız alındı. Birim ataması bekleniyor. Başvuru değiştirilemez.</div>
+      )}
+      {basvuru?.status === "APPROVED" && basvuru.kesinListede === false && !basvuru.sozlesmeImzaPasif && (
+        <div className="alert alert-wait">Evrakınız onaylanmıştı ancak İŞKUR nihai listesinde yer almıyorsunuz. Başvuru değiştirilemez.</div>
+      )}
+      {basvuru?.status === "APPROVED" && basvuru.kesinListede == null && !basvuru.sozlesmeImzaPasif && (
+        <div className="alert alert-ok">Evrakınız onaylandı. Başvurunuz İŞKUR incelemesine gönderilecek. Başvuru değiştirilemez.</div>
       )}
       {basvuru?.atananBirimAdi && basvuru.atamaBildirimiOkundu && (
         <div className="alert alert-ok">Atandığı birim: {basvuru.atananBirimAdi}</div>
@@ -268,7 +312,7 @@ export function ApplicationPage() {
       <nav className="application-steps" aria-label="Başvuru adımları">
         <a href="#belgeler"><span>1</span><b>Belgeler</b><small>{new Set(basvuru?.belgeler.filter((belge) => belge.belgeTipi !== "HANE_SGK_DOKUMU").map((belge) => belge.belgeTipi) ?? []).size}/5</small></a>
         <a href="#hane-sgk"><span>2</span><b>Hane SGK</b><small>{basvuru?.belgeler.some((belge) => belge.belgeTipi === "HANE_SGK_DOKUMU") ? "Tamam" : "Bekliyor"}</small></a>
-        <a href="#hesap-bilgisi"><span>3</span><b>Hesap ve gönderim</b><small>{hesapBilgisiHazir ? "Hazır" : "Bekliyor"}</small></a>
+        <a href="#iletisim-hesap"><span>3</span><b>İletişim ve hesap</b><small>{iletisimHazir && hesapBilgisiHazir ? "Hazır" : "Bekliyor"}</small></a>
       </nav>
 
       <section id="belgeler" aria-labelledby="belgeler-baslik">
@@ -319,8 +363,32 @@ export function ApplicationPage() {
       </div>
 
       <form onSubmit={(e) => save(e, true)}>
-        <section id="hesap-bilgisi" className="card" style={{ marginTop: 18, padding: 22 }}>
-          <h3 className="section">Halkbank hesap bilgisi</h3>
+        <section id="iletisim-hesap" className="card" style={{ marginTop: 18, padding: 22 }}>
+          <h3 className="section">İletişim bilgileri</h3>
+          <p style={{ color: "var(--muted)", marginTop: -4, marginBottom: 14, lineHeight: 1.55 }}>
+            OBS’deki kayıtlar güncel olmayabilir. Bilgilendirme e-postaları bu adreslere gönderilir; güncel e-posta ve cep telefonunuzu girin.
+          </p>
+          <label>E-posta</label>
+          <input
+            type="email"
+            value={eposta}
+            onChange={(e) => setEposta(e.target.value)}
+            placeholder="ornek@mail.com"
+            disabled={locked}
+            autoComplete="email"
+            maxLength={160}
+          />
+          <label>Cep telefonu</label>
+          <input
+            value={gsm}
+            onChange={(e) => setGsm(e.target.value)}
+            placeholder="05xx xxx xx xx"
+            disabled={locked}
+            inputMode="tel"
+            autoComplete="tel"
+            maxLength={20}
+          />
+          <h3 className="section" style={{ marginTop: 22 }}>Halkbank hesap bilgisi</h3>
           <label>IBAN</label>
           <input
             value={iban}

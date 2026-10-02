@@ -5,13 +5,12 @@ import com.sks.sksiskur.domain.Basvuru;
 import com.sks.sksiskur.domain.BasvuruDonemi;
 import com.sks.sksiskur.domain.IslemTuru;
 import com.sks.sksiskur.domain.Role;
-import com.sks.sksiskur.domain.KayitListesi;
+import com.sks.sksiskur.domain.BasvuruDalga;
 import com.sks.sksiskur.domain.KayitTuru;
 import com.sks.sksiskur.domain.KesinKayitKaydi;
 import com.sks.sksiskur.domain.Student;
 import com.sks.sksiskur.exception.ApiException;
 import com.sks.sksiskur.repository.BasvuruRepository;
-import com.sks.sksiskur.repository.KayitListesiRepository;
 import com.sks.sksiskur.repository.KesinKayitKaydiRepository;
 import com.sks.sksiskur.web.dto.KesinListeUploadResponse;
 import org.springframework.http.HttpStatus;
@@ -30,23 +29,23 @@ public class KesinListeService {
 
     private final KesinKayitKaydiRepository kesinKayitKaydiRepository;
     private final BasvuruRepository basvuruRepository;
-    private final KayitListesiRepository kayitListesiRepository;
     private final BasvuruDonemiService basvuruDonemiService;
+    private final BasvuruDalgaService basvuruDalgaService;
     private final IskurExcelParser excelParser;
     private final AuditLogService auditLogService;
 
     public KesinListeService(
             KesinKayitKaydiRepository kesinKayitKaydiRepository,
             BasvuruRepository basvuruRepository,
-            KayitListesiRepository kayitListesiRepository,
             BasvuruDonemiService basvuruDonemiService,
+            BasvuruDalgaService basvuruDalgaService,
             IskurExcelParser excelParser,
             AuditLogService auditLogService
     ) {
         this.kesinKayitKaydiRepository = kesinKayitKaydiRepository;
         this.basvuruRepository = basvuruRepository;
-        this.kayitListesiRepository = kayitListesiRepository;
         this.basvuruDonemiService = basvuruDonemiService;
+        this.basvuruDalgaService = basvuruDalgaService;
         this.excelParser = excelParser;
         this.auditLogService = auditLogService;
     }
@@ -57,13 +56,18 @@ public class KesinListeService {
         if (!donem.isAktif()) {
             throw new ApiException(HttpStatus.CONFLICT, "Yalnızca aktif döneme kesin liste yüklenebilir.");
         }
-        KayitListesi meta = currentListe(donem);
-        if (meta.isKesinOnaylandi()) {
-            throw new ApiException(HttpStatus.CONFLICT, "Kesin liste onaylandıktan sonra yeniden yüklenemez.");
+        BasvuruDalga dalga = basvuruDalgaService.requireAktifDalga(donem);
+        if (dalga.isImzaBildirimiGonderildi()) {
+            throw new ApiException(HttpStatus.CONFLICT, "İmza bildirimi gönderildikten sonra İŞKUR nihai listesi değiştirilemez.");
+        }
+        long atanan = basvuruRepository.countByStatusAndAtananBirimKoduIsNotNullAndBasvuruDonemiId(
+                ApplicationStatus.APPROVED, donem.getId());
+        if (atanan > 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "Birim dağıtımı yapıldıktan sonra nihai liste yeniden yüklenemez.");
         }
 
         List<IskurExcelParser.ParsedRow> parsed = excelParser.parse(file);
-        kesinKayitKaydiRepository.deleteByBasvuruDonemiId(donem.getId());
+        kesinKayitKaydiRepository.deleteByBasvuruDalgaId(dalga.getId());
 
         Set<String> seen = new LinkedHashSet<>();
         int skipped = 0;
@@ -75,6 +79,7 @@ public class KesinListeService {
             }
             KesinKayitKaydi kayit = new KesinKayitKaydi();
             kayit.setBasvuruDonemi(donem);
+            kayit.setBasvuruDalga(dalga);
             kayit.setTcKimlikNo(row.tcKimlikNo());
             kayit.setAd(row.ad());
             kayit.setSoyad(row.soyad());
@@ -83,22 +88,30 @@ public class KesinListeService {
             kesinKayitKaydiRepository.save(kayit);
         }
 
-        ComparisonResult comparison = applyComparison(donem);
-        meta.setKesinListeYuklemeTarihi(Instant.now());
-        meta.setKesinListeYukleyenAdmin(adminUsername);
-        kayitListesiRepository.save(meta);
+        ComparisonResult comparison = applyComparison(donem, dalga);
+        if (comparison.eslesen() == 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Yüklenen İŞKUR nihai listesinde onaylı başvuru bulunamadı. Dosyayı kontrol edin.");
+        }
+        Instant now = Instant.now();
+        dalga.setKesinListeYuklemeTarihi(now);
+        dalga.setKesinListeYukleyenAdmin(adminUsername);
+        dalga.setKesinOnaylandi(true);
+        dalga.setOnayTarihi(now);
+        dalga.setOnaylayanAdmin(adminUsername);
+        basvuruDalgaService.saveDalga(dalga);
         auditLogService.log(Role.ADMIN, adminUsername, adminUsername, IslemTuru.KESIN_LISTE_YUKLE, "DONEM", donem.getId(),
-                "Kesin liste yüklendi: " + donem.getAd(),
-                comparison.eslesen() + " eşleşme, " + comparison.kesinListedeDegil() + " listede yok");
+                "İŞKUR nihai listesi yüklendi: " + dalga.getAd(),
+                comparison.eslesen() + " öğrenci imza davetine alındı");
 
         return new KesinListeUploadResponse(
                 donem.getId(),
-                kesinKayitKaydiRepository.countByBasvuruDonemiId(donem.getId()),
+                kesinKayitKaydiRepository.countByBasvuruDalgaId(dalga.getId()),
                 skipped,
                 comparison.eslesen(),
                 comparison.kesinListedeDegil(),
                 comparison.listedeBasvuruEslesmedi(),
-                meta.getKesinListeYuklemeTarihi(),
+                dalga.getKesinListeYuklemeTarihi(),
                 adminUsername
         );
     }
@@ -106,23 +119,28 @@ public class KesinListeService {
     @Transactional(readOnly = true)
     public long countUploaded(Long donemId) {
         BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
-        return kesinKayitKaydiRepository.countByBasvuruDonemiId(donem.getId());
+        BasvuruDalga dalga = basvuruDalgaService.requireAktifDalga(donem);
+        return kesinKayitKaydiRepository.countByBasvuruDalgaId(dalga.getId());
     }
 
     @Transactional(readOnly = true)
     public List<KesinKayitKaydi> listUploaded(Long donemId) {
         BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
-        return kesinKayitKaydiRepository.findByBasvuruDonemiIdOrderByAdAscSoyadAsc(donem.getId());
+        BasvuruDalga dalga = basvuruDalgaService.requireAktifDalga(donem);
+        return kesinKayitKaydiRepository.findByBasvuruDalgaIdOrderByAdAscSoyadAsc(dalga.getId());
     }
 
     @Transactional
     public void resetComparison(BasvuruDonemi donem) {
-        kesinKayitKaydiRepository.deleteByBasvuruDonemiId(donem.getId());
-        KayitListesi meta = currentListe(donem);
-        meta.setKesinListeYuklemeTarihi(null);
-        meta.setKesinListeYukleyenAdmin(null);
-        kayitListesiRepository.save(meta);
+        BasvuruDalga dalga = basvuruDalgaService.requireAktifDalga(donem);
+        kesinKayitKaydiRepository.deleteByBasvuruDalgaId(dalga.getId());
+        dalga.setKesinListeYuklemeTarihi(null);
+        dalga.setKesinListeYukleyenAdmin(null);
+        basvuruDalgaService.saveDalga(dalga);
         for (Basvuru basvuru : approvedBasvurular(donem)) {
+            if (isProtectedKesin(basvuru)) {
+                continue;
+            }
             basvuru.setKayitTuru(null);
             basvuru.setKesinListede(null);
             basvuru.setKayitTarihi(null);
@@ -130,14 +148,17 @@ public class KesinListeService {
     }
 
     @Transactional
-    public ComparisonResult applyComparison(BasvuruDonemi donem) {
-        List<KesinKayitKaydi> kayitlar = kesinKayitKaydiRepository.findByBasvuruDonemiIdOrderByAdAscSoyadAsc(donem.getId());
+    public ComparisonResult applyComparison(BasvuruDonemi donem, BasvuruDalga dalga) {
+        List<KesinKayitKaydi> kayitlar = kesinKayitKaydiRepository.findByBasvuruDalgaIdOrderByAdAscSoyadAsc(dalga.getId());
         List<Basvuru> approved = approvedBasvurular(donem);
         int eslesen = 0;
         int kesinListedeDegil = 0;
         Instant now = Instant.now();
 
         for (Basvuru basvuru : approved) {
+            if (isProtectedKesin(basvuru)) {
+                continue;
+            }
             if (matches(basvuru.getStudent(), kayitlar)) {
                 basvuru.setKayitTuru(KayitTuru.KESIN);
                 basvuru.setKesinListede(true);
@@ -154,12 +175,18 @@ public class KesinListeService {
 
         int listedeBasvuruEslesmedi = 0;
         for (KesinKayitKaydi kayit : kayitlar) {
-            boolean matched = approved.stream().anyMatch(b -> matchesRow(b.getStudent(), kayit));
+            boolean matched = approved.stream()
+                    .filter(b -> !isProtectedKesin(b))
+                    .anyMatch(b -> matchesRow(b.getStudent(), kayit));
             if (!matched) {
                 listedeBasvuruEslesmedi++;
             }
         }
         return new ComparisonResult(eslesen, kesinListedeDegil, listedeBasvuruEslesmedi);
+    }
+
+    private static boolean isProtectedKesin(Basvuru basvuru) {
+        return basvuru.isAssigned() && basvuru.getKayitTuru() == KayitTuru.KESIN;
     }
 
     public boolean matches(Student student, List<KesinKayitKaydi> kayitlar) {
@@ -181,15 +208,6 @@ public class KesinListeService {
 
     private List<Basvuru> approvedBasvurular(BasvuruDonemi donem) {
         return basvuruRepository.findByStatusAndBasvuruDonemiId(ApplicationStatus.APPROVED, donem.getId());
-    }
-
-    private KayitListesi currentListe(BasvuruDonemi donem) {
-        return kayitListesiRepository.findByBasvuruDonemiId(donem.getId()).orElseGet(() -> {
-            KayitListesi created = new KayitListesi();
-            created.setBasvuruDonemi(donem);
-            created.setKesinOnaylandi(false);
-            return kayitListesiRepository.save(created);
-        });
     }
 
     private static String dedupeKey(IskurExcelParser.ParsedRow row) {

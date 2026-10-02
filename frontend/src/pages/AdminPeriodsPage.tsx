@@ -3,14 +3,17 @@ import { api, ApiError, downloadAuthenticatedFile } from "../api";
 import { useConfirm } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
 import { Shell, formatDate } from "../components/ui";
-import type { BasvuruDonemi, IskurListe } from "../types";
+import type { BasvuruDalga, BasvuruDonemi, IskurListe } from "../types";
 
 export function AdminPeriodsPage() {
   const confirm = useConfirm();
+  const today = new Date().toISOString().slice(0, 10);
   const [periods, setPeriods] = useState<BasvuruDonemi[]>([]);
   const [iskurList, setIskurList] = useState<IskurListe | null>(null);
+  const [dalgalar, setDalgalar] = useState<BasvuruDalga[]>([]);
+  const [waveStart, setWaveStart] = useState(today);
+  const [waveEnd, setWaveEnd] = useState(today);
   const [name, setName] = useState("");
-  const today = new Date().toISOString().slice(0, 10);
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [incomeLimit, setIncomeLimit] = useState("");
@@ -26,8 +29,10 @@ export function AdminPeriodsPage() {
     const activePeriod = nextPeriods.find((period) => period.aktif);
     if (activePeriod) {
       setIskurList(await api.iskurListesi(activePeriod.id));
+      setDalgalar(await api.basvuruDalgalar(activePeriod.id));
     } else {
       setIskurList(null);
+      setDalgalar([]);
     }
   }
 
@@ -92,7 +97,7 @@ export function AdminPeriodsPage() {
     if (!active) return;
     if (!await confirm({
       title: "İŞKUR listesini yükle",
-      message: "Yeni dosya mevcut İŞKUR listesinin tamamını değiştirir.",
+      message: "Yeni dosya yalnızca aktif başvuru turunun İŞKUR listesini değiştirir. Dönem boyunca listede yer alan öğrenciler başvuruya uygun kalır.",
       confirmLabel: "Yükle"
     })) return;
     setBusy(true);
@@ -110,7 +115,33 @@ export function AdminPeriodsPage() {
     }
   }
 
+  async function startNewWave() {
+    if (!active) return;
+    if (waveEnd < waveStart) {
+      setError("Tur bitiş tarihi başlangıçtan önce olamaz.");
+      return;
+    }
+    if (!await confirm({
+      title: "Yeni başvuru turu",
+      message: "Mevcut turda kesin liste onayı ve imza bildirimi tamamlanmış olmalıdır. Yeni tur açıldığında öğrenci başvuru tarihleri güncellenir.",
+      confirmLabel: "Tur aç"
+    })) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.yeniBasvuruTuru(active.id, waveStart, waveEnd);
+      await load();
+      setMessage("Yeni başvuru turu açıldı. Bu tur için İŞKUR listesini yükleyin.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Yeni tur açılamadı.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const active = periods.find((period) => period.aktif);
+  const aktifDalga = dalgalar.find((dalga) => dalga.aktif);
 
   return (
     <Shell home="/admin">
@@ -123,8 +154,54 @@ export function AdminPeriodsPage() {
       </p>
       {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
+      {active && aktifDalga && <section className="card" style={{ padding: 18, marginBottom: 18 }}>
+        <h4 style={{ marginTop: 0 }}>Başvuru turları — {active.ad}</h4>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>
+          Aktif tur: <b>{aktifDalga.ad}</b>
+          {aktifDalga.kesinOnaylandi && aktifDalga.imzaBildirimiGonderildi
+            ? " · Dağıtım sonrası boş kontenjan için yeni tur açabilirsiniz."
+            : " · Kesin liste ve imza tamamlanmadan yeni tur açılamaz."}
+        </p>
+        <div style={{ overflow: "auto", marginBottom: 16 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Tur</th><th>Durum</th><th>Öğrenci aralığı</th><th>İŞKUR</th><th>Nihai liste</th><th>Yüklendi</th><th>İmza daveti</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dalgalar.map((dalga) => (
+                <tr key={dalga.id}>
+                  <td><b>{dalga.ad}</b>{dalga.aktif ? " (aktif)" : ""}</td>
+                  <td>{dalga.durum === "ACIK" ? "Açık" : "Tamamlandı"}</td>
+                  <td>{dalga.ogrenciBaslangicTarihi && dalga.ogrenciBitisTarihi
+                    ? `${dalga.ogrenciBaslangicTarihi} – ${dalga.ogrenciBitisTarihi}`
+                    : "—"}</td>
+                  <td>{dalga.iskurListeKayitSayisi}</td>
+                  <td>{dalga.kesinListeKayitSayisi}</td>
+                  <td>{dalga.kesinOnaylandi ? "Evet" : "Hayır"}</td>
+                  <td>{dalga.imzaBildirimiGonderildi ? "Gönderildi" : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {aktifDalga.kesinOnaylandi && aktifDalga.imzaBildirimiGonderildi && (
+          <div className="row" style={{ alignItems: "end" }}>
+            <label style={{ margin: 0 }}>
+              Yeni tur başlangıç
+              <input type="date" value={waveStart} onChange={(e) => setWaveStart(e.target.value)} disabled={busy} style={{ margin: "4px 0 0" }} />
+            </label>
+            <label style={{ margin: 0 }}>
+              Bitiş
+              <input type="date" value={waveEnd} min={waveStart} onChange={(e) => setWaveEnd(e.target.value)} disabled={busy} style={{ margin: "4px 0 0" }} />
+            </label>
+            <button className="btn btn-primary" disabled={busy} onClick={startNewWave}>Yeni tur başlat</button>
+          </div>
+        )}
+      </section>}
       {active && <section className="card" style={{ padding: 18, marginBottom: 18 }}>
-        <h4 style={{ marginTop: 0 }}>İŞKUR başvuru listesi — {active.ad}</h4>
+        <h4 style={{ marginTop: 0 }}>İŞKUR başvuru listesi — {aktifDalga ? aktifDalga.ad : active.ad}</h4>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
           Excel dosyasında en az <b>Ad</b> ve <b>Soyad</b> sütunları olmalıdır. Varsa T.C. Kimlik No ve Öğrenci No eşleştirmeyi güçlendirir.
         </p>

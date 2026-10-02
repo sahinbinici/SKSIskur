@@ -11,5 +11,11 @@ public interface KesinKayitKaydiRepository extends JpaRepository<KesinKayitKaydi
 
     void deleteByBasvuruDonemiId(Long basvuruDonemiId);
 
+    void deleteByBasvuruDalgaId(Long basvuruDalgaId);
+
     List<KesinKayitKaydi> findByBasvuruDonemiIdOrderByAdAscSoyadAsc(Long basvuruDonemiId);
+
+    List<KesinKayitKaydi> findByBasvuruDalgaIdOrderByAdAscSoyadAsc(Long basvuruDalgaId);
+
+    long countByBasvuruDalgaId(Long basvuruDalgaId);
 }

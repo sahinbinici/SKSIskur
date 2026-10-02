@@ -34,6 +34,10 @@ public class IskurBasvuruKaydi {
     @JoinColumn(name = "basvuru_donemi_id", nullable = false)
     private BasvuruDonemi basvuruDonemi;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "basvuru_dalga_id")
+    private BasvuruDalga basvuruDalga;
+
     @Column(name = "tc_kimlik_no", length = 11)
     private String tcKimlikNo;
 

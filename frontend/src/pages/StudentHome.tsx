@@ -64,7 +64,7 @@ export function StudentHome() {
   }
 
   const yeniAtama = basvuru?.atananBirimAdi && !basvuru.atamaBildirimiOkundu;
-  const imzaBildirimi = basvuru?.imzaBildirimiGonderildi && !basvuru.imzaBildirimiOkundu && !basvuru.atananBirimAdi;
+  const imzaBildirimi = basvuru?.imzaBildirimiGonderildi && !basvuru.imzaBildirimiOkundu && !basvuru.atananBirimAdi && !basvuru.sozlesmeImzalandi;
   const basvuruErisilebilir = canAccessApplication(profile);
   const action = studentApplicationAction(basvuru);
 
@@ -73,7 +73,7 @@ export function StudentHome() {
       {error && <div className="alert alert-error">{error}</div>}
       {imzaBildirimi && (
         <div className="alert alert-wait">
-          <strong>İmza bildirimi.</strong> {basvuru.imzaBildirimiMesaji}
+          <strong>Sözleşme imza daveti.</strong> {basvuru.imzaBildirimiMesaji}
           <button className="btn btn-secondary btn-compact" style={{ marginLeft: 12 }} onClick={dismissImzaNotice}>
             Okudum
           </button>
@@ -108,6 +108,9 @@ export function StudentHome() {
               <Field label="Kayıt tarihi" value={profile?.kayitTarihi} />
               <Field label="E-posta" value={profile?.eposta} />
               <Field label="Telefon" value={profile?.gsm} />
+              <p style={{ color: "var(--muted)", fontSize: 13, margin: "8px 0 0", gridColumn: "1 / -1" }}>
+                Güncel iletişim bilgilerinizi başvuru ekranından girebilirsiniz; bilgilendirmeler bu adreslere gider.
+              </p>
               <Field label="Adres" value={[profile?.adres, profile?.ilce, profile?.il].filter(Boolean).join(" / ")} />
               <Field label="Danışman" value={profile?.danisman} />
             </div>
@@ -123,19 +126,25 @@ export function StudentHome() {
           {basvuruErisilebilir && basvuru && <StatusBadge status={basvuru.status} />}
           {basvuruErisilebilir && !basvuru && !error && <div className="alert alert-wait">Aktif başvuru dönemi bekleniyor.</div>}
           {basvuruErisilebilir && basvuru?.status === "APPROVED" && basvuru.kesinListede == null && (
-            <div className="alert alert-wait">Evrakınız onaylandı. Başvurunuz İŞKUR incelemesi için gönderilecek; kesin kayıt listesi henüz açıklanmadı.</div>
+            <div className="alert alert-wait">Evrakınız onaylandı. Başvurunuz İŞKUR incelemesine gönderilecek.</div>
           )}
-          {basvuruErisilebilir && basvuru?.status === "APPROVED" && basvuru.kesinListede === false && (
-            <div className="alert alert-wait">Evrakınız onaylanmıştı ancak İŞKUR kesin kayıt listesinde yer almıyorsunuz.</div>
+          {basvuruErisilebilir && basvuru?.sozlesmeImzaPasif && (
+            <div className="alert alert-wait">Sözleşme imzasına gelmediğiniz için kaydınız pasife alındı.</div>
+          )}
+          {basvuruErisilebilir && basvuru?.status === "APPROVED" && basvuru.kesinListede === false && !basvuru.sozlesmeImzaPasif && (
+            <div className="alert alert-wait">Evrakınız onaylanmıştı ancak İŞKUR nihai listesinde yer almıyorsunuz.</div>
           )}
           {basvuruErisilebilir && basvuru?.status === "RETURNED" && (
             <div className="alert alert-wait">Başvurunuz eksik evrak nedeniyle iade edildi. Yönetici notunu inceleyip eksiklerinizi tamamlayarak yeniden gönderin.</div>
           )}
-          {basvuruErisilebilir && basvuru?.kayitTuru === "KESIN" && !basvuru.atananBirimAdi && !basvuru.imzaBildirimiGonderildi && (
-            <div className="alert alert-ok">İŞKUR kesin listesine alındınız. Birim ataması bekleniyor.</div>
+          {basvuruErisilebilir && basvuru?.kesinListede === true && !basvuru.sozlesmeImzaPasif && !basvuru.atananBirimAdi && !basvuru.imzaBildirimiGonderildi && (
+            <div className="alert alert-ok">İŞKUR nihai listesine alındınız. Sözleşme imza daveti gönderilecek.</div>
           )}
-          {basvuruErisilebilir && basvuru?.kayitTuru === "KESIN" && !basvuru.atananBirimAdi && basvuru.imzaBildirimiGonderildi && basvuru.imzaBildirimiOkundu && (
-            <div className="alert alert-ok">İmza bildiriminiz alındı. Birim ataması bekleniyor.</div>
+          {basvuruErisilebilir && basvuru?.kesinListede === true && !basvuru.sozlesmeImzaPasif && !basvuru.atananBirimAdi && basvuru.imzaBildirimiGonderildi && !basvuru.sozlesmeImzalandi && basvuru.imzaBildirimiOkundu && (
+            <div className="alert alert-wait">Sözleşme imzası için gelmeniz bekleniyor.</div>
+          )}
+          {basvuruErisilebilir && basvuru?.sozlesmeImzalandi && !basvuru.atananBirimAdi && (
+            <div className="alert alert-ok">Sözleşme imzanız alındı. Birim ataması bekleniyor.</div>
           )}
           {basvuruErisilebilir && (
             <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>

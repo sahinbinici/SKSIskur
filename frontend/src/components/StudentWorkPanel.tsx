@@ -7,7 +7,8 @@ const MONTHS = [
 
 const TAKIP_LABEL: Record<string, string> = {
   DRAFT: "Hazırlanıyor",
-  SUBMITTED: "Birime gönderildi"
+  SUBMITTED: "SKS onayı bekleniyor",
+  APPROVED: "SKS onayladı"
 };
 
 type StudentWorkPanelProps = {
@@ -29,13 +30,20 @@ export function StudentWorkPanel({ ozet }: StudentWorkPanelProps) {
         </div>
         <span className="dashboard-badge dashboard-badge-ok">Atandınız</span>
       </div>
+      {ozet.kalanIzinGunu === 0 && (
+        <div className="alert alert-wait" role="status">
+          Dönemlik izin hakkınız doldu ({ozet.izinGunLimiti} gün). Yeni izin günü birim tarafından işaretlenemez; raporlu günler ayrı değerlendirilir.
+        </div>
+      )}
       <div className="dashboard-pending-grid dashboard-pending-grid-4">
         <article className="dashboard-pending-card dashboard-stat-card">
           <strong>{ozet.birimAdi}</strong>
           <span>Atandığınız birim</span>
         </article>
         <article className="dashboard-pending-card dashboard-stat-card">
-          <strong>{ozet.kalanIzinGunu} gün</strong>
+          <strong className={ozet.kalanIzinGunu === 0 ? "leave-balance exhausted" : undefined}>
+            {ozet.kalanIzinGunu === 0 ? "Hak bitti" : `${ozet.kalanIzinGunu} gün`}
+          </strong>
           <span>İzin bakiyesi ({ozet.kullanilanIzinGunu}/{ozet.izinGunLimiti})</span>
         </article>
         <article className="dashboard-pending-card dashboard-stat-card">

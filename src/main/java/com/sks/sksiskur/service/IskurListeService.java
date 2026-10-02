@@ -33,6 +33,7 @@ public class IskurListeService {
     private final BasvuruDonemiService basvuruDonemiService;
     private final IskurExcelParser excelParser;
     private final AuditLogService auditLogService;
+    private final BasvuruDalgaService basvuruDalgaService;
     private final boolean demoEnabled;
 
     public IskurListeService(
@@ -41,6 +42,7 @@ public class IskurListeService {
             BasvuruDonemiService basvuruDonemiService,
             IskurExcelParser excelParser,
             AuditLogService auditLogService,
+            BasvuruDalgaService basvuruDalgaService,
             @Value("${app.demo.enabled:false}") boolean demoEnabled
     ) {
         this.repository = repository;
@@ -48,6 +50,7 @@ public class IskurListeService {
         this.basvuruDonemiService = basvuruDonemiService;
         this.excelParser = excelParser;
         this.auditLogService = auditLogService;
+        this.basvuruDalgaService = basvuruDalgaService;
         this.demoEnabled = demoEnabled;
     }
 
@@ -82,7 +85,8 @@ public class IskurListeService {
         }
 
         List<IskurExcelParser.ParsedRow> parsed = excelParser.parse(file);
-        repository.deleteByBasvuruDonemiId(donem.getId());
+        var dalga = basvuruDalgaService.requireAktifDalga(donem);
+        repository.deleteByBasvuruDalgaId(dalga.getId());
 
         Set<String> seen = new LinkedHashSet<>();
         int skipped = 0;
@@ -94,6 +98,7 @@ public class IskurListeService {
             }
             IskurBasvuruKaydi kayit = new IskurBasvuruKaydi();
             kayit.setBasvuruDonemi(donem);
+            kayit.setBasvuruDalga(dalga);
             kayit.setTcKimlikNo(row.tcKimlikNo());
             kayit.setAd(row.ad());
             kayit.setSoyad(row.soyad());

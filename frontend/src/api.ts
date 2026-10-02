@@ -1,4 +1,4 @@
-import type { AdminOzet, AdminRole, AdminTakipOzet, AdminUser, AgreementDocument, AgreementType, ApplicationStatus, AuthResponse, Basvuru, BasvuruDagitim, BasvuruDonemi, BelgeYuklemeFiltre, BirimAylikRapor, BirimDuyuru, BirimDuyuruInbox, BirimKullanici, BirimOgrenci, DagitimBirimi, DagitimSonuc, DemoInfo, DocumentType, ImzaBildirimiGonder, IskurListe, IskurListeUpload, IslemLogPage, IslemTuru, IzinRaporOgrenci, KayitListeFiltre, KayitListesi, KesinListeUpload, OgrenciCalismaOzet, PuantajDurum, Role, StudentAgreement, StudentProfile, TakipDonem, WorkUnit, YoneticiPanosuDuyuru } from "./types";
+import type { AdminOzet, AdminRole, AdminTakipOzet, AdminUser, AgreementDocument, AgreementType, ApplicationStatus, AuthResponse, Basvuru, BasvuruDagitim, BasvuruDalga, BasvuruDonemi, BelgeYuklemeFiltre, BirimAylikRapor, BirimDuyuru, BirimDuyuruInbox, BirimKullanici, BirimOgrenci, DagitimBirimi, DagitimSonuc, DemoInfo, DocumentType, ImzaBildirimiGonder, IskurListe, IskurListeUpload, IslemLogPage, IslemTuru, IzinRaporOgrenci, KayitListeFiltre, KayitListesi, KesinListeUpload, OgrenciCalismaOzet, PuantajDurum, Role, SozlesmeImzaBekleyen, StudentAgreement, StudentProfile, TakipDonem, WorkUnit, YoneticiPanosuDuyuru } from "./types";
 
 const TOKEN_KEY = "sksiskur.token";
 
@@ -104,12 +104,26 @@ export const api = {
     }
     return response.json() as Promise<OgrenciCalismaOzet>;
   },
-  saveDraft: (payload: { iban: string; hesapSahibi: string; bankaSubeKodu: string; hesapNumarasi: string }) =>
+  saveDraft: (payload: {
+    iban: string;
+    hesapSahibi: string;
+    bankaSubeKodu: string;
+    hesapNumarasi: string;
+    eposta: string;
+    gsm: string;
+  }) =>
     request<Basvuru>("/api/student/basvuru", {
       method: "PUT",
       body: JSON.stringify(payload)
     }),
-  submit: (payload: { iban: string; hesapSahibi: string; bankaSubeKodu: string; hesapNumarasi: string }) =>
+  submit: (payload: {
+    iban: string;
+    hesapSahibi: string;
+    bankaSubeKodu: string;
+    hesapNumarasi: string;
+    eposta: string;
+    gsm: string;
+  }) =>
     request<Basvuru>("/api/student/basvuru/gonder", {
       method: "POST",
       body: JSON.stringify(payload)
@@ -129,6 +143,12 @@ export const api = {
     method: "POST", body: JSON.stringify({ ad, ogrenciBaslangicTarihi, ogrenciBitisTarihi, aylikGelirLimiti })
   }),
   closeBasvuruDonemi: (id: number) => request<BasvuruDonemi>(`/api/admin/basvuru-donemleri/${id}/kapat`, { method: "POST" }),
+  basvuruDalgalar: (donemId: number) => request<BasvuruDalga[]>(`/api/admin/basvuru-donemleri/${donemId}/dalgalar`),
+  yeniBasvuruTuru: (donemId: number, ogrenciBaslangicTarihi: string, ogrenciBitisTarihi: string) =>
+    request<BasvuruDalga>(`/api/admin/basvuru-donemleri/${donemId}/dalgalar/yeni-tur`, {
+      method: "POST",
+      body: JSON.stringify({ ogrenciBaslangicTarihi, ogrenciBitisTarihi })
+    }),
   iskurListesiExcelUrl: (donemId: number) => `/api/admin/basvuru-donemleri/${donemId}/iskur-listesi.xlsx`,
   adminBasvuruQueryParams: (
     status?: ApplicationStatus | "",
@@ -304,6 +324,17 @@ export const api = {
   onaylaKesinListe: () => request<KayitListesi>("/api/admin/kayit-listesi/onayla", { method: "POST" }),
   gonderImzaBildirimi: () =>
     request<ImzaBildirimiGonder>("/api/admin/kayit-listesi/imza-bildirimi-gonder", { method: "POST" }),
+  sozlesmeImzaBekleyen: (donemId?: number) =>
+    request<SozlesmeImzaBekleyen[]>(
+      `/api/admin/kayit-listesi/sozlesme-imza-bekleyen${donemId ? `?donemId=${donemId}` : ""}`
+    ),
+  sozlesmeImzalandi: (basvuruId: number) =>
+    request<void>(`/api/admin/kayit-listesi/sozlesme-imza/${basvuruId}/imzalandi`, { method: "POST" }),
+  sozlesmeImzaPasif: (basvuruIds: number[]) =>
+    request<number>("/api/admin/kayit-listesi/sozlesme-imza/pasif", {
+      method: "POST",
+      body: JSON.stringify({ basvuruIds })
+    }),
   geriAlKesinListe: () => request<KayitListesi>("/api/admin/kayit-listesi/geri-al", { method: "POST" }),
   adminTakip: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
     const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
@@ -379,6 +410,15 @@ export const api = {
   },
   adminTakipOgrenci: (basvuruId: number, yil: number, ay: number, donemId?: number) =>
     request<TakipDonem>(`/api/admin/takip/ogrenciler/${basvuruId}?yil=${yil}&ay=${ay}${donemId ? `&donemId=${donemId}` : ""}`),
+  adminTakipOnayla: (basvuruId: number, yil: number, ay: number, donemId?: number) =>
+    request<TakipDonem>(`/api/admin/takip/ogrenciler/${basvuruId}/onayla?yil=${yil}&ay=${ay}${donemId ? `&donemId=${donemId}` : ""}`, {
+      method: "POST"
+    }),
+  adminTakipOnaylaGonderilenler: (yil: number, ay: number, birimKodu: string, donemId?: number) => {
+    const params = new URLSearchParams({ yil: String(yil), ay: String(ay), birimKodu });
+    if (donemId) params.set("donemId", String(donemId));
+    return request<number>(`/api/admin/takip/onayla-gonderilenler?${params}`, { method: "POST" });
+  },
   adminPuantajBelgeUrl: (basvuruId: number, yil: number, ay: number, tarih: string) =>
     `/api/admin/takip/ogrenciler/${basvuruId}/puantaj/belge?yil=${yil}&ay=${ay}&tarih=${tarih}`,
   birimOgrenciler: () => request<BirimOgrenci[]>("/api/birim/ogrenciler"),

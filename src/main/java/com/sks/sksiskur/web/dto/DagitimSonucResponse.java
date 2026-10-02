@@ -30,6 +30,7 @@ public record DagitimSonucResponse(
     public record AtamaSatir(
             Long basvuruId,
             String ogrenciNo,
+            String tcKimlikNo,
             String adSoyad,
             String fakulte,
             String atamaTuru,

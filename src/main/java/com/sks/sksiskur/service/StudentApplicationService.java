@@ -3,7 +3,9 @@ package com.sks.sksiskur.service;
 import com.sks.sksiskur.domain.ApplicationStatus;
 import com.sks.sksiskur.domain.Basvuru;
 import com.sks.sksiskur.domain.BasvuruBelgesi;
+import com.sks.sksiskur.domain.BasvuruDalga;
 import com.sks.sksiskur.domain.BasvuruDonemi;
+import com.sks.sksiskur.domain.KayitTuru;
 import com.sks.sksiskur.domain.DocumentType;
 import com.sks.sksiskur.domain.IslemTuru;
 import com.sks.sksiskur.domain.Role;
@@ -47,6 +49,7 @@ public class StudentApplicationService {
     private final AdminAssignmentService adminAssignmentService;
     private final SozlesmeService sozlesmeService;
     private final IskurListeService iskurListeService;
+    private final BasvuruDalgaService basvuruDalgaService;
     private final AuditLogService auditLogService;
 
     public StudentApplicationService(
@@ -59,6 +62,7 @@ public class StudentApplicationService {
             AdminAssignmentService adminAssignmentService,
             SozlesmeService sozlesmeService,
             IskurListeService iskurListeService,
+            BasvuruDalgaService basvuruDalgaService,
             AuditLogService auditLogService
     ) {
         this.studentRepository = studentRepository;
@@ -70,6 +74,7 @@ public class StudentApplicationService {
         this.adminAssignmentService = adminAssignmentService;
         this.sozlesmeService = sozlesmeService;
         this.iskurListeService = iskurListeService;
+        this.basvuruDalgaService = basvuruDalgaService;
         this.auditLogService = auditLogService;
     }
 
@@ -107,6 +112,7 @@ public class StudentApplicationService {
             basvuru.setHesapSahibi(request.hesapSahibi().trim());
         }
         applyOptionalHesapDetaylari(basvuru, request);
+        applyOptionalIletisim(basvuru, request);
         return mapper.toBasvuru(basvuruRepository.save(basvuru));
     }
 
@@ -117,6 +123,7 @@ public class StudentApplicationService {
         Basvuru basvuru = getOrCreateEntity(ogrenciNo);
         assertEditable(basvuru);
         applyHesapBilgisi(basvuru, request);
+        applyIletisim(basvuru, request, true);
         assertComplete(basvuru);
         basvuru.setStatus(ApplicationStatus.SUBMITTED);
         basvuru.setGonderimTarihi(Instant.now());
@@ -198,14 +205,27 @@ public class StudentApplicationService {
     private Basvuru getOrCreateEntity(String ogrenciNo) {
         Student student = requireEligibleStudent(ogrenciNo);
         BasvuruDonemi donem = basvuruDonemiService.requireActive();
-        return basvuruRepository.findByStudentAndBasvuruDonemiId(student, donem.getId()).orElseGet(() -> {
+        BasvuruDalga dalga = basvuruDalgaService.requireOpenDalgaForStudent(donem);
+        return basvuruRepository.findByStudentAndBasvuruDonemiId(student, donem.getId()).map(existing -> {
+            assertEligibleForNewWave(existing);
+            existing.setBasvuruDalga(dalga);
+            return existing;
+        }).orElseGet(() -> {
             Basvuru created = new Basvuru();
             created.setStudent(student);
             created.setBasvuruDonemi(donem);
+            created.setBasvuruDalga(dalga);
             created.setStatus(ApplicationStatus.DRAFT);
             created.setHesapSahibi(student.getAdSoyad());
             return basvuruRepository.save(created);
         });
+    }
+
+    private void assertEligibleForNewWave(Basvuru basvuru) {
+        if (basvuru.isAssigned() && basvuru.getKayitTuru() == KayitTuru.KESIN) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Birim ataması yapıldığı için bu dönemde yeni başvuru turuna katılamazsınız.");
+        }
     }
 
     private Student findStudent(String ogrenciNo) {
@@ -276,7 +296,59 @@ public class StudentApplicationService {
         }
     }
 
+    private void applyOptionalIletisim(Basvuru basvuru, BasvuruKaydetRequest request) {
+        applyIletisim(basvuru, request, false);
+    }
+
+    private void applyIletisim(Basvuru basvuru, BasvuruKaydetRequest request, boolean required) {
+        String eposta = request.eposta() == null ? "" : request.eposta().trim();
+        String gsmInput = request.gsm() == null ? "" : request.gsm().trim();
+        if (required) {
+            if (eposta.isBlank()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "E-posta adresi zorunludur.");
+            }
+            if (gsmInput.isBlank()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Cep telefonu numarası zorunludur.");
+            }
+        }
+        if (!eposta.isBlank()) {
+            validateEposta(eposta);
+            basvuru.setIletisimEposta(eposta);
+            basvuru.getStudent().setEposta(eposta);
+        }
+        if (!gsmInput.isBlank()) {
+            String gsm = normalizeGsm(gsmInput);
+            basvuru.setIletisimGsm(gsm);
+            basvuru.getStudent().setGsm(gsm);
+        }
+    }
+
+    private void validateEposta(String eposta) {
+        if (!eposta.matches("^[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}$")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Geçerli bir e-posta adresi giriniz.");
+        }
+    }
+
+    private String normalizeGsm(String value) {
+        String digits = normalizeDigits(value);
+        if (digits.startsWith("90") && digits.length() == 12) {
+            digits = digits.substring(2);
+        } else if (digits.length() == 11 && digits.startsWith("0")) {
+            digits = digits.substring(1);
+        }
+        if (digits.length() != 10 || !digits.startsWith("5")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Geçerli bir cep telefonu numarası giriniz (05xx xxx xx xx).");
+        }
+        return "0" + digits;
+    }
+
     private void assertComplete(Basvuru basvuru) {
+        if (basvuru.getIletisimEposta() == null || basvuru.getIletisimEposta().isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "E-posta adresi zorunludur.");
+        }
+        if (basvuru.getIletisimGsm() == null || basvuru.getIletisimGsm().isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Cep telefonu numarası zorunludur.");
+        }
         if (basvuru.getIban() == null || basvuru.getIban().isBlank()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Halkbank IBAN bilgisi zorunludur.");
         }

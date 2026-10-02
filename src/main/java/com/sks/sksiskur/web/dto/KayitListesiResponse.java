@@ -21,6 +21,7 @@ public record KayitListesiResponse(
         boolean imzaBildirimiGonderildi,
         Instant imzaBildirimiGonderimTarihi,
         String imzaBildirimiGonderenAdmin,
+        BasvuruDalgaResponse aktifDalga,
         List<Satir> ogrenciler,
         List<ListedeEslesmeyen> listedeEslesmeyenler
 ) {

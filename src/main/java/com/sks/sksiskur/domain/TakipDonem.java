@@ -52,6 +52,9 @@ public class TakipDonem {
     @Column(name = "gonderim_tarihi")
     private Instant gonderimTarihi;
 
+    @Column(name = "onay_tarihi")
+    private Instant onayTarihi;
+
     @Column(name = "olusturma_tarihi", nullable = false)
     private Instant olusturmaTarihi;
 
@@ -62,7 +65,7 @@ public class TakipDonem {
     private List<TakipGun> gunler = new ArrayList<>();
 
     public boolean isLocked() {
-        return status == TakipStatus.SUBMITTED;
+        return status == TakipStatus.SUBMITTED || status == TakipStatus.APPROVED;
     }
 
     @PrePersist

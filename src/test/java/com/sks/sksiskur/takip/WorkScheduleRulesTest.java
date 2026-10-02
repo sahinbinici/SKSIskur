@@ -61,7 +61,7 @@ class WorkScheduleRulesTest {
     }
 
     @Test
-    void puantajOnlyAllowedInCurrentIsoWeek() {
+    void isoWeekMondayGrouping() {
         LocalDate wednesday = LocalDate.of(2026, 9, 2);
         assertTrue(WorkScheduleRules.isInCurrentWeek(LocalDate.of(2026, 8, 31), wednesday));
         assertTrue(WorkScheduleRules.isInCurrentWeek(LocalDate.of(2026, 9, 6), wednesday));

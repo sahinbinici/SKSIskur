@@ -56,7 +56,7 @@ export function UnitStudentsPage() {
     <Shell home="/birim">
       <h3 className="section">Birim öğrenci listesi</h3>
       <p style={{ color: "var(--muted)", marginTop: -8, marginBottom: 18 }}>
-        {session?.birimAdi || session?.displayName}. Atanan öğrenciye tıklayarak EK-6 ve puantaj takvimlerini doldurun.
+        {session?.birimAdi || session?.displayName}. Öğrenci satırından aylık EK-6 ve puantajı doldurup tamamladığınızda yöneticiye gönderin.
       </p>
       {error && <div className="alert alert-error">{error}</div>}
 
@@ -113,8 +113,13 @@ export function UnitStudentsPage() {
                 </td>
                 <td>{item.fakulte || item.program || item.bolum || "—"}</td>
                 <td>
-                  <b className={item.kalanIzinGunu === 0 ? "leave-balance exhausted" : "leave-balance"}>{item.kalanIzinGunu} gün kaldı</b>
-                  <div style={{ color: "var(--muted)", fontSize: 12 }}>{item.kullanilanIzinGunu}/{item.izinGunLimiti} gün kullanıldı</div>
+                  <b className={item.kalanIzinGunu === 0 ? "leave-balance exhausted" : "leave-balance"}>
+                    {item.kalanIzinGunu === 0 ? "İzin hakkı bitti" : `${item.kalanIzinGunu} gün kaldı`}
+                  </b>
+                  <div style={{ color: "var(--muted)", fontSize: 12 }}>
+                    {item.kullanilanIzinGunu}/{item.izinGunLimiti} gün kullanıldı
+                    {item.kalanIzinGunu === 0 ? " · yeni izin girilemez" : ""}
+                  </div>
                 </td>
                 <td>
                   <div>{item.eposta || "—"}</div>

@@ -57,16 +57,16 @@ public class KampusResolver {
     public String buildImzaMesaji(Student student) {
         if (resolve(student) == KampusTuru.MERKEZ) {
             return "Sayın " + student.getAdSoyad()
-                    + ", İŞKUR kesin kayıt listesine alındınız. Birim dağıtımı öncesinde SKS Daire Başkanlığı'na gelerek imza atmanız gerekmektedir.";
+                    + ", İŞKUR nihai listesine alındınız. Birim ataması için SKS Daire Başkanlığı'na gelerek sözleşme imzalamanız gerekmektedir.";
         }
         String birimAdi = resolveTasraBirimAdi(student);
         return "Sayın " + student.getAdSoyad()
-                + ", İŞKUR kesin kayıt listesine alındınız. Birim dağıtımı öncesinde bulunduğunuz "
-                + birimAdi + " birimine gelerek imza atmanız gerekmektedir.";
+                + ", İŞKUR nihai listesine alındınız. Birim ataması için bulunduğunuz "
+                + birimAdi + " birimine gelerek sözleşme imzalamanız gerekmektedir.";
     }
 
     public String buildEmailSubject() {
-        return "İŞKUR Kesin Kayıt – İmza Bildirimi";
+        return "İŞKUR Nihai Liste – Sözleşme İmza Daveti";
     }
 
     private String join(String... values) {

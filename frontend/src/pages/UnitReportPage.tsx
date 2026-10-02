@@ -8,7 +8,7 @@ export const MONTHS = [
   "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
   "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
 ];
-const WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
+const WEEKDAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 
 type Kind = "ekuant" | "puantaj";
 
@@ -49,10 +49,6 @@ function formatSaat(value: number) {
   return value.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
-function formatGun(value: Date) {
-  return value.toLocaleDateString("tr-TR");
-}
-
 export function UnitReportPage() {
   const { session } = useAuth();
   const [yearOptions] = useState(() => {
@@ -82,6 +78,7 @@ export function UnitReportPage() {
   const daysInMonth = new Date(yil, ay, 0).getDate();
 
   function printReport() {
+    if (!data?.yazdirilabilir) return;
     const title = kind === "ekuant" ? "EK-6" : "Puantaj";
     const previous = document.title;
     document.title = `${title} ${MONTHS[ay - 1]} ${yil} - ${birimAdi}`;
@@ -95,7 +92,7 @@ export function UnitReportPage() {
         <div>
           <h3 className="section" style={{ margin: 0 }}>Aylık EK-6 / puantaj raporu</h3>
           <p style={{ color: "var(--muted)", margin: "6px 0 0" }}>
-            Cetvel, yazdırıldığında ekteki resmi forma uygun A3 yatay sayfada çıkar.
+            SKS yöneticisi ayı onayladıktan sonra cetvelleri yazdırıp imzalayabilirsiniz.
           </p>
         </div>
         <div className="toolbar" style={{ margin: 0 }}>
@@ -117,9 +114,26 @@ export function UnitReportPage() {
               Puantaj
             </button>
           </div>
-          <button className="btn btn-gold" onClick={printReport} disabled={loading || !data}>Yazdır / PDF</button>
+          <button className="btn btn-gold" onClick={printReport} disabled={loading || !data?.yazdirilabilir}>
+            Yazdır / PDF
+          </button>
         </div>
       </div>
+      {data && !data.yazdirilabilir && (
+        <div className="alert alert-wait no-print">
+          {data.onayBekleyenOgrenci > 0
+            ? `${data.onayBekleyenOgrenci} öğrencinin kaydı yönetici onayı bekliyor.`
+            : data.gonderilmeyenOgrenci > 0
+              ? `${data.gonderilmeyenOgrenci} öğrencinin ayı henüz gönderilmedi.`
+              : "Bu ay için yazdırma henüz açılmadı."}
+          Önizleme aşağıda görünür; yazdırma tüm öğrenciler onaylandığında açılır.
+        </div>
+      )}
+      {data?.yazdirilabilir && (
+        <div className="alert alert-ok no-print">
+          {MONTHS[ay - 1]} {yil} cetvelleri onaylandı. Yazdırıp birim imzası için hazırlayabilirsiniz.
+        </div>
+      )}
       {error && <div className="alert alert-error no-print">{error}</div>}
       {loading && <div className="alert alert-wait no-print">Rapor hazırlanıyor...</div>}
       {data && kind === "ekuant" && (
@@ -174,7 +188,6 @@ export function EkuantSheet({
         <thead>
           <tr>
             <th rowSpan={2}>SIRA</th>
-            <th rowSpan={2}>ÖĞRENCİ NO</th>
             <th rowSpan={2}>TC</th>
             <th rowSpan={2}>AD SOYAD</th>
             {groups.map((group) => (
@@ -200,7 +213,6 @@ export function EkuantSheet({
             return (
               <tr key={row.basvuruId}>
                 <td>{row.siraNo}</td>
-                <td>{row.ogrenciNo}</td>
                 <td>{row.tcKimlikNo || ""}</td>
                 <td className="name">{upper(`${row.ad} ${row.soyad}`)}</td>
                 {groups.flatMap((group, gi) =>
@@ -217,12 +229,11 @@ export function EkuantSheet({
           })}
           {ogrenciler.length === 0 && (
             <tr>
-              <td colSpan={4 + weeks.length * 7}>Bu birime atanmış öğrenci yok.</td>
+              <td colSpan={3 + weeks.length * 7}>Bu birime atanmış öğrenci yok.</td>
             </tr>
           )}
         </tbody>
       </table>
-      <SignatureBlock />
     </article>
   );
 }
@@ -300,29 +311,6 @@ export function PuantajSheet({
           )}
         </tbody>
       </table>
-      <SignatureBlock />
     </article>
-  );
-}
-
-function SignatureBlock() {
-  const today = formatGun(new Date());
-  return (
-    <div className="report-sign">
-      <div>
-        <b>HAZIRLAYAN</b>
-        <span>Ad Soyad: ____________________________</span>
-        <span>Ünvan: ____________________________</span>
-        <span>Tarih: {today}</span>
-        <span>İmza</span>
-      </div>
-      <div>
-        <b>ONAYLAYAN</b>
-        <span>Ad Soyad: ____________________________</span>
-        <span>Ünvan: ____________________________</span>
-        <span>Tarih: ____________________________</span>
-        <span>İmza</span>
-      </div>
-    </div>
   );
 }

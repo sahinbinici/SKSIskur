@@ -38,7 +38,7 @@ export function LoginPortalHero() {
       <h2>İŞKUR Gençlik Programı Başvuru Portalı</h2>
       <p>
         Öğrenciler evraklarını yükleyip başvurularını gönderir. SKS yöneticileri başvuruları inceler,
-        kesin kayıt listesini karşılaştırır ve birimlere dağıtır. Birim kullanıcıları atanan öğrencilerin
+        İŞKUR nihai listesini yükler, sözleşme imzalarını alır ve birimlere dağıtır. Birim kullanıcıları atanan öğrencilerin
         EK-6 ve puantaj takibini yapar.
       </p>
       <a

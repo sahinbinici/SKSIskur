@@ -45,19 +45,18 @@ export function AdminPendingTasks() {
         link: "/admin"
       });
     }
-    const kayitBekleyen = kayit?.kesinKarsilastirmaBekleyen ?? ozet?.kayitBekleyen ?? 0;
-    if (kayitBekleyen > 0) {
+    if ((ozet?.onaylandi ?? 0) > 0 && !kayit?.kesinListeYuklendi) {
       pending.push({
-        title: "Kesin liste karşılaştırması",
-        detail: "İŞKUR listesi ile eşleştirme bekliyor",
-        count: kayitBekleyen,
+        title: "İŞKUR nihai listesi",
+        detail: "Onaylı başvuruları gönderin, dönen listeyi yükleyin",
+        count: ozet?.onaylandi ?? 0,
         link: "/admin/kayit"
       });
     }
     if (kayit?.kesinOnaylandi && !kayit.imzaBildirimiGonderildi) {
       pending.push({
-        title: "İmza bildirimi",
-        detail: "Dağıtımdan önce gönderilmeli",
+        title: "Sözleşme daveti",
+        detail: "Nihai listedekilere imza e-postası gönderilmeli",
         count: kayit.kesinListede ?? 0,
         link: "/admin/kayit"
       });
@@ -66,7 +65,7 @@ export function AdminPendingTasks() {
     if (kayit?.imzaBildirimiGonderildi && atanmamis > 0) {
       pending.push({
         title: "Birim ataması",
-        detail: "Kesin kayıtlı öğrenci birime atanmayı bekliyor",
+        detail: "Sözleşme imzalayan öğrenci birime atanmayı bekliyor",
         count: atanmamis,
         link: "/admin/dagitim"
       });
@@ -77,14 +76,6 @@ export function AdminPendingTasks() {
         detail: "Kontenjan yetersizliği",
         count: dagitim?.atanamayan ?? 0,
         link: "/admin/dagitim"
-      });
-    }
-    if ((kayit?.listedeBasvuruEslesmedi ?? 0) > 0) {
-      pending.push({
-        title: "Listede eşleşmeyen kayıt",
-        detail: "İŞKUR listesinde olup başvuru bulunamadı",
-        count: kayit?.listedeBasvuruEslesmedi ?? 0,
-        link: "/admin/kayit"
       });
     }
     return pending;

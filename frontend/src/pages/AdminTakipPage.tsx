@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, ApiError, downloadAuthenticatedFile } from "../api";
 import { FilterChips } from "../components/FilterChips";
 import { ActionCard, PageHeader } from "../components/PageHeader";
-import { Shell } from "../components/ui";
+import { OgrenciKimlikMeta, Shell } from "../components/ui";
 import { EkuantSheet, MONTHS, PuantajSheet, calendarWeeks } from "./UnitReportPage";
 import type { AdminTakipOzet, BasvuruDonemi, BirimAylikRapor, IzinRaporOgrenci, WorkUnit } from "../types";
 
@@ -111,8 +111,52 @@ export function AdminTakipPage() {
     ).catch((err) => setError(err instanceof ApiError ? err.message : "Liste indirilemedi."));
   }
 
+  async function approveStudent(basvuruId: number) {
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.adminTakipOnayla(basvuruId, yil, ay, periodId);
+      setMessage("Öğrenci kaydı onaylandı.");
+      const next = await api.adminTakip(yil, ay, birimKodu || undefined, periodId);
+      setOzet(next);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Onay verilemedi.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function approveSubmittedInUnit() {
+    if (!birimKodu) {
+      setError("Toplu onay için bir birim seçin.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const count = await api.adminTakipOnaylaGonderilenler(yil, ay, birimKodu, periodId);
+      setMessage(`${count} öğrencinin kaydı onaylandı.`);
+      const next = await api.adminTakip(yil, ay, birimKodu, periodId);
+      setOzet(next);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Toplu onay verilemedi.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function takipDurumLabel(row: AdminTakipOzet["ogrenciler"][number]) {
+    if (row.status === "APPROVED") return "Onaylandı";
+    if (row.status === "SUBMITTED") return "Onay bekliyor";
+    if (row.status === "DRAFT") return "Taslak";
+    return "—";
+  }
+
   function downloadIskurPaketi() {
-    const filename = `onayli_ogrenciler_${yil}-${String(ay).padStart(2, "0")}.xlsx`;
+    const scope = birimKodu || "tum-birimler";
+    const filename = `iskur-odeme_${scope}_${yil}-${String(ay).padStart(2, "0")}.xlsm`;
     void downloadAuthenticatedFile(
       api.adminIskurPaketiExcelUrl(yil, ay, birimKodu || undefined, periodId),
       filename
@@ -188,13 +232,14 @@ export function AdminTakipPage() {
 
       {pageTab === "paket" && (
         <ActionCard
-          title="İŞKUR aylık paketi"
-          description="Katılımcı listesi, devamsızlık formu, banka listesi ve EK-6 çizelgesini içeren resmi Excel dosyası oluşturulur."
+          title="İŞKUR ödeme dosyası"
+          description="Onaylanan aylık puantajlara göre katılımcı listesi, devamsızlık formu ve devam gün çizelgesi doldurulur. Birim seçerseniz o birim, seçmezseniz tüm birimler yazılır. Bordro ve diğer sayfalar şimdilik boş bırakılır."
           meta={(
             <>
               <span className="meta-chip">{periodLabel}</span>
               <span className="meta-chip">{MONTHS[ay - 1]} {yil}</span>
               <span className="meta-chip">{birimLabel}</span>
+              <span className="meta-chip">{ozet?.ogrenciler.filter((row) => row.status === "APPROVED").length ?? 0} onaylı</span>
               <span className="meta-chip">{ogrenciSayisi} öğrenci</span>
             </>
           )}
@@ -204,12 +249,26 @@ export function AdminTakipPage() {
             disabled={!selectedPeriod || loading}
             onClick={downloadIskurPaketi}
           >
-            İŞKUR paketi indir (Excel)
+            {birimKodu ? "Birim ödeme dosyasını indir" : "Tüm birimler ödeme dosyasını indir"}
           </button>
         </ActionCard>
       )}
 
       {pageTab === "ozet" && ozet && (
+        <>
+          <div className="secondary-actions no-print" style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              className="btn btn-gold"
+              disabled={loading || !birimKodu || !ozet.ogrenciler.some((row) => row.status === "SUBMITTED")}
+              onClick={() => void approveSubmittedInUnit()}
+            >
+              Birimdeki gönderilenleri onayla
+            </button>
+            <span style={{ color: "var(--muted)", fontSize: 13 }}>
+              Birim, ayı gönderdikten sonra EK-6 ve puantaj cetvellerini yazdırabilsin diye onay verin.
+            </span>
+          </div>
         <div className="card" style={{ overflow: "auto" }}>
           <table>
             <thead>
@@ -230,7 +289,7 @@ export function AdminTakipPage() {
                 <tr key={row.basvuruId}>
                   <td>
                     <b>{row.adSoyad}</b>
-                    <div style={{ color: "var(--muted)" }}>{row.ogrenciNo}</div>
+                    <OgrenciKimlikMeta ogrenciNo={row.ogrenciNo} tcKimlikNo={row.tcKimlikNo} />
                   </td>
                   <td>{row.birimAdi || "—"}</td>
                   <td>{row.ekuant}</td>
@@ -238,8 +297,15 @@ export function AdminTakipPage() {
                   <td>{row.gelmedi}</td>
                   <td>{row.izinli}</td>
                   <td>{row.raporlu}</td>
-                  <td>{row.locked ? "Gönderildi" : row.status === "DRAFT" ? "Taslak" : "—"}</td>
-                  <td><button className="btn btn-secondary btn-compact" onClick={() => navigate(`/admin/takip/${row.basvuruId}?yil=${yil}&ay=${ay}${periodId ? `&donemId=${periodId}` : ""}`)}>İncele</button></td>
+                  <td>{takipDurumLabel(row)}</td>
+                  <td className="no-wrap">
+                    <button className="btn btn-secondary btn-compact" onClick={() => navigate(`/admin/takip/${row.basvuruId}?yil=${yil}&ay=${ay}${periodId ? `&donemId=${periodId}` : ""}`)}>İncele</button>
+                    {row.status === "SUBMITTED" && (
+                      <button className="btn btn-gold btn-compact" style={{ marginLeft: 6 }} disabled={loading} onClick={() => void approveStudent(row.basvuruId)}>
+                        Onayla
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
               {ozet.ogrenciler.length === 0 && (
@@ -252,6 +318,7 @@ export function AdminTakipPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {pageTab === "ayarlar" && (
@@ -323,7 +390,7 @@ export function AdminTakipPage() {
                     <thead><tr><th>Öğrenci</th><th>Birim</th><th>Tarih</th><th>Durum</th><th>Belge</th></tr></thead>
                     <tbody>{izinRaporlular.map((row) => (
                       <tr key={`${row.basvuruId}-${row.tarih}-${row.durum}`}>
-                        <td><b>{row.adSoyad}</b><div style={{ color: "var(--muted)" }}>{row.ogrenciNo}</div></td>
+                        <td><b>{row.adSoyad}</b><OgrenciKimlikMeta ogrenciNo={row.ogrenciNo} tcKimlikNo={row.tcKimlikNo} /></td>
                         <td>{row.birimAdi || "—"}</td>
                         <td>{row.tarih}</td>
                         <td>{row.durum === "IZINLI" ? "İzinli" : "Raporlu"}</td>

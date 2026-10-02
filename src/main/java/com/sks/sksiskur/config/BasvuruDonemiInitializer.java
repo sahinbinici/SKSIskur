@@ -4,13 +4,13 @@ import com.sks.sksiskur.domain.BasvuruDonemi;
 import com.sks.sksiskur.repository.BasvuruDonemiRepository;
 import com.sks.sksiskur.repository.BasvuruRepository;
 import com.sks.sksiskur.repository.KayitListesiRepository;
+import com.sks.sksiskur.service.BasvuruDalgaService;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Year;
-
 @Component
 @Order(10)
 public class BasvuruDonemiInitializer implements CommandLineRunner {
@@ -18,15 +18,18 @@ public class BasvuruDonemiInitializer implements CommandLineRunner {
     private final BasvuruDonemiRepository donemRepository;
     private final BasvuruRepository basvuruRepository;
     private final KayitListesiRepository kayitListesiRepository;
+    private final BasvuruDalgaService basvuruDalgaService;
 
     public BasvuruDonemiInitializer(
             BasvuruDonemiRepository donemRepository,
             BasvuruRepository basvuruRepository,
-            KayitListesiRepository kayitListesiRepository
+            KayitListesiRepository kayitListesiRepository,
+            BasvuruDalgaService basvuruDalgaService
     ) {
         this.donemRepository = donemRepository;
         this.basvuruRepository = basvuruRepository;
         this.kayitListesiRepository = kayitListesiRepository;
+        this.basvuruDalgaService = basvuruDalgaService;
     }
 
     @Override
@@ -48,6 +51,21 @@ public class BasvuruDonemiInitializer implements CommandLineRunner {
             kayitListesiRepository.findAll().stream()
                     .filter(liste -> liste.getBasvuruDonemi() == null)
                     .forEach(liste -> liste.setBasvuruDonemi(activeDonem));
+        }
+        for (BasvuruDonemi period : donemRepository.findAll()) {
+            basvuruDalgaService.ensureInitialDalga(period);
+            kayitListesiRepository.findByBasvuruDonemiId(period.getId()).ifPresent(liste ->
+                    basvuruDalgaService.migrateKayitListesiIfNeeded(
+                            period,
+                            liste.isKesinOnaylandi(),
+                            liste.isImzaBildirimiGonderildi(),
+                            liste.getOnayTarihi(),
+                            liste.getOnaylayanAdmin(),
+                            liste.getKesinListeYuklemeTarihi(),
+                            liste.getKesinListeYukleyenAdmin(),
+                            liste.getImzaBildirimiGonderimTarihi(),
+                            liste.getImzaBildirimiGonderenAdmin()
+                    ));
         }
     }
 }

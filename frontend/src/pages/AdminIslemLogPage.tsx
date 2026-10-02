@@ -30,6 +30,7 @@ const TUR_LABELS: Record<IslemTuru, string> = {
   EKUANT_KAYDET: "Ekuant kaydı",
   PUANTAJ_KAYDET: "Puantaj kaydı",
   TAKIP_GONDER: "Takip gönderimi",
+  TAKIP_ONAY: "Takip onayı",
   ISKUR_PAKET_INDIR: "İŞKUR paketi indirme"
 };
 

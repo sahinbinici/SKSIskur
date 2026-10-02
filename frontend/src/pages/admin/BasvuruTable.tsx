@@ -137,7 +137,10 @@ export function BasvuruTable({
                 <td>
                   <Link to={`/admin/basvuru/${item.id}`} className="table-row-anchor">
                     <b>{item.student.adSoyad}</b>
-                    <div style={{ color: "var(--muted)" }}>{item.student.ogrenciNo}</div>
+                    <div style={{ color: "var(--muted)", fontSize: 13 }}>
+                      <div>{item.student.ogrenciNo}</div>
+                      <div>T.C. {item.student.tcKimlikNo || "—"}</div>
+                    </div>
                   </Link>
                 </td>
                 <td>{item.student.fakulte || item.student.program || item.student.bolum}</td>

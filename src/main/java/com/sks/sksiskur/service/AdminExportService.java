@@ -261,7 +261,7 @@ public class AdminExportService {
     public byte[] takipOzetExcel(Long donemId, String birimKodu, int yil, int ay) {
         AdminTakipOzetResponse ozet = takipService.adminTakipOzet(donemId, birimKodu, yil, ay);
         List<String> headers = List.of(
-                "Sıra", "Öğrenci No", "Ad Soyad", "Birim Kodu", "Birim",
+                "Sıra", "Öğrenci No", "T.C. Kimlik", "Ad Soyad", "Birim Kodu", "Birim",
                 "EK-6", "Geldi", "Gelmedi", "İzinli", "Raporlu", "Durum", "Gönderildi"
         );
         List<List<Object>> rows = new ArrayList<>();
@@ -270,6 +270,7 @@ public class AdminExportService {
             rows.add(excelRow(
                     i + 1,
                     row.ogrenciNo(),
+                    row.tcKimlikNo(),
                     row.adSoyad(),
                     row.birimKodu(),
                     row.birimAdi(),
@@ -327,10 +328,11 @@ public class AdminExportService {
     @Transactional(readOnly = true)
     public byte[] izinRaporExcel(Long donemId, String birimKodu, int yil, int ay) {
         List<IzinRaporOgrenciResponse> rows = takipService.leaveAndReportStudents(donemId, birimKodu, yil, ay);
-        List<String> headers = List.of("Öğrenci No", "Ad Soyad", "Birim", "Tarih", "Durum", "Belge");
+        List<String> headers = List.of("Öğrenci No", "T.C. Kimlik", "Ad Soyad", "Birim", "Tarih", "Durum", "Belge");
         List<List<Object>> data = rows.stream()
                 .map(row -> excelRow(
                         row.ogrenciNo(),
+                        row.tcKimlikNo(),
                         row.adSoyad(),
                         row.birimAdi(),
                         row.tarih(),
@@ -344,10 +346,11 @@ public class AdminExportService {
     @Transactional(readOnly = true)
     public byte[] iliskisiKesilenlerExcel(Long donemId, String birimKodu) {
         var period = basvuruDonemiService.resolveForAdmin(donemId);
-        List<String> headers = List.of("Öğrenci No", "Ad Soyad", "Birim", "İlişki Kesilme Tarihi", "Başvuru Dönemi");
+        List<String> headers = List.of("Öğrenci No", "T.C. Kimlik", "Ad Soyad", "Birim", "İlişki Kesilme Tarihi", "Başvuru Dönemi");
         List<List<Object>> rows = takipService.terminatedStudents(donemId, birimKodu).stream()
                 .map(row -> excelRow(
                         row.ogrenciNo(),
+                        row.tcKimlikNo(),
                         row.adSoyad(),
                         row.birimAdi(),
                         row.iliskiBitisTarihi(),
@@ -427,6 +430,10 @@ public class AdminExportService {
 
     private static String takipStatusLabel(TakipStatus status) {
         if (status == null) return "—";
-        return status == TakipStatus.SUBMITTED ? "Gönderildi" : "Taslak";
+        return switch (status) {
+            case SUBMITTED -> "Gönderildi";
+            case APPROVED -> "Onaylandı";
+            case DRAFT -> "Taslak";
+        };
     }
 }

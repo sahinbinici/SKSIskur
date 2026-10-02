@@ -170,8 +170,12 @@ public class AuthService {
         student.setProgram(remote.program());
         student.setSinif(remote.sinif());
         student.setDurumu(remote.durumu());
-        student.setEposta(remote.eposta());
-        student.setGsm(remote.gsm());
+        if (isBlank(student.getEposta())) {
+            student.setEposta(remote.eposta());
+        }
+        if (isBlank(student.getGsm())) {
+            student.setGsm(remote.gsm());
+        }
         student.setAdres(remote.adres());
         student.setIl(remote.il());
         student.setIlce(remote.ilce());
@@ -189,6 +193,10 @@ public class AuthService {
 
     private String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private String clientIp(HttpServletRequest request) {

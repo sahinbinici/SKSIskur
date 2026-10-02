@@ -3,11 +3,9 @@ package com.sks.sksiskur.service;
 import com.sks.sksiskur.domain.ApplicationStatus;
 import com.sks.sksiskur.domain.Basvuru;
 import com.sks.sksiskur.domain.BasvuruDonemi;
-import com.sks.sksiskur.domain.KayitListesi;
 import com.sks.sksiskur.domain.KayitTuru;
 import com.sks.sksiskur.exception.ApiException;
 import com.sks.sksiskur.repository.BasvuruRepository;
-import com.sks.sksiskur.repository.KayitListesiRepository;
 import com.sks.sksiskur.sicil.AssignmentPlanner;
 import com.sks.sksiskur.sicil.Faculty;
 import com.sks.sksiskur.sicil.SicilUnitCatalog;
@@ -33,7 +31,7 @@ import java.util.stream.Collectors;
 public class AssignmentService {
 
     private final BasvuruRepository basvuruRepository;
-    private final KayitListesiRepository kayitListesiRepository;
+    private final BasvuruDalgaService basvuruDalgaService;
     private final SicilUnitCatalog sicilUnitCatalog;
     private final DagitimBirimiService dagitimBirimiService;
     private final AssignmentPlanner planner = new AssignmentPlanner();
@@ -42,14 +40,14 @@ public class AssignmentService {
 
     public AssignmentService(
             BasvuruRepository basvuruRepository,
-            KayitListesiRepository kayitListesiRepository,
+            BasvuruDalgaService basvuruDalgaService,
             SicilUnitCatalog sicilUnitCatalog,
             DagitimBirimiService dagitimBirimiService,
             @Value("${app.dagitim.kontenjan:10}") int quota,
             BasvuruDonemiService basvuruDonemiService
     ) {
         this.basvuruRepository = basvuruRepository;
-        this.kayitListesiRepository = kayitListesiRepository;
+        this.basvuruDalgaService = basvuruDalgaService;
         this.sicilUnitCatalog = sicilUnitCatalog;
         this.dagitimBirimiService = dagitimBirimiService;
         this.quota = quota;
@@ -74,7 +72,7 @@ public class AssignmentService {
         BasvuruDonemi donem = basvuruDonemiService.requireActive();
         if (!kesinListeOnayli(donem)) {
             throw new ApiException(HttpStatus.CONFLICT,
-                    "Birim dağıtımı ancak İŞKUR kesin listesi yüklenip karşılaştırma onaylandıktan sonra yapılabilir.");
+                    "Birim dağıtımı ancak İŞKUR nihai listesi yüklendikten ve sözleşme imzaları işlendikten sonra yapılabilir.");
         }
         if (!imzaBildirimiGonderildi(donem)) {
             throw new ApiException(HttpStatus.CONFLICT,
@@ -85,9 +83,18 @@ public class AssignmentService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Dağıtılacak kesin kayıtlı öğrenci yok.");
         }
 
-        List<Basvuru> targets = yenidenDagit
-                ? approved
-                : approved.stream().filter(b -> !b.isAssigned()).toList();
+        List<Basvuru> targets;
+        if (yenidenDagit) {
+            targets = approved.stream()
+                    .filter(b -> b.isSozlesmeImzalandi() || b.isAssigned())
+                    .toList();
+            targets.forEach(Basvuru::clearAssignment);
+        } else {
+            targets = approved.stream()
+                    .filter(b -> !b.isAssigned())
+                    .filter(Basvuru::isSozlesmeImzalandi)
+                    .toList();
+        }
         if (targets.isEmpty()) {
             return toResponse(approved, Instant.now(), donem);
         }
@@ -97,10 +104,6 @@ public class AssignmentService {
         List<Faculty> faculties = sicilUnitCatalog.faculties();
         if (units.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "Birim listesi boş geldi. Sicil bağlantısını kontrol edin.");
-        }
-
-        if (yenidenDagit) {
-            targets.forEach(Basvuru::clearAssignment);
         }
 
         List<AssignmentPlanner.Candidate> candidates = targets.stream()
@@ -142,6 +145,9 @@ public class AssignmentService {
                 .filter(unit -> unit.unit().kod().equals(birimKodu.trim()))
                 .findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Hedef birim dağıtıma açık değil."));
+        if (!basvuru.isSozlesmeImzalandi()) {
+            throw new ApiException(HttpStatus.CONFLICT, "Manuel atama için önce sözleşme imzası işlenmelidir.");
+        }
         if (target.unit().kod().equals(basvuru.getAtananBirimKodu())) {
             return toResponse(kesinOgrenciler(donem), Instant.now(), donem);
         }
@@ -162,19 +168,18 @@ public class AssignmentService {
 
     private List<Basvuru> kesinOgrenciler(BasvuruDonemi donem) {
         return basvuruRepository.findByStatusAndKayitTuruAndBasvuruDonemiIdOrderByStudentSoyadAscStudentAdAsc(
-                ApplicationStatus.APPROVED, KayitTuru.KESIN, donem.getId());
+                        ApplicationStatus.APPROVED, KayitTuru.KESIN, donem.getId())
+                .stream()
+                .filter(b -> !b.isSozlesmeImzaPasif())
+                .toList();
     }
 
     private boolean kesinListeOnayli(BasvuruDonemi donem) {
-        return kayitListesiRepository.findByBasvuruDonemiId(donem.getId())
-                .map(KayitListesi::isKesinOnaylandi)
-                .orElse(false);
+        return basvuruDalgaService.requireAktifDalga(donem).isKesinOnaylandi();
     }
 
     private boolean imzaBildirimiGonderildi(BasvuruDonemi donem) {
-        return kayitListesiRepository.findByBasvuruDonemiId(donem.getId())
-                .map(KayitListesi::isImzaBildirimiGonderildi)
-                .orElse(false);
+        return basvuruDalgaService.requireAktifDalga(donem).isImzaBildirimiGonderildi();
     }
 
     private DagitimSonucResponse toResponse(List<Basvuru> approved, Instant atamaTarihi, BasvuruDonemi donem) {
@@ -199,6 +204,7 @@ public class AssignmentService {
             DagitimSonucResponse.AtamaSatir row = new DagitimSonucResponse.AtamaSatir(
                     basvuru.getId(),
                     basvuru.getStudent().getOgrenciNo(),
+                    basvuru.getStudent().getTcKimlikNo(),
                     basvuru.getStudent().getAdSoyad(),
                     basvuru.getStudent().getFakulte(),
                     basvuru.getAtamaTuru(),

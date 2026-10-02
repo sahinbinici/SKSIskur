@@ -149,3 +149,18 @@ export function maskTc(value?: string | null) {
   if (!value || value.length < 5) return value || "—";
   return `${value.slice(0, 3)}*****${value.slice(-3)}`;
 }
+
+export function OgrenciKimlikMeta({
+  ogrenciNo,
+  tcKimlikNo
+}: {
+  ogrenciNo: string;
+  tcKimlikNo?: string | null;
+}) {
+  return (
+    <div style={{ color: "var(--muted)", fontSize: 13 }}>
+      <div>{ogrenciNo}</div>
+      <div>T.C. {tcKimlikNo || "—"}</div>
+    </div>
+  );
+}

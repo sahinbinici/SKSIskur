@@ -13,6 +13,7 @@ import com.sks.sksiskur.service.AdminUserService;
 import com.sks.sksiskur.service.AssignmentService;
 import com.sks.sksiskur.service.BirimDuyuruService;
 import com.sks.sksiskur.service.BirimKullaniciService;
+import com.sks.sksiskur.service.BasvuruDalgaService;
 import com.sks.sksiskur.service.BasvuruDonemiService;
 import com.sks.sksiskur.service.DocumentDownload;
 import com.sks.sksiskur.service.TakipService;
@@ -43,6 +44,8 @@ import com.sks.sksiskur.web.dto.BirimKullaniciUpdateRequest;
 import com.sks.sksiskur.web.dto.AdminTakipOzetResponse;
 import com.sks.sksiskur.web.dto.BasvuruResponse;
 import com.sks.sksiskur.web.dto.BelgeYuklemeFiltre;
+import com.sks.sksiskur.web.dto.BasvuruDalgaCreateRequest;
+import com.sks.sksiskur.web.dto.BasvuruDalgaResponse;
 import com.sks.sksiskur.web.dto.BasvuruDonemiCreateRequest;
 import com.sks.sksiskur.web.dto.BasvuruDonemiResponse;
 import com.sks.sksiskur.web.dto.BirimAylikRaporResponse;
@@ -51,6 +54,8 @@ import com.sks.sksiskur.web.dto.DagitimSonucResponse;
 import com.sks.sksiskur.web.dto.KayitListesiResponse;
 import com.sks.sksiskur.web.dto.KayitListeFiltre;
 import com.sks.sksiskur.web.dto.KesinListeUploadResponse;
+import com.sks.sksiskur.web.dto.SozlesmeImzaBekleyenResponse;
+import com.sks.sksiskur.web.dto.SozlesmeImzaPasifTopluRequest;
 import com.sks.sksiskur.web.dto.IzinRaporOgrenciResponse;
 import com.sks.sksiskur.web.dto.IadeRequest;
 import com.sks.sksiskur.web.dto.ReviewRequest;
@@ -98,6 +103,7 @@ public class AdminController {
     private final TakipService takipService;
     private final BirimKullaniciService birimKullaniciService;
     private final BasvuruDonemiService basvuruDonemiService;
+    private final BasvuruDalgaService basvuruDalgaService;
     private final AdminUserService adminUserService;
     private final AdminAssignmentService adminAssignmentService;
     private final SozlesmeService sozlesmeService;
@@ -118,6 +124,7 @@ public class AdminController {
             TakipService takipService,
             BirimKullaniciService birimKullaniciService,
             BasvuruDonemiService basvuruDonemiService,
+            BasvuruDalgaService basvuruDalgaService,
             AdminUserService adminUserService,
             AdminAssignmentService adminAssignmentService,
             SozlesmeService sozlesmeService,
@@ -137,6 +144,7 @@ public class AdminController {
         this.takipService = takipService;
         this.birimKullaniciService = birimKullaniciService;
         this.basvuruDonemiService = basvuruDonemiService;
+        this.basvuruDalgaService = basvuruDalgaService;
         this.adminUserService = adminUserService;
         this.adminAssignmentService = adminAssignmentService;
         this.sozlesmeService = sozlesmeService;
@@ -184,6 +192,28 @@ public class AdminController {
     @PutMapping("/basvuru-donemleri/{id}/gelir-limiti")
     public BasvuruDonemiResponse updateIncomeLimit(@PathVariable Long id, @RequestParam BigDecimal limit) {
         return basvuruDonemiService.updateIncomeLimit(id, limit);
+    }
+
+    @GetMapping("/basvuru-donemleri/{id}/dalgalar")
+    public List<BasvuruDalgaResponse> basvuruDalgalar(@PathVariable Long id) {
+        return basvuruDalgaService.list(id);
+    }
+
+    @PostMapping("/basvuru-donemleri/{id}/dalgalar/yeni-tur")
+    public BasvuruDalgaResponse yeniBasvuruTuru(
+            @PathVariable Long id,
+            @Valid @RequestBody BasvuruDalgaCreateRequest request,
+            Authentication authentication
+    ) {
+        return basvuruDalgaService.createNext(id, request, username(authentication));
+    }
+
+    @PostMapping("/basvuru-donemleri/dalgalar/{dalgaId}/tamamla")
+    public BasvuruDalgaResponse tamamlaBasvuruTuru(
+            @PathVariable Long dalgaId,
+            Authentication authentication
+    ) {
+        return basvuruDalgaService.tamamla(dalgaId, username(authentication));
     }
 
     @GetMapping("/basvuru-donemleri/{id}/iskur-listesi")
@@ -380,6 +410,25 @@ public class AdminController {
     @PostMapping("/kayit-listesi/imza-bildirimi-gonder")
     public ImzaBildirimiGonderResponse gonderImzaBildirimi(Authentication authentication) {
         return imzaBildirimiService.gonder(username(authentication));
+    }
+
+    @GetMapping("/kayit-listesi/sozlesme-imza-bekleyen")
+    public List<SozlesmeImzaBekleyenResponse> sozlesmeImzaBekleyen(@RequestParam(required = false) Long donemId) {
+        Long resolved = donemId != null ? donemId : basvuruDonemiService.requireActive().getId();
+        return imzaBildirimiService.listSozlesmeImzaBekleyen(resolved);
+    }
+
+    @PostMapping("/kayit-listesi/sozlesme-imza/{basvuruId}/imzalandi")
+    public void sozlesmeImzalandi(@PathVariable Long basvuruId, Authentication authentication) {
+        imzaBildirimiService.markSozlesmeImzalandi(basvuruId, username(authentication));
+    }
+
+    @PostMapping("/kayit-listesi/sozlesme-imza/pasif")
+    public int sozlesmeImzaPasif(
+            @Valid @RequestBody SozlesmeImzaPasifTopluRequest request,
+            Authentication authentication
+    ) {
+        return imzaBildirimiService.markSozlesmeImzaPasif(request.basvuruIds(), username(authentication));
     }
 
     @GetMapping("/birimler")
@@ -625,8 +674,10 @@ public class AdminController {
             @RequestParam(required = false) Long donemId
     ) {
         YearMonth month = resolveMonth(yil, ay);
+        String scope = (birimKodu == null || birimKodu.isBlank()) ? "tum-birimler" : birimKodu;
         String filename = String.format(
-                "onayli_ogrenciler_%d-%02d.xlsx",
+                "iskur-odeme_%s_%d-%02d.xlsm",
+                scope,
                 month.getYear(),
                 month.getMonthValue()
         );
@@ -703,6 +754,35 @@ public class AdminController {
     ) {
         return excelAttachment(adminExportService.iliskisiKesilenlerExcel(donemId, birimKodu),
                 "iliskisi-kesilen-ogrenciler.xlsx");
+    }
+
+    @PostMapping("/takip/ogrenciler/{basvuruId}/onayla")
+    public TakipDonemResponse takipOnayla(
+            @PathVariable Long basvuruId,
+            @RequestParam int yil,
+            @RequestParam int ay,
+            @RequestParam(required = false) Long donemId,
+            Authentication authentication
+    ) {
+        TakipDonemResponse saved = takipService.adminApprove(donemId, basvuruId, yil, ay);
+        auditLogService.logAdmin(authentication, IslemTuru.TAKIP_ONAY, "BASVURU", basvuruId,
+                "Aylık takip onaylandı: " + yil + "-" + String.format("%02d", ay), null);
+        return saved;
+    }
+
+    @PostMapping("/takip/onayla-gonderilenler")
+    public int takipOnaylaGonderilenler(
+            @RequestParam int yil,
+            @RequestParam int ay,
+            @RequestParam String birimKodu,
+            @RequestParam(required = false) Long donemId,
+            Authentication authentication
+    ) {
+        int count = takipService.adminApproveSubmitted(donemId, birimKodu, yil, ay);
+        auditLogService.logAdmin(authentication, IslemTuru.TAKIP_ONAY, "BIRIM", null,
+                "Toplu takip onayı: " + birimKodu + " " + yil + "-" + String.format("%02d", ay),
+                count + " öğrenci");
+        return count;
     }
 
     @GetMapping("/takip/ogrenciler/{basvuruId}")

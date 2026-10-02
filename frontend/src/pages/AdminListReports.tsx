@@ -136,7 +136,7 @@ export function KayitListSheets({ data }: { data: KayitListesi }) {
   const kesinDegil = data.ogrenciler.filter((row) => row.kesinListede === false);
   const durum = data.kesinOnaylandi
     ? `Onaylandı${data.onaylayanAdmin ? ` (${data.onaylayanAdmin})` : ""}${data.onayTarihi ? ` · ${dateLabel(data.onayTarihi)}` : ""}`
-    : "TASLAK — karşılaştırma henüz onaylanmadı";
+    : "TASLAK — İŞKUR nihai listesi henüz yüklenmedi";
 
   return (
     <>
@@ -147,17 +147,17 @@ export function KayitListSheets({ data }: { data: KayitListesi }) {
           <p>İŞKUR GENÇLİK PROGRAMI KESİN LİSTE</p>
           <p className="report-note">{durum} · {kesin.length} öğrenci · {todayLabel()}</p>
         </header>
-        <KayitTable rows={kesin} emptyText="Kesin listede öğrenci yok." />
+        <KayitTable rows={kesin} emptyText="İŞKUR nihai listesinde öğrenci yok." />
         <ListSignature onaylayan={data.onaylayanAdmin} />
       </article>
       <article className="report-sheet print-only report-break">
         <header className="report-head">
           <h1>T.C. GAZİANTEP ÜNİVERSİTESİ</h1>
           <h2>SAĞLIK KÜLTÜR VE SPOR DAİRE BAŞKANLIĞI</h2>
-          <p>İŞKUR GENÇLİK PROGRAMI — KESİN LİSTEDE OLMAYAN ONAYLI BAŞVURULAR</p>
+          <p>İŞKUR GENÇLİK PROGRAMI — NİHAİ LİSTEDE OLMAYAN ONAYLI BAŞVURULAR</p>
           <p className="report-note">{durum} · {kesinDegil.length} öğrenci · {todayLabel()}</p>
         </header>
-        <KayitTable rows={kesinDegil} emptyText="Kesin listede olmayan onaylı başvuru yok." />
+        <KayitTable rows={kesinDegil} emptyText="Nihai listede olmayan onaylı başvuru yok." />
         <ListSignature onaylayan={data.onaylayanAdmin} />
       </article>
     </>

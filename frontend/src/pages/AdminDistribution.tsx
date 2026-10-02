@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api";
 import { useConfirm } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
-import { Shell, formatDate } from "../components/ui";
+import { OgrenciKimlikMeta, Shell, formatDate } from "../components/ui";
 import type { DagitimBirim, DagitimBirimi, DagitimSonuc } from "../types";
 
 export function AdminDistribution() {
@@ -70,17 +70,22 @@ export function AdminDistribution() {
     <Shell home="/admin">
       <PageHeader
         title="Birim dağıtımı"
-        description="Kesin kayıtlı öğrenciler önce kendi fakülte/MYO birimine yerleştirilir; kontenjan dolarsa kalanlar diğer açık birimlere atanır."
+        description="Sözleşme imzalayan öğrenciler önce kendi fakülte/MYO birimine yerleştirilir; kontenjan dolarsa kalanlar diğer açık birimlere atanır."
       />      {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
       {data && !data.kesinListeOnaylandi && (
         <div className="alert alert-wait">
-          Kesin liste karşılaştırması henüz onaylanmadı. Dağıtım, kesin kayıt ekranından onaylandıktan sonra açılır.
+          Önce kesin kayıt ekranından İŞKUR nihai listesini yükleyin.
         </div>
       )}
       {data && data.kesinListeOnaylandi && !data.imzaBildirimiGonderildi && (
         <div className="alert alert-wait">
-          Birim dağıtımından önce kesin kayıt ekranından öğrencilere imza bildirimi gönderilmelidir.
+          Dağıtımdan önce nihai listedekilere sözleşme imza daveti gönderilmelidir.
+        </div>
+      )}
+      {data?.imzaBildirimiGonderildi && (
+        <div className="alert alert-wait">
+          Dağıtıma yalnızca &quot;İmza geldi&quot; ile işaretlenen öğrenciler alınır.
         </div>
       )}
       <div className="grid-5" style={{ marginBottom: 18 }}>
@@ -141,7 +146,8 @@ export function AdminDistribution() {
             <div key={row.basvuruId} className="doc-item" onClick={() => navigate(`/admin/basvuru/${row.basvuruId}`)} style={{ cursor: "pointer" }}>
               <div>
                 <b>{row.adSoyad}</b>
-                <div style={{ color: "var(--muted)", fontSize: 13 }}>{row.ogrenciNo} · {row.fakulte}</div>
+                <OgrenciKimlikMeta ogrenciNo={row.ogrenciNo} tcKimlikNo={row.tcKimlikNo} />
+                <div style={{ color: "var(--muted)", fontSize: 13 }}>{row.fakulte}</div>
               </div>
             </div>
           ))}
@@ -173,7 +179,7 @@ function UnitStudents({ birim, units, busy, onMove, onOpen }: { birim: DagitimBi
             <tr key={row.basvuruId}>
               <td>
                 <b>{row.adSoyad}</b>
-                <div style={{ color: "var(--muted)" }}>{row.ogrenciNo}</div>
+                <OgrenciKimlikMeta ogrenciNo={row.ogrenciNo} tcKimlikNo={row.tcKimlikNo} />
               </td>
               <td>{row.fakulte || "—"}</td>
               <td>{row.atamaTuru === "FAKULTE" ? "Fakülte öncelikli" : row.atamaTuru === "MANUEL" ? "Manuel" : "Rastgele"}</td>
