@@ -40,6 +40,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -67,6 +68,7 @@ public class TakipService {
     private final int daysPerWeek;
     private final BigDecimal gunlukSaat;
     private final BasvuruDonemiService basvuruDonemiService;
+    private final String relaxedBirimKodlari;
 
     public TakipService(
             BasvuruRepository basvuruRepository,
@@ -75,7 +77,8 @@ public class TakipService {
             FileStorageService fileStorageService,
             @Value("${app.takip.haftalik-gun:3}") int daysPerWeek,
             @Value("${app.takip.gunluk-saat:7.5}") BigDecimal gunlukSaat,
-            BasvuruDonemiService basvuruDonemiService
+            BasvuruDonemiService basvuruDonemiService,
+            @Value("${app.takip.relaxed-birim-kodlari:}") String relaxedBirimKodlari
     ) {
         this.basvuruRepository = basvuruRepository;
         this.takipDonemRepository = takipDonemRepository;
@@ -84,6 +87,16 @@ public class TakipService {
         this.daysPerWeek = daysPerWeek;
         this.gunlukSaat = gunlukSaat;
         this.basvuruDonemiService = basvuruDonemiService;
+        this.relaxedBirimKodlari = relaxedBirimKodlari;
+    }
+
+    private boolean isRelaxedBirim(String birimKodu) {
+        if (birimKodu == null || relaxedBirimKodlari == null || relaxedBirimKodlari.isBlank()) {
+            return false;
+        }
+        return Arrays.stream(relaxedBirimKodlari.split(","))
+                .map(String::trim)
+                .anyMatch(kod -> kod.equals(birimKodu));
     }
 
     @Transactional(readOnly = true)
@@ -93,7 +106,8 @@ public class TakipService {
                 .findByAtananBirimKoduAndStatusAndBasvuruDonemiIdOrderByStudentSoyadAscStudentAdAsc(
                         birimKodu, ApplicationStatus.APPROVED, donem.getId())
                 .stream()
-                .filter(basvuru -> basvuru.isAssigned() && basvuru.canWorkIn(YearMonth.now(ZONE)))
+                .filter(basvuru -> basvuru.isAssigned()
+                        && (isRelaxedBirim(birimKodu) || basvuru.canWorkIn(YearMonth.now(ZONE))))
                 .map(this::toOgrenci)
                 .toList();
     }
@@ -444,6 +458,7 @@ public class TakipService {
     @Transactional
     public TakipDonemResponse saveEkuant(String birimKodu, Long basvuruId, EkuantKaydetRequest request) {
         YearMonth month = requireMonth(request.yil(), request.ay());
+        boolean relaxed = isRelaxedBirim(birimKodu);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, request.yil(), request.ay());
         assertEditable(donem);
         Set<LocalDate> days = request.gunler() == null ? Set.of() : new HashSet<>(request.gunler());
@@ -454,9 +469,11 @@ public class TakipService {
         }
         Map<LocalDate, TakipGun> existing = donem.getGunler().stream()
                 .collect(Collectors.toMap(TakipGun::getTarih, Function.identity()));
-        assertMonthlyQuotaNotExceeded(donem.getBasvuru(), month, existing.keySet(), days);
-        assertWeeklyLimitNotExceeded(month, days);
-        assertClosedDaysUnchanged(donem.getBasvuru(), month, existing.keySet(), days);
+        if (!relaxed) {
+            assertMonthlyQuotaNotExceeded(donem.getBasvuru(), month, existing.keySet(), days);
+            assertWeeklyLimitNotExceeded(month, days);
+            assertClosedDaysUnchanged(donem.getBasvuru(), month, existing.keySet(), days);
+        }
         for (TakipGun gun : new ArrayList<>(donem.getGunler())) {
             if (!days.contains(gun.getTarih())) {
                 fileStorageService.deleteQuietly(gun.getBelgeYolu());
@@ -477,19 +494,24 @@ public class TakipService {
     @Transactional
     public TakipDonemResponse savePuantaj(String birimKodu, Long basvuruId, PuantajKaydetRequest request) {
         YearMonth month = requireMonth(request.yil(), request.ay());
+        boolean relaxed = isRelaxedBirim(birimKodu);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, request.yil(), request.ay());
         assertEditable(donem);
         Map<LocalDate, TakipGun> byDate = donem.getGunler().stream()
                 .collect(Collectors.toMap(TakipGun::getTarih, Function.identity()));
         if (request.kayitlar() != null) {
-            assertPermissionLimit(basvuruId, byDate, request.kayitlar());
+            if (!relaxed) {
+                assertPermissionLimit(basvuruId, byDate, request.kayitlar());
+            }
             for (PuantajKaydetRequest.Kayit kayit : request.kayitlar()) {
                 TakipGun gun = byDate.get(kayit.tarih());
                 if (gun == null) {
                     throw new ApiException(HttpStatus.BAD_REQUEST, kayit.tarih() + " EK-6 günü değil.");
                 }
-                assertEntryOpen(donem.getBasvuru(), kayit.tarih());
-                assertPuantajDate(kayit.tarih());
+                if (!relaxed) {
+                    assertEntryOpen(donem.getBasvuru(), kayit.tarih());
+                    assertPuantajDate(kayit.tarih());
+                }
                 PuantajDurum onceki = gun.getDurum();
                 gun.setDurum(kayit.durum());
                 if (kayit.durum() == PuantajDurum.GELMEDI && donem.getBasvuru().getIliskiBitisTarihi() == null) {
@@ -517,14 +539,19 @@ public class TakipService {
             MultipartFile file
     ) {
         YearMonth month = requireMonth(yil, ay);
+        boolean relaxed = isRelaxedBirim(birimKodu);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, yil, ay);
         assertEditable(donem);
-        assertEntryOpen(donem.getBasvuru(), tarih);
+        if (!relaxed) {
+            assertEntryOpen(donem.getBasvuru(), tarih);
+        }
         TakipGun gun = donem.getGunler().stream()
                 .filter(item -> item.getTarih().equals(tarih))
                 .findFirst()
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Önce EK-6 günü seçilmelidir."));
-        assertPuantajDate(tarih);
+        if (!relaxed) {
+            assertPuantajDate(tarih);
+        }
         if (gun.getDurum() != PuantajDurum.IZINLI && gun.getDurum() != PuantajDurum.RAPORLU) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Belge yalnızca izinli veya raporlu gün için yüklenir.");
         }
@@ -578,27 +605,30 @@ public class TakipService {
     @Transactional
     public TakipDonemResponse submit(String birimKodu, Long basvuruId, int yil, int ay) {
         YearMonth month = requireMonth(yil, ay);
+        boolean relaxed = isRelaxedBirim(birimKodu);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, yil, ay);
         assertEditable(donem);
         LocalDate today = LocalDate.now(ZONE);
-        if (month.isAfter(YearMonth.from(today))) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "Gelecek ay gönderilemez.");
-        }
-        Set<LocalDate> quotaDays = quotaDays(donem.getBasvuru(), month);
-        List<String> ekuantErrors = WorkScheduleRules.validateMonthlyQuota(month, quotaDays, daysPerWeek, today);
-        if (!ekuantErrors.isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, ekuantErrors.getFirst());
-        }
-        List<String> weeklyErrors = WorkScheduleRules.validateEkuant(
-                month, actualMonthDays(donem.getBasvuru(), month), daysPerWeek, today);
-        if (!weeklyErrors.isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, weeklyErrors.getFirst());
+        if (!relaxed) {
+            if (month.isAfter(YearMonth.from(today))) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "Gelecek ay gönderilemez.");
+            }
+            Set<LocalDate> quotaDays = quotaDays(donem.getBasvuru(), month);
+            List<String> ekuantErrors = WorkScheduleRules.validateMonthlyQuota(month, quotaDays, daysPerWeek, today);
+            if (!ekuantErrors.isEmpty()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, ekuantErrors.getFirst());
+            }
+            List<String> weeklyErrors = WorkScheduleRules.validateEkuant(
+                    month, actualMonthDays(donem.getBasvuru(), month), daysPerWeek, today);
+            if (!weeklyErrors.isEmpty()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, weeklyErrors.getFirst());
+            }
         }
         if (donem.getGunler().isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Göndermeden önce EK-6 günleri seçilmelidir.");
         }
         for (TakipGun gun : donem.getGunler()) {
-            if (gun.getTarih().isAfter(today)) {
+            if (!relaxed && gun.getTarih().isAfter(today)) {
                 throw new ApiException(HttpStatus.BAD_REQUEST,
                         "Gelecek günler için puantaj girilemez. " + gun.getTarih()
                                 + " tarihini EK-6'dan çıkarın veya ay ilerledikçe işaretleyin.");
@@ -606,7 +636,8 @@ public class TakipService {
             if (gun.getDurum() == null) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, gun.getTarih() + " için puantaj girilmedi.");
             }
-            if ((gun.getDurum() == PuantajDurum.IZINLI || gun.getDurum() == PuantajDurum.RAPORLU)
+            if (!relaxed
+                    && (gun.getDurum() == PuantajDurum.IZINLI || gun.getDurum() == PuantajDurum.RAPORLU)
                     && (gun.getBelgeYolu() == null || gun.getBelgeYolu().isBlank())) {
                 throw new ApiException(HttpStatus.BAD_REQUEST,
                         gun.getTarih() + " izinli/raporlu olduğu için dilekçe veya rapor yüklenmelidir.");
@@ -732,7 +763,8 @@ public class TakipService {
 
     private Basvuru requireAssigned(String birimKodu, Long basvuruId, YearMonth month) {
         return basvuruRepository.findDetailedByIdAndAtananBirimKoduAndBasvuruDonemiAktifTrue(basvuruId, birimKodu)
-                .filter(basvuru -> basvuru.isAssigned() && basvuru.canWorkIn(month))
+                .filter(basvuru -> basvuru.isAssigned()
+                        && (isRelaxedBirim(birimKodu) || basvuru.canWorkIn(month)))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Bu birime atanmış öğrenci bulunamadı."));
     }
 
@@ -758,6 +790,8 @@ public class TakipService {
     }
 
     private TakipDonemResponse emptyDraft(Basvuru basvuru, YearMonth month) {
+        String birimKodu = basvuru.getAtananBirimKodu();
+        boolean relaxed = isRelaxedBirim(birimKodu);
         return new TakipDonemResponse(
                 null,
                 basvuru.getId(),
@@ -768,12 +802,13 @@ public class TakipService {
                 null,
                 List.of(),
                 List.of(),
-                ekuantWarnings(basvuru, month),
+                relaxed ? List.of() : ekuantWarnings(basvuru, month),
                 closedDays(basvuru.getBasvuruDonemi().getId(), month),
                 quotaDays(basvuru, month).size(),
                 WorkScheduleRules.monthlyQuota(daysPerWeek),
                 countPermissionDays(basvuru.getId()),
                 MAX_IZIN_GUNU,
+                relaxed,
                 toOgrenci(basvuru)
         );
     }
@@ -793,7 +828,9 @@ public class TakipService {
                 ))
                 .toList();
         Set<LocalDate> quotaDays = quotaDays(donem.getBasvuru(), month);
-        List<String> warnings = ekuantWarnings(donem.getBasvuru(), month);
+        String birimKodu = donem.getBasvuru().getAtananBirimKodu();
+        boolean relaxed = isRelaxedBirim(birimKodu);
+        List<String> warnings = relaxed ? List.of() : ekuantWarnings(donem.getBasvuru(), month);
         return new TakipDonemResponse(
                 donem.getId(),
                 donem.getBasvuru().getId(),
@@ -810,6 +847,7 @@ public class TakipService {
                 WorkScheduleRules.monthlyQuota(daysPerWeek),
                 countPermissionDays(donem.getBasvuru().getId()),
                 MAX_IZIN_GUNU,
+                relaxed,
                 toOgrenci(donem.getBasvuru())
         );
     }

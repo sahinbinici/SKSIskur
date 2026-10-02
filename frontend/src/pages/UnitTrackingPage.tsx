@@ -110,6 +110,7 @@ export function UnitTrackingPage() {
 
   const selectedGun = selected ? puantajByDate.get(selected) : undefined;
   const locked = Boolean(donem?.locked);
+  const testMode = Boolean(donem?.testTakipModu);
   const quotaCount = donem?.ekuantKotaGunSayisi ?? 0;
   const quotaLimit = donem?.ekuantKotaGunLimiti ?? DAYS_PER_WEEK * 4;
   const currentWeekMonday = mondayOf(toYmd(now));
@@ -154,20 +155,23 @@ export function UnitTrackingPage() {
       };
     });
   }, [cells, workDays, currentWeekMonday, ay, yil, now, todayYmd]);
-  const puantajDayOpen = (date: string) => !locked && workDays.has(date) && !closedDays.has(date) && date <= todayYmd;
+  const puantajDayOpen = (date: string) =>
+    !locked && workDays.has(date) && (testMode || !closedDays.has(date)) && (testMode || date <= todayYmd);
   const puantajEditable = selected ? puantajDayOpen(selected) : false;
   const izinLimitiDolu = (donem?.toplamIzinGunu ?? 0) >= (donem?.izinGunLimiti ?? 10);
   const kullanilanIzin = donem?.toplamIzinGunu ?? 0;
   const izinLimiti = donem?.izinGunLimiti ?? 10;
   const kalanIzin = Math.max(0, izinLimiti - kullanilanIzin);
-  const missingPuantaj = [...workDays].filter((date) => date <= todayYmd && !puantajByDate.get(date)?.durum);
-  const missingDocs = [...workDays].filter((date) => {
+  const missingPuantaj = [...workDays].filter((date) =>
+    (testMode || date <= todayYmd) && !puantajByDate.get(date)?.durum
+  );
+  const missingDocs = testMode ? [] : [...workDays].filter((date) => {
     const gun = puantajByDate.get(date);
     return date <= todayYmd && needsDocument(gun?.durum) && !gun?.belgeVar;
   });
-  const futureWorkDays = [...workDays].filter((date) => date > todayYmd);
+  const futureWorkDays = testMode ? [] : [...workDays].filter((date) => date > todayYmd);
   const canSubmit = !locked
-    && (donem?.ekuantUyarilari.length ?? 0) === 0
+    && (testMode || (donem?.ekuantUyarilari.length ?? 0) === 0)
     && missingPuantaj.length === 0
     && missingDocs.length === 0
     && futureWorkDays.length === 0
@@ -175,10 +179,10 @@ export function UnitTrackingPage() {
   const incompleteWeeks = weekPlans.filter((week) => week.selected < week.required).length;
   const viewingOpen = new Date(yil, ay - 1, 1) >= new Date(now.getFullYear(), now.getMonth(), 1);
   const submissionSummary = canSubmit
-    ? "Tüm kontroller tamamlandı. Ayı gönderime hazır."
+    ? (testMode ? "Test modu: EK-6 ve puantaj tamam, istediğiniz zaman gönderebilirsiniz." : "Tüm kontroller tamamlandı. Ayı gönderime hazır.")
     : [
-        incompleteWeeks > 0 ? `${incompleteWeeks} haftanın EK-6 planı eksik` : "",
-        !viewingOpen && quotaCount !== quotaLimit ? `aylık kota ${quotaCount}/${quotaLimit}` : "",
+        !testMode && incompleteWeeks > 0 ? `${incompleteWeeks} haftanın EK-6 planı eksik` : "",
+        !testMode && !viewingOpen && quotaCount !== quotaLimit ? `aylık kota ${quotaCount}/${quotaLimit}` : "",
         missingPuantaj.length > 0 ? `${missingPuantaj.length} puantaj eksik` : "",
         futureWorkDays.length > 0 ? `${futureWorkDays.length} gelecek gün seçili` : "",
         missingDocs.length > 0 ? `${missingDocs.length} belge eksik` : ""
@@ -210,7 +214,7 @@ export function UnitTrackingPage() {
 
   async function toggleEkuant(date: string) {
     if (locked || busy) return;
-    if (closedDays.has(date)) {
+    if (!testMode && closedDays.has(date)) {
       setError("Bu gün için EK-6 ve puantaj girişi yönetici tarafından kapatıldı.");
       return;
     }
@@ -219,15 +223,17 @@ export function UnitTrackingPage() {
       next.delete(date);
       if (selected === date) setSelected(null);
     } else {
-      const selectedInWeek = [...next].filter((item) => mondayOf(item) === mondayOf(date)).length;
-      if (selectedInWeek >= DAYS_PER_WEEK) {
-        setError(`Her hafta tam ${DAYS_PER_WEEK} EK-6 günü seçilmelidir; bu haftanın kotası dolu.`);
-        return;
-      }
-      const dayOfMonth = Number(date.slice(8, 10));
-      if (dayOfMonth < 29 && quotaCount >= quotaLimit) {
-        setError(`Bu ayın 4 haftalık kotası dolu (${quotaLimit} gün).`);
-        return;
+      if (!testMode) {
+        const selectedInWeek = [...next].filter((item) => mondayOf(item) === mondayOf(date)).length;
+        if (selectedInWeek >= DAYS_PER_WEEK) {
+          setError(`Her hafta tam ${DAYS_PER_WEEK} EK-6 günü seçilmelidir; bu haftanın kotası dolu.`);
+          return;
+        }
+        const dayOfMonth = Number(date.slice(8, 10));
+        if (dayOfMonth < 29 && quotaCount >= quotaLimit) {
+          setError(`Bu ayın 4 haftalık kotası dolu (${quotaLimit} gün).`);
+          return;
+        }
       }
       next.add(date);
       setSelected(date);
@@ -237,11 +243,11 @@ export function UnitTrackingPage() {
 
   async function setDurum(durum: PuantajDurum) {
     if (!selected || busy || !puantajDayOpen(selected)) return;
-    if (closedDays.has(selected)) {
+    if (!testMode && closedDays.has(selected)) {
       setError("Bu gün için EK-6 ve puantaj girişi yönetici tarafından kapatıldı.");
       return;
     }
-    if (durum === "IZINLI" && selectedGun?.durum !== "IZINLI" && izinLimitiDolu) {
+    if (!testMode && durum === "IZINLI" && selectedGun?.durum !== "IZINLI" && izinLimitiDolu) {
       setError(`İzin hakkı doldu. Bu öğrenci için yeni izin günü girilemez (${izinLimiti} gün).`);
       return;
     }
@@ -300,10 +306,11 @@ export function UnitTrackingPage() {
       {message && <div className="alert alert-ok">{message}</div>}
 
       <section className="card help-tip" style={{ padding: 16, marginBottom: 18 }}>
-        <b>Bu ay nasıl doldurulur?</b>
+        <b>{testMode ? "Test takip modu (Eğitim Fakültesi)" : "Bu ay nasıl doldurulur?"}</b>
         <p style={{ margin: "6px 0 0", color: "var(--muted)", lineHeight: 1.55 }}>
-          Haftada en fazla 3 gün EK-6 seçin. Ayın 29–31. günleri sonraki ayın 12 günlük kotasına sayılır.
-          Puantaj yalnızca gelmiş günlere girilir; içinde bulunulan ay, bugüne kadarki haftalar tamamsa gönderilebilir.
+          {testMode
+            ? "Geçmiş ve gelecek aylar için EK-6 ve puantaj girebilir, haftalık/aylık kota ve belge zorunluluğu uygulanmaz. Tüm EK-6 günlerine puantaj işaretleyip istediğiniz zaman gönderebilirsiniz."
+            : "Haftada en fazla 3 gün EK-6 seçin. Ayın 29–31. günleri sonraki ayın 12 günlük kotasına sayılır. Puantaj yalnızca gelmiş günlere girilir; içinde bulunulan ay, bugüne kadarki haftalar tamamsa gönderilebilir."}
         </p>
       </section>
       {locked && (
@@ -348,7 +355,8 @@ export function UnitTrackingPage() {
             puantajByDate={puantajByDate}
             selected={selected}
             locked={locked || busy}
-            quotaFull={quotaCount >= quotaLimit}
+            quotaFull={!testMode && quotaCount >= quotaLimit}
+            testMode={testMode}
             onDay={(cell) => toggleEkuant(cell.date)}
           />
           <div className="schedule-progress" aria-label="EK-6 plan durumu">
@@ -382,12 +390,13 @@ export function UnitTrackingPage() {
             selected={selected}
             locked={locked || busy}
             todayYmd={todayYmd}
+            testMode={testMode}
             onDay={(cell) => {
               if (!workDays.has(cell.date)) return;
               setError("");
               setMessage("");
               setSelected(cell.date);
-              if (cell.date > todayYmd) {
+              if (!testMode && cell.date > todayYmd) {
                 setError("Gelecek günler için puantaj girilemez.");
               }
             }}
@@ -404,7 +413,7 @@ export function UnitTrackingPage() {
         <section className="card puantaj-panel">
           <div>
             <h4>{formatLong(selected)}</h4>
-            <p>{closedDays.has(selected) ? "Bu gün için EK-6 ve puantaj girişi yönetici tarafından kapatıldı." : selected > todayYmd ? "Bu gün henüz gelmedi; puantaj ay ilerledikçe girilebilir." : puantajEditable ? (izinLimitiDolu ? `İzin kotası doldu; yeni “İzinli” seçilemez. Rapor veya geldi/gelmedi işaretleyebilirsiniz.` : `Bu gün için yoklama durumunu seçin. Kalan izin: ${kalanIzin}/${izinLimiti} gün.`) : "Bu ay gönderildiği için puantaj değiştirilemez."}</p>
+            <p>{!testMode && closedDays.has(selected) ? "Bu gün için EK-6 ve puantaj girişi yönetici tarafından kapatıldı." : !testMode && selected > todayYmd ? "Bu gün henüz gelmedi; puantaj ay ilerledikçe girilebilir." : puantajEditable ? (testMode ? "Test modu: yoklama durumunu seçin." : izinLimitiDolu ? `İzin kotası doldu; yeni “İzinli” seçilemez. Rapor veya geldi/gelmedi işaretleyebilirsiniz.` : `Bu gün için yoklama durumunu seçin. Kalan izin: ${kalanIzin}/${izinLimiti} gün.`) : "Bu ay gönderildiği için puantaj değiştirilemez."}</p>
           </div>
           <div className="status-row">
             {STATUSES.map((status) => (
@@ -412,7 +421,7 @@ export function UnitTrackingPage() {
                 key={status}
                 type="button"
                 className={`status-chip ${status} ${selectedGun?.durum === status ? "active" : ""}`}
-                disabled={!puantajEditable || busy || closedDays.has(selected) || (status === "IZINLI" && selectedGun?.durum !== "IZINLI" && izinLimitiDolu)}
+                disabled={!puantajEditable || busy || (!testMode && closedDays.has(selected)) || (!testMode && status === "IZINLI" && selectedGun?.durum !== "IZINLI" && izinLimitiDolu)}
                 onClick={() => setDurum(status)}
               >
                 {PUANTAJ_LABEL[status]}
@@ -466,6 +475,7 @@ function CalendarGrid({
   locked,
   quotaFull = false,
   todayYmd,
+  testMode = false,
   onDay
 }: {
   cells: CalCell[];
@@ -477,6 +487,7 @@ function CalendarGrid({
   locked: boolean;
   quotaFull?: boolean;
   todayYmd?: string;
+  testMode?: boolean;
   onDay: (cell: CalCell) => void;
 }) {
   return (
@@ -489,14 +500,14 @@ function CalendarGrid({
           return <div key={`empty-${index}`} className="cal-day empty" />;
         }
         const isWork = workDays.has(cell.date);
-        const isClosed = closedDays.has(cell.date);
+        const isClosed = !testMode && closedDays.has(cell.date);
         const gun = puantajByDate.get(cell.date);
         const monday = mondayOf(cell.date);
         const nextMonthQuota = cell.day >= 29;
         const quotaBlocked = quotaFull && !nextMonthQuota;
         const weekSelectedCount = [...workDays].filter((date) => mondayOf(date) === monday).length;
-        const weekBlocked = mode === "ekuant" && !isWork && weekSelectedCount >= DAYS_PER_WEEK;
-        const futurePuantajDay = mode === "puantaj" && isWork && todayYmd != null && cell.date > todayYmd;
+        const weekBlocked = !testMode && mode === "ekuant" && !isWork && weekSelectedCount >= DAYS_PER_WEEK;
+        const futurePuantajDay = !testMode && mode === "puantaj" && isWork && todayYmd != null && cell.date > todayYmd;
         const classes = ["cal-day"];
         if (!cell.weekday) classes.push("weekend");
         if (mode === "ekuant" && isWork) classes.push("work");
@@ -507,8 +518,8 @@ function CalendarGrid({
         if (isClosed) classes.push("closed");
         if (selected === cell.date) classes.push("selected");
         const clickable = mode === "ekuant"
-          ? !locked && !isClosed && (isWork || (!quotaBlocked && !weekBlocked))
-          : isWork && !locked && !isClosed;
+          ? !locked && !isClosed && (isWork || testMode || (!quotaBlocked && !weekBlocked))
+          : isWork && !locked && !isClosed && (testMode || !futurePuantajDay);
         const title = mode === "ekuant" && !isWork && (quotaBlocked || weekBlocked)
           ? quotaBlocked ? "Bu ayın 4 haftalık kotası dolu" : `Bu hafta ${DAYS_PER_WEEK} EK-6 günü seçildi`
           : isClosed

@@ -90,8 +90,11 @@ public class KesinListeService {
 
         ComparisonResult comparison = applyComparison(donem, dalga);
         if (comparison.eslesen() == 0) {
+            long rowCount = kesinKayitKaydiRepository.countByBasvuruDalgaId(dalga.getId());
             throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "Yüklenen İŞKUR nihai listesinde onaylı başvuru bulunamadı. Dosyayı kontrol edin.");
+                    "Yüklenen İŞKUR nihai listesinde onaylı başvuru bulunamadı (dosyadan "
+                            + rowCount + " satır okundu, 0 eşleşme). Liste, sistemde onaylı öğrencilerin T.C. / öğrenci no / ad-soyad bilgisiyle aynı olmalıdır. "
+                            + "Tam kura sonuç dosyası yerine yalnızca bu dönemde onayladığınız öğrencileri içeren dosyayı kullanın.");
         }
         Instant now = Instant.now();
         dalga.setKesinListeYuklemeTarihi(now);

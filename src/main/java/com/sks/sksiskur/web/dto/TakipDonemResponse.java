@@ -23,6 +23,7 @@ public record TakipDonemResponse(
         int ekuantKotaGunLimiti,
         int toplamIzinGunu,
         int izinGunLimiti,
+        boolean testTakipModu,
         BirimOgrenciResponse ogrenci
 ) {
     public record PuantajGunResponse(

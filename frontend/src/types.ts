@@ -336,6 +336,7 @@ export type TakipDonem = {
   ekuantKotaGunLimiti: number;
   toplamIzinGunu: number;
   izinGunLimiti: number;
+  testTakipModu: boolean;
   ogrenci: BirimOgrenci;
 };
 
