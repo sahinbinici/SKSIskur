@@ -56,6 +56,13 @@ function isValidGsm(value: string) {
   return normalized.length === 10 && normalized.startsWith("5");
 }
 
+function focusIletisim() {
+  window.setTimeout(() => {
+    document.getElementById("iletisim-hesap")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.querySelector<HTMLInputElement>("#iletisim-hesap input[type='email']")?.focus();
+  }, 0);
+}
+
 export function ApplicationPage() {
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [basvuru, setBasvuru] = useState<Basvuru | null>(null);
@@ -141,19 +148,23 @@ export function ApplicationPage() {
       return;
     }
     if (!eposta.trim() && submit) {
-      setError("E-posta adresi zorunludur.");
+      setError("E-posta adresi zorunludur. «İletişim bilgileri» alanlarını doldurun.");
+      focusIletisim();
       return;
     }
     if (eposta.trim() && !isValidEmail(eposta)) {
       setError("Geçerli bir e-posta adresi giriniz.");
+      focusIletisim();
       return;
     }
     if (!gsm.trim() && submit) {
-      setError("Cep telefonu numarası zorunludur.");
+      setError("Cep telefonu numarası zorunludur. «İletişim bilgileri» alanlarını doldurun.");
+      focusIletisim();
       return;
     }
     if (gsm.trim() && !isValidGsm(gsm)) {
       setError("Geçerli bir cep telefonu giriniz (05xx xxx xx xx).");
+      focusIletisim();
       return;
     }
     if (submit) {
