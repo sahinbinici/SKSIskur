@@ -44,7 +44,7 @@ export function UnitDashboardSummary({ items, unreadDuyuru, report, birimAdi }: 
           <strong>{report?.yazdirilabilir ? "Hazır" : report?.onayBekleyenOgrenci ?? eksikPuantaj}</strong>
           <span>
             {report?.yazdirilabilir
-              ? "Cetvel onaylı · Yazdır →"
+              ? "Cetvel onaylı · İndir / yazdır →"
               : report && report.onayBekleyenOgrenci > 0
                 ? "Onay bekliyor · Rapor →"
                 : "Eksik gönderim · Rapor →"}

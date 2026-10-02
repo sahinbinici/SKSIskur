@@ -588,6 +588,7 @@ export type IslemTuru =
   | "PUANTAJ_KAYDET"
   | "TAKIP_GONDER"
   | "TAKIP_ONAY"
+  | "TAKIP_IADE"
   | "ISKUR_PAKET_INDIR";
 
 export type IslemLog = {

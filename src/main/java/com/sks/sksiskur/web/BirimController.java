@@ -5,6 +5,7 @@ import com.sks.sksiskur.security.AuthPrincipal;
 import com.sks.sksiskur.service.AuditLogService;
 import com.sks.sksiskur.service.DocumentDownload;
 import com.sks.sksiskur.service.BirimDuyuruService;
+import com.sks.sksiskur.service.AdminExportService;
 import com.sks.sksiskur.service.TakipService;
 import com.sks.sksiskur.web.dto.BirimAylikRaporResponse;
 import com.sks.sksiskur.web.dto.BirimDuyuruInboxResponse;
@@ -15,6 +16,7 @@ import com.sks.sksiskur.web.dto.TakipAyRequest;
 import com.sks.sksiskur.web.dto.TakipDonemResponse;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -37,11 +39,18 @@ import java.util.List;
 public class BirimController {
 
     private final TakipService takipService;
+    private final AdminExportService adminExportService;
     private final BirimDuyuruService birimDuyuruService;
     private final AuditLogService auditLogService;
 
-    public BirimController(TakipService takipService, BirimDuyuruService birimDuyuruService, AuditLogService auditLogService) {
+    public BirimController(
+            TakipService takipService,
+            AdminExportService adminExportService,
+            BirimDuyuruService birimDuyuruService,
+            AuditLogService auditLogService
+    ) {
         this.takipService = takipService;
+        this.adminExportService = adminExportService;
         this.birimDuyuruService = birimDuyuruService;
         this.auditLogService = auditLogService;
     }
@@ -69,6 +78,24 @@ public class BirimController {
     ) {
         YearMonth month = resolveMonth(yil, ay);
         return takipService.monthlyReport(birimKodu(authentication), month.getYear(), month.getMonthValue());
+    }
+
+    @GetMapping("/rapor.xlsx")
+    public ResponseEntity<byte[]> monthlyReportExcel(
+            Authentication authentication,
+            @RequestParam(required = false) Integer yil,
+            @RequestParam(required = false) Integer ay
+    ) {
+        YearMonth month = resolveMonth(yil, ay);
+        String kod = birimKodu(authentication);
+        byte[] content = adminExportService.birimTakipRaporExcel(kod, month.getYear(), month.getMonthValue());
+        String filename = "ek6-puantaj_" + kod + "_" + month.getYear() + "-"
+                + String.format("%02d", month.getMonthValue()) + ".xlsx";
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
+                .body(content);
     }
 
     @GetMapping("/ogrenciler/{basvuruId}/takip")

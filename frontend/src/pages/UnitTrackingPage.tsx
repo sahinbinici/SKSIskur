@@ -309,7 +309,7 @@ export function UnitTrackingPage() {
       {locked && (
         <div className={`alert ${donem?.status === "APPROVED" ? "alert-ok" : "alert-wait"}`}>
           {donem?.status === "APPROVED"
-            ? `Bu ay SKS tarafından onaylandı. Aylık rapor ekranından EK-6 ve puantaj cetvellerini yazdırabilirsiniz.`
+            ? `Bu ay SKS tarafından onaylandı. Aylık rapor ekranından EK-6 ve puantaj cetvellerini Excel indirip veya yazdırıp imzalayabilirsiniz.`
             : `Bu ay ${formatDate(donem?.gonderimTarihi)} tarihinde gönderildi; yönetici onayı bekleniyor. Gönderilen kayıt değiştirilemez.`}
         </div>
       )}

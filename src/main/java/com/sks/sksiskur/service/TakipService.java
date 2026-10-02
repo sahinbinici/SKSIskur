@@ -666,6 +666,57 @@ public class TakipService {
         return count;
     }
 
+    @Transactional
+    public TakipDonemResponse adminReturn(Long basvuruDonemiId, Long basvuruId, int yil, int ay) {
+        YearMonth month = requireMonth(yil, ay);
+        BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
+        basvuruRepository.findDetailedById(basvuruId)
+                .filter(item -> item.isAssigned()
+                        && item.getBasvuruDonemi() != null
+                        && item.getBasvuruDonemi().getId().equals(period.getId()))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Birime atanmış öğrenci bulunamadı."));
+        TakipDonem donem = takipDonemRepository.findByBasvuruIdAndYilAndAy(basvuruId, yil, ay)
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Öğrenci bu ay için kayıt göndermedi."));
+        if (donem.getStatus() != TakipStatus.SUBMITTED && donem.getStatus() != TakipStatus.APPROVED) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Yalnızca gönderilmiş veya onaylanmış kayıtlar birime iade edilebilir.");
+        }
+        donem.setStatus(TakipStatus.DRAFT);
+        donem.setGonderimTarihi(null);
+        donem.setOnayTarihi(null);
+        return toResponse(takipDonemRepository.save(donem), month);
+    }
+
+    @Transactional
+    public int adminReturnSubmitted(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
+        YearMonth month = requireMonth(yil, ay);
+        BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
+        String normalizedUnit = blankToNull(birimKodu);
+        if (normalizedUnit == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Toplu iade için birim seçilmelidir.");
+        }
+        List<Basvuru> students = assignedKesin(normalizedUnit, period).stream()
+                .filter(basvuru -> basvuru.canWorkIn(month))
+                .toList();
+        Map<Long, TakipDonem> donemler = loadDonemler(students, yil, ay);
+        int count = 0;
+        for (Basvuru basvuru : students) {
+            TakipDonem donem = donemler.get(basvuru.getId());
+            if (donem != null
+                    && (donem.getStatus() == TakipStatus.SUBMITTED || donem.getStatus() == TakipStatus.APPROVED)) {
+                donem.setStatus(TakipStatus.DRAFT);
+                donem.setGonderimTarihi(null);
+                donem.setOnayTarihi(null);
+                count++;
+            }
+        }
+        if (count == 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "İade edilecek gönderilmiş veya onaylı kayıt bulunamadı.");
+        }
+        takipDonemRepository.saveAll(donemler.values());
+        return count;
+    }
+
     private TakipDonem getOrCreateEntity(String birimKodu, Long basvuruId, int yil, int ay) {
         YearMonth month = requireMonth(yil, ay);
         Basvuru basvuru = requireAssigned(birimKodu, basvuruId, month);

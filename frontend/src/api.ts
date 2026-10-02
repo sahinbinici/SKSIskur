@@ -419,6 +419,15 @@ export const api = {
     if (donemId) params.set("donemId", String(donemId));
     return request<number>(`/api/admin/takip/onayla-gonderilenler?${params}`, { method: "POST" });
   },
+  adminTakipIade: (basvuruId: number, yil: number, ay: number, donemId?: number) =>
+    request<TakipDonem>(`/api/admin/takip/ogrenciler/${basvuruId}/iade?yil=${yil}&ay=${ay}${donemId ? `&donemId=${donemId}` : ""}`, {
+      method: "POST"
+    }),
+  adminTakipIadeGonderilenler: (yil: number, ay: number, birimKodu: string, donemId?: number) => {
+    const params = new URLSearchParams({ yil: String(yil), ay: String(ay), birimKodu });
+    if (donemId) params.set("donemId", String(donemId));
+    return request<number>(`/api/admin/takip/iade-gonderilenler?${params}`, { method: "POST" });
+  },
   adminPuantajBelgeUrl: (basvuruId: number, yil: number, ay: number, tarih: string) =>
     `/api/admin/takip/ogrenciler/${basvuruId}/puantaj/belge?yil=${yil}&ay=${ay}&tarih=${tarih}`,
   birimOgrenciler: () => request<BirimOgrenci[]>("/api/birim/ogrenciler"),
@@ -454,6 +463,8 @@ export const api = {
     }),
   birimRapor: (yil: number, ay: number) =>
     request<BirimAylikRapor>(`/api/birim/rapor?yil=${yil}&ay=${ay}`),
+  birimRaporExcelUrl: (yil: number, ay: number) =>
+    `/api/birim/rapor.xlsx?yil=${yil}&ay=${ay}`,
   islemLoglari: (params: {
     tur?: IslemTuru;
     rol?: Role;

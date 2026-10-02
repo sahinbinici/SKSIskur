@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError, downloadAuthenticatedFile } from "../api";
+import { useConfirm } from "../components/ConfirmDialog";
 import { FilterChips } from "../components/FilterChips";
 import { ActionCard, PageHeader } from "../components/PageHeader";
 import { AdminProcessNav } from "../components/AdminProcessNav";
@@ -12,6 +13,7 @@ type PageTab = "paket" | "ozet" | "ayarlar" | "cetvel";
 type CetvelKind = "ekuant" | "puantaj";
 
 export function AdminTakipPage() {
+  const confirm = useConfirm();
   const now = new Date();
   const [yil, setYil] = useState(now.getFullYear());
   const [ay, setAy] = useState(now.getMonth() + 1);
@@ -129,6 +131,58 @@ export function AdminTakipPage() {
     }
   }
 
+  async function returnStudent(basvuruId: number, wasApproved: boolean) {
+    const ok = await confirm({
+      title: "Birime iade et",
+      message: wasApproved
+        ? "Onaylı kayıt taslağa alınır; birim düzeltip yeniden gönderir. Cetvel ve ödeme listesi bu öğrenci için güncellenene kadar geçersiz sayılır."
+        : "Gönderilen kayıt birime iade edilir; birim EK-6 ve puantajı düzenleyip yeniden gönderebilir.",
+      confirmLabel: "İade et",
+      variant: "danger"
+    });
+    if (!ok) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.adminTakipIade(basvuruId, yil, ay, periodId);
+      setMessage("Kayıt birime iade edildi.");
+      const next = await api.adminTakip(yil, ay, birimKodu || undefined, periodId);
+      setOzet(next);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "İade edilemedi.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function returnSubmittedInUnit() {
+    if (!birimKodu) {
+      setError("Toplu iade için bir birim seçin.");
+      return;
+    }
+    const ok = await confirm({
+      title: "Birimdeki kayıtları iade et",
+      message: "Seçili birimde gönderilmiş ve onaylı tüm aylık kayıtlar taslağa alınır; birim düzeltip yeniden gönderir.",
+      confirmLabel: "Toplu iade",
+      variant: "danger"
+    });
+    if (!ok) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const count = await api.adminTakipIadeGonderilenler(yil, ay, birimKodu, periodId);
+      setMessage(`${count} öğrencinin kaydı birime iade edildi.`);
+      const next = await api.adminTakip(yil, ay, birimKodu, periodId);
+      setOzet(next);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Toplu iade yapılamadı.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function approveSubmittedInUnit() {
     if (!birimKodu) {
       setError("Toplu onay için bir birim seçin.");
@@ -176,7 +230,7 @@ export function AdminTakipPage() {
     <Shell home="/admin" full>
       <PageHeader
         title="Aylık devam ve ödeme"
-        description="Önce birimin gönderdiği puantajı onaylayın. Onaydan sonra ödeme Excel’ini indirin; birim onaylı cetveli yazdırır."
+        description="Birimin gönderdiğini onaylayın veya düzeltme için iade edin. İŞKUR ödeme dosyası burada indirilir; birim yalnızca onaylı EK-6 / puantaj cetvelini indirir."
       />
 
       <div className="filter-bar no-print">
@@ -302,8 +356,20 @@ export function AdminTakipPage() {
             >
               Birimdeki gönderilenleri onayla
             </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              disabled={
+                loading
+                || !birimKodu
+                || !ozet.ogrenciler.some((row) => row.status === "SUBMITTED" || row.status === "APPROVED")
+              }
+              onClick={() => void returnSubmittedInUnit()}
+            >
+              Birimdeki kayıtları iade et
+            </button>
             <span style={{ color: "var(--muted)", fontSize: 13 }}>
-              Birim, ayı gönderdikten sonra EK-6 ve puantaj cetvellerini yazdırabilsin diye onay verin.
+              Onay sonrası birim cetvel indirir; ödeme dosyası yalnızca SKS tarafında.
             </span>
           </div>
         <div className="card" style={{ overflow: "auto" }}>
@@ -340,6 +406,16 @@ export function AdminTakipPage() {
                     {row.status === "SUBMITTED" && (
                       <button className="btn btn-gold btn-compact" style={{ marginLeft: 6 }} disabled={loading} onClick={() => void approveStudent(row.basvuruId)}>
                         Onayla
+                      </button>
+                    )}
+                    {(row.status === "SUBMITTED" || row.status === "APPROVED") && (
+                      <button
+                        className="btn btn-danger btn-compact"
+                        style={{ marginLeft: 6 }}
+                        disabled={loading}
+                        onClick={() => void returnStudent(row.basvuruId, row.status === "APPROVED")}
+                      >
+                        İade
                       </button>
                     )}
                   </td>

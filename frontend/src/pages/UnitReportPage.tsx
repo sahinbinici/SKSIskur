@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, ApiError } from "../api";
+import { api, ApiError, downloadAuthenticatedFile } from "../api";
 import { useAuth } from "../auth";
 import { Shell } from "../components/ui";
 import type { BirimAylikRapor, BirimRaporOgrenci } from "../types";
@@ -86,13 +86,21 @@ export function UnitReportPage() {
     document.title = previous;
   }
 
+  function downloadExcel() {
+    if (!data?.yazdirilabilir) return;
+    void downloadAuthenticatedFile(
+      api.birimRaporExcelUrl(yil, ay),
+      `ek6-puantaj_${yil}-${String(ay).padStart(2, "0")}.xlsx`
+    ).catch((err) => setError(err instanceof ApiError ? err.message : "Excel indirilemedi."));
+  }
+
   return (
     <Shell home="/birim" full>
       <div className="report-toolbar no-print">
         <div>
           <h3 className="section" style={{ margin: 0 }}>Aylık EK-6 / puantaj raporu</h3>
           <p style={{ color: "var(--muted)", margin: "6px 0 0" }}>
-            SKS yöneticisi ayı onayladıktan sonra cetvelleri yazdırıp imzalayabilirsiniz.
+            SKS onayından sonra EK-6 ve puantaj cetvellerini Excel indirip veya yazdırıp imzalayın. İŞKUR ödeme dosyası yalnızca SKS yöneticisinde indirilir.
           </p>
         </div>
         <div className="toolbar" style={{ margin: 0 }}>
@@ -114,7 +122,10 @@ export function UnitReportPage() {
               Puantaj
             </button>
           </div>
-          <button className="btn btn-gold" onClick={printReport} disabled={loading || !data?.yazdirilabilir}>
+          <button type="button" className="btn btn-secondary" onClick={downloadExcel} disabled={loading || !data?.yazdirilabilir}>
+            Excel indir
+          </button>
+          <button type="button" className="btn btn-gold" onClick={printReport} disabled={loading || !data?.yazdirilabilir}>
             Yazdır / PDF
           </button>
         </div>

@@ -289,6 +289,20 @@ public class AdminExportService {
     @Transactional(readOnly = true)
     public byte[] takipRaporExcel(Long donemId, String birimKodu, int yil, int ay) {
         BirimAylikRaporResponse rapor = takipService.adminMonthlyReport(donemId, birimKodu, yil, ay);
+        return aylikRaporWorkbook(rapor);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] birimTakipRaporExcel(String birimKodu, int yil, int ay) {
+        BirimAylikRaporResponse rapor = takipService.monthlyReport(birimKodu, yil, ay);
+        if (!rapor.yazdirilabilir()) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "EK-6 ve puantaj cetvelleri yalnızca SKS onayı tamamlandığında indirilebilir.");
+        }
+        return aylikRaporWorkbook(rapor);
+    }
+
+    private byte[] aylikRaporWorkbook(BirimAylikRaporResponse rapor) {
         List<String> ekuantHeaders = List.of(
                 "Sıra", "Öğrenci No", "T.C. Kimlik", "Ad", "Soyad", "IBAN", "EK-6 Günleri", "Gün Sayısı"
         );

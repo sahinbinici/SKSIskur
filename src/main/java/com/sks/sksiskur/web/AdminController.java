@@ -786,6 +786,35 @@ public class AdminController {
         return count;
     }
 
+    @PostMapping("/takip/ogrenciler/{basvuruId}/iade")
+    public TakipDonemResponse takipIade(
+            @PathVariable Long basvuruId,
+            @RequestParam int yil,
+            @RequestParam int ay,
+            @RequestParam(required = false) Long donemId,
+            Authentication authentication
+    ) {
+        TakipDonemResponse saved = takipService.adminReturn(donemId, basvuruId, yil, ay);
+        auditLogService.logAdmin(authentication, IslemTuru.TAKIP_IADE, "BASVURU", basvuruId,
+                "Aylık takip birime iade edildi: " + yil + "-" + String.format("%02d", ay), null);
+        return saved;
+    }
+
+    @PostMapping("/takip/iade-gonderilenler")
+    public int takipIadeGonderilenler(
+            @RequestParam int yil,
+            @RequestParam int ay,
+            @RequestParam String birimKodu,
+            @RequestParam(required = false) Long donemId,
+            Authentication authentication
+    ) {
+        int count = takipService.adminReturnSubmitted(donemId, birimKodu, yil, ay);
+        auditLogService.logAdmin(authentication, IslemTuru.TAKIP_IADE, "BIRIM", null,
+                "Toplu takip iadesi: " + birimKodu + " " + yil + "-" + String.format("%02d", ay),
+                count + " öğrenci");
+        return count;
+    }
+
     @GetMapping("/takip/ogrenciler/{basvuruId}")
     public TakipDonemResponse takipOgrenci(
             @PathVariable Long basvuruId,
