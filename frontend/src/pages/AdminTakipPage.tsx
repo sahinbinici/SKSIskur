@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError, downloadAuthenticatedFile } from "../api";
 import { useConfirm } from "../components/ConfirmDialog";
+import { FilterChips } from "../components/FilterChips";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { ActionCard, PageHeader } from "../components/PageHeader";
 import { AdminProcessNav } from "../components/AdminProcessNav";
