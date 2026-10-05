@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -24,6 +26,8 @@ import java.util.Set;
 
 @Service
 public class IskurListeService {
+
+    private static final int LISTE_SAYFA = 100;
 
     private static final String LISTEDE_DEGIL_MESAJ =
             "İŞKUR listesinde adınız olmadığı için başvuru yapamazsınız.";
@@ -55,10 +59,13 @@ public class IskurListeService {
     }
 
     @Transactional(readOnly = true)
-    public IskurListeResponse get(Long donemId) {
+    public IskurListeResponse get(Long donemId, String query) {
         BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
-        long count = repository.countByBasvuruDonemiId(donem.getId());
-        List<IskurListeResponse.Satir> preview = repository.findTop50ByBasvuruDonemiIdOrderByAdAscSoyadAsc(donem.getId())
+        String q = query == null ? "" : query.trim();
+        long total = repository.countByBasvuruDonemiId(donem.getId());
+        long matched = q.isEmpty() ? total : repository.countSearchByDonem(donem.getId(), q);
+        List<IskurListeResponse.Satir> rows = repository
+                .searchByDonem(donem.getId(), q, PageRequest.of(0, LISTE_SAYFA))
                 .stream()
                 .map(row -> new IskurListeResponse.Satir(
                         row.getTcKimlikNo(),
@@ -70,10 +77,11 @@ public class IskurListeService {
         return new IskurListeResponse(
                 donem.getId(),
                 donem.getAd(),
-                count > 0,
-                count,
+                total > 0,
+                total,
                 donem.getIskurListeYuklemeTarihi(),
-                preview
+                matched,
+                rows
         );
     }
 

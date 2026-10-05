@@ -196,7 +196,8 @@ export const api = {
   adminBasvurularBelgeZipFilename: (belgeTipi: DocumentType) =>
     `basvurular-${belgeTipi.toLowerCase()}.zip`,
   updateBasvuruDonemiGelirLimiti: (id: number, limit: number) => request<BasvuruDonemi>(`/api/admin/basvuru-donemleri/${id}/gelir-limiti?limit=${encodeURIComponent(String(limit))}`, { method: "PUT" }),
-  iskurListesi: (donemId: number) => request<IskurListe>(`/api/admin/basvuru-donemleri/${donemId}/iskur-listesi`),
+  iskurListesi: (donemId: number, q?: string) =>
+    request<IskurListe>(`/api/admin/basvuru-donemleri/${donemId}/iskur-listesi${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   uploadIskurListesi: async (donemId: number, file: File) => {
     const body = new FormData();
     body.append("file", file);

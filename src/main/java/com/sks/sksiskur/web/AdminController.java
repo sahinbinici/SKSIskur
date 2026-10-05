@@ -217,8 +217,11 @@ public class AdminController {
     }
 
     @GetMapping("/basvuru-donemleri/{id}/iskur-listesi")
-    public IskurListeResponse iskurListesi(@PathVariable Long id) {
-        return iskurListeService.get(id);
+    public IskurListeResponse iskurListesi(
+            @PathVariable Long id,
+            @RequestParam(required = false) String q
+    ) {
+        return iskurListeService.get(id, q);
     }
 
     @PostMapping(value = "/basvuru-donemleri/{id}/iskur-listesi", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

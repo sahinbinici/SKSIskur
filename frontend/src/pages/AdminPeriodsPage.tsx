@@ -21,14 +21,17 @@ export function AdminPeriodsPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [iskurQuery, setIskurQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const iskurSearchTimer = useRef<number | undefined>(undefined);
+  const skipIskurSearch = useRef(true);
 
   async function load() {
     const nextPeriods = await api.basvuruDonemleri();
     setPeriods(nextPeriods);
     const activePeriod = nextPeriods.find((period) => period.aktif);
     if (activePeriod) {
-      setIskurList(await api.iskurListesi(activePeriod.id));
+      setIskurList(await api.iskurListesi(activePeriod.id, iskurQuery.trim() || undefined));
       setDalgalar(await api.basvuruDalgalar(activePeriod.id));
     } else {
       setIskurList(null);
@@ -39,6 +42,22 @@ export function AdminPeriodsPage() {
   useEffect(() => {
     load().catch((err) => setError(err instanceof ApiError ? err.message : "Dönemler yüklenemedi."));
   }, []);
+
+  useEffect(() => {
+    if (skipIskurSearch.current) {
+      skipIskurSearch.current = false;
+      return;
+    }
+    const activePeriod = periods.find((period) => period.aktif);
+    if (!activePeriod) return;
+    window.clearTimeout(iskurSearchTimer.current);
+    iskurSearchTimer.current = window.setTimeout(() => {
+      api.iskurListesi(activePeriod.id, iskurQuery.trim() || undefined)
+        .then(setIskurList)
+        .catch((err) => setError(err instanceof ApiError ? err.message : "Liste aranamadı."));
+    }, 300);
+    return () => window.clearTimeout(iskurSearchTimer.current);
+  }, [iskurQuery]);
 
   async function create() {
     if (!name.trim() || !startDate || !endDate || !incomeLimit || Number(incomeLimit) < 0) return;
@@ -235,6 +254,36 @@ export function AdminPeriodsPage() {
             Son yükleme: {formatDate(active.iskurListeYuklemeTarihi)}
           </p>
         )}
+        <div className="filter-panel" style={{ marginBottom: 14 }}>
+          <div className="filter-panel-section">
+            <h4 className="filter-panel-title">Listede ara</h4>
+            <div className="filter-panel-row">
+              <label className="filter-label filter-label-grow">
+                Öğrenci
+                <input
+                  placeholder="Ad, soyad, T.C. veya öğrenci no"
+                  value={iskurQuery}
+                  onChange={(event) => setIskurQuery(event.target.value)}
+                />
+              </label>
+              {iskurQuery && (
+                <button type="button" className="btn btn-secondary" onClick={() => setIskurQuery("")}>
+                  Temizle
+                </button>
+              )}
+            </div>
+            <p className="filter-panel-note" style={{ marginTop: 8 }}>
+              {iskurList
+                ? iskurQuery.trim()
+                  ? `${iskurList.eslesenSayisi ?? iskurList.onizleme.length} kayıt bulundu (toplam ${iskurList.kayitSayisi}).`
+                  : `Toplam ${iskurList.kayitSayisi} kayıt.`
+                : "Listede ad, soyad, T.C. veya öğrenci numarası ile arayın."}
+            </p>
+          </div>
+        </div>
+        {iskurList && iskurQuery.trim() && iskurList.onizleme.length === 0 && (
+          <p style={{ color: "var(--muted)", marginBottom: 0 }}>Eşleşen kayıt yok.</p>
+        )}
         {iskurList && iskurList.onizleme.length > 0 && (
           <div style={{ overflow: "auto" }}>
             <table>
@@ -252,9 +301,14 @@ export function AdminPeriodsPage() {
                 ))}
               </tbody>
             </table>
-            {iskurList.kayitSayisi > iskurList.onizleme.length && (
+            {iskurList.eslesenSayisi > iskurList.onizleme.length && (
               <p style={{ color: "var(--muted)", marginBottom: 0 }}>
-                İlk {iskurList.onizleme.length} kayıt gösteriliyor (toplam {iskurList.kayitSayisi}).
+                İlk {iskurList.onizleme.length} kayıt gösteriliyor (eşleşen {iskurList.eslesenSayisi}, toplam {iskurList.kayitSayisi}).
+              </p>
+            )}
+            {!iskurQuery.trim() && iskurList.kayitSayisi > iskurList.onizleme.length && iskurList.eslesenSayisi === iskurList.kayitSayisi && (
+              <p style={{ color: "var(--muted)", marginBottom: 0 }}>
+                İlk {iskurList.onizleme.length} kayıt gösteriliyor (toplam {iskurList.kayitSayisi}). Arayarak diğer kayıtları bulun.
               </p>
             )}
           </div>

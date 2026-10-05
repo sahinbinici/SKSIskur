@@ -9,6 +9,7 @@ public record IskurListeResponse(
         boolean yuklendi,
         long kayitSayisi,
         Instant yuklemeTarihi,
+        long eslesenSayisi,
         List<Satir> onizleme
 ) {
     public record Satir(

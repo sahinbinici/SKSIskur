@@ -26,6 +26,7 @@ export type IskurListe = {
   yuklendi: boolean;
   kayitSayisi: number;
   yuklemeTarihi: string | null;
+  eslesenSayisi: number;
   onizleme: { tcKimlikNo: string | null; ad: string; soyad: string; ogrenciNo: string | null }[];
 };
 
