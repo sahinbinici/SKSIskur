@@ -26,8 +26,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -36,20 +34,18 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 @Service
 public class AdminExportService {
 
-    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale.forLanguageTag("tr-TR"));
-
     private final AdminApplicationService adminApplicationService;
     private final TakipService takipService;
     private final IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository;
     private final BasvuruDonemiService basvuruDonemiService;
     private final ExcelExportService excelExportService;
+    private final CetvelExcelExportService cetvelExcelExportService;
     private final FileStorageService fileStorageService;
 
     public AdminExportService(
@@ -58,6 +54,7 @@ public class AdminExportService {
             IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository,
             BasvuruDonemiService basvuruDonemiService,
             ExcelExportService excelExportService,
+            CetvelExcelExportService cetvelExcelExportService,
             FileStorageService fileStorageService
     ) {
         this.adminApplicationService = adminApplicationService;
@@ -65,6 +62,7 @@ public class AdminExportService {
         this.iskurBasvuruKaydiRepository = iskurBasvuruKaydiRepository;
         this.basvuruDonemiService = basvuruDonemiService;
         this.excelExportService = excelExportService;
+        this.cetvelExcelExportService = cetvelExcelExportService;
         this.fileStorageService = fileStorageService;
     }
 
@@ -316,40 +314,7 @@ public class AdminExportService {
     }
 
     private byte[] aylikRaporWorkbook(BirimAylikRaporResponse rapor) {
-        List<String> ekuantHeaders = List.of(
-                "Sıra", "Öğrenci No", "T.C. Kimlik", "Ad", "Soyad", "IBAN", "EK-6 Günleri", "Gün Sayısı"
-        );
-        List<String> puantajHeaders = List.of(
-                "Sıra", "Öğrenci No", "T.C. Kimlik", "Ad", "Soyad", "Geldiği Günler", "Gün Sayısı", "Toplam Saat"
-        );
-        List<List<Object>> ekuantRows = new ArrayList<>();
-        List<List<Object>> puantajRows = new ArrayList<>();
-        for (BirimAylikRaporResponse.RaporOgrenci ogrenci : rapor.ogrenciler()) {
-            ekuantRows.add(excelRow(
-                    ogrenci.siraNo(),
-                    ogrenci.ogrenciNo(),
-                    ogrenci.tcKimlikNo(),
-                    ogrenci.ad(),
-                    ogrenci.soyad(),
-                    ogrenci.iban(),
-                    formatDays(ogrenci.ekuantGunler()),
-                    ogrenci.ekuantGunler().size()
-            ));
-            puantajRows.add(excelRow(
-                    ogrenci.siraNo(),
-                    ogrenci.ogrenciNo(),
-                    ogrenci.tcKimlikNo(),
-                    ogrenci.ad(),
-                    ogrenci.soyad(),
-                    formatDays(ogrenci.geldiGunler()),
-                    ogrenci.toplamGun(),
-                    ogrenci.toplamSaat()
-            ));
-        }
-        return excelExportService.workbook(List.of(
-                new ExcelExportService.SheetSpec("EK-6", ekuantHeaders, ekuantRows),
-                new ExcelExportService.SheetSpec("Puantaj", puantajHeaders, puantajRows)
-        ));
+        return cetvelExcelExportService.workbook(rapor);
     }
 
     @Transactional(readOnly = true)
@@ -411,10 +376,6 @@ public class AdminExportService {
     private static String kesinListeLabel(Boolean kesinListede) {
         if (kesinListede == null) return "Karşılaştırma bekliyor";
         return kesinListede ? "Evet" : "Hayır";
-    }
-
-    private static String formatDays(List<LocalDate> days) {
-        return days.stream().map(DAY::format).collect(Collectors.joining(", "));
     }
 
     private static String faculty(String fakulte, String program, String bolum) {
