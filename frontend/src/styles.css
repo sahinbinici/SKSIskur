@@ -707,8 +707,18 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  align-items: center;
+  align-items: flex-end;
   margin-bottom: 16px;
+  overflow: visible;
+}
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 220px;
+}
+.filter-field .filter-label {
+  margin: 0;
 }
 .filter-bar select,
 .filter-bar input {
@@ -729,7 +739,9 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 .search-select {
   position: relative;
   min-width: 260px;
-  max-width: 360px;
+  max-width: 420px;
+  z-index: 20;
+  text-transform: none;
 }
 .search-select-trigger,
 .search-select input {
@@ -759,7 +771,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 }
 .search-select-list {
   position: absolute;
-  z-index: 30;
+  z-index: 80;
   top: calc(100% + 4px);
   left: 0;
   right: 0;

@@ -26,7 +26,6 @@ export function SearchableSelect({
   emptyLabel = "Sonuç yok"
 }: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -65,6 +64,7 @@ export function SearchableSelect({
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
+      setOpen(true);
       setActive((index) => Math.min(index + 1, Math.max(filtered.length - 1, 0)));
       return;
     }
@@ -87,29 +87,22 @@ export function SearchableSelect({
 
   return (
     <div className={`search-select${open ? " open" : ""}`} ref={rootRef}>
-      {open ? (
-        <input
-          ref={inputRef}
-          value={query}
-          placeholder={placeholder}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={onKeyDown}
-          autoFocus
-          aria-expanded="true"
-          aria-autocomplete="list"
-        />
-      ) : (
-        <button
-          type="button"
-          className="search-select-trigger"
-          onClick={() => {
-            setOpen(true);
-            window.setTimeout(() => inputRef.current?.focus(), 0);
-          }}
-        >
-          <span>{selected?.label || placeholder}</span>
-        </button>
-      )}
+      <input
+        value={open ? query : selected?.label ?? ""}
+        placeholder={placeholder}
+        onFocus={() => {
+          setOpen(true);
+          setQuery("");
+        }}
+        onChange={(event) => {
+          setOpen(true);
+          setQuery(event.target.value);
+        }}
+        onKeyDown={onKeyDown}
+        aria-expanded={open}
+        aria-autocomplete="list"
+        autoComplete="off"
+      />
       {open && (
         <ul className="search-select-list" role="listbox">
           {filtered.map((option, index) => (
@@ -119,6 +112,7 @@ export function SearchableSelect({
                 className={index === active ? "active" : ""}
                 role="option"
                 aria-selected={option.value === value}
+                onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => setActive(index)}
                 onClick={() => choose(option.value)}
               >

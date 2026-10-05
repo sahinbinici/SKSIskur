@@ -272,19 +272,19 @@ export function AdminTakipPage() {
             ))}
           </select>
         </label>
-        <label className="filter-label">
-          Birim
+        <div className="filter-field">
+          <span className="filter-label">Birim</span>
           <SearchableSelect
             value={birimKodu}
             onChange={setBirimKodu}
-            placeholder="Birim ara veya seç"
+            placeholder="Birim adı veya kodu yazın"
             emptyLabel="Eşleşen birim yok"
             options={[
               { value: "", label: "Tüm birimler" },
               ...units.map((unit) => ({ value: unit.kod, label: unit.ad, hint: `Kod ${unit.kod}` }))
             ]}
           />
-        </label>
+        </div>
       </div>
       <AdminProcessNav />
 

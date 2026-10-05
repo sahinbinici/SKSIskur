@@ -253,7 +253,14 @@ export function AdminBasvuruToolbar(props: Props) {
 
       <FilterChips
         items={[
-          selectedPeriod ? { label: selectedPeriod.ad, onClear: () => { setPeriodId(undefined); void runLoad(status, query, undefined); } } : { label: "" },
+          selectedPeriod ? {
+            label: selectedPeriod.ad,
+            onClear: () => {
+              const active = periods.find((period) => period.aktif)?.id;
+              setPeriodId(active);
+              void runLoad(status, query, active);
+            }
+          } : { label: "" },
           fakulte ? { label: fakulte, onClear: () => { setFakulte(""); void runLoad(status, query, periodId, onlyMine, belgeTipi, belgeYukleme, ""); } } : { label: "" },
           status ? { label: STATUS_LABEL[status], onClear: () => { setStatus(""); void runLoad("", query); } } : { label: "" },
           onlyMine ? { label: "Bana atananlar", onClear: () => { setOnlyMine(false); void runLoad(status, query, periodId, false); } } : { label: "" },
