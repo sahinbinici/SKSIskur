@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusBadge, formatDate } from "../../components/ui";
@@ -70,6 +70,10 @@ export function BasvuruTable({
   const [sortKey, setSortKey] = useState<"name" | "date">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const belgeColumnTitle = ADMIN_BELGE_TIPLERI.find((belge) => belge.type === belgeTipi)?.title ?? "Belgeler";
+
+  useEffect(() => {
+    setPage(1);
+  }, [items]);
 
   const sorted = useMemo(() => {
     const next = [...items];

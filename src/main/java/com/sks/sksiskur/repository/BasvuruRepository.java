@@ -97,16 +97,27 @@ public interface BasvuruRepository extends JpaRepository<Basvuru, Long> {
             JOIN FETCH b.student s
             WHERE b.basvuruDonemi.id = :donemId
               AND (:status IS NULL OR b.status = :status)
+              AND (:fakulte IS NULL OR :fakulte = '' OR s.fakulte = :fakulte)
               AND (
                     :q IS NULL OR :q = ''
                     OR LOWER(s.ogrenciNo) LIKE LOWER(CONCAT('%', :q, '%'))
+                    OR s.tcKimlikNo LIKE CONCAT('%', :q, '%')
                     OR LOWER(s.ad) LIKE LOWER(CONCAT('%', :q, '%'))
                     OR LOWER(s.soyad) LIKE LOWER(CONCAT('%', :q, '%'))
                     OR LOWER(CONCAT(s.ad, ' ', s.soyad)) LIKE LOWER(CONCAT('%', :q, '%'))
+                    OR LOWER(CONCAT(s.soyad, ' ', s.ad)) LIKE LOWER(CONCAT('%', :q, '%'))
+                    OR LOWER(COALESCE(s.fakulte, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+                    OR LOWER(COALESCE(s.bolum, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+                    OR LOWER(COALESCE(s.program, '')) LIKE LOWER(CONCAT('%', :q, '%'))
               )
             ORDER BY b.guncellemeTarihi DESC
             """)
-    List<Basvuru> search(@Param("donemId") Long donemId, @Param("status") ApplicationStatus status, @Param("q") String q);
+    List<Basvuru> search(
+            @Param("donemId") Long donemId,
+            @Param("status") ApplicationStatus status,
+            @Param("q") String q,
+            @Param("fakulte") String fakulte
+    );
 
     @EntityGraph(attributePaths = {"student", "belgeler", "atananAdmin"})
     @Query("""
@@ -115,15 +126,35 @@ public interface BasvuruRepository extends JpaRepository<Basvuru, Long> {
             WHERE b.basvuruDonemi.id = :donemId
               AND b.atananAdmin.username = :username
               AND (:status IS NULL OR b.status = :status)
+              AND (:fakulte IS NULL OR :fakulte = '' OR s.fakulte = :fakulte)
               AND (
                     :q IS NULL OR :q = ''
                     OR LOWER(s.ogrenciNo) LIKE LOWER(CONCAT('%', :q, '%'))
+                    OR s.tcKimlikNo LIKE CONCAT('%', :q, '%')
                     OR LOWER(s.ad) LIKE LOWER(CONCAT('%', :q, '%'))
                     OR LOWER(s.soyad) LIKE LOWER(CONCAT('%', :q, '%'))
                     OR LOWER(CONCAT(s.ad, ' ', s.soyad)) LIKE LOWER(CONCAT('%', :q, '%'))
+                    OR LOWER(CONCAT(s.soyad, ' ', s.ad)) LIKE LOWER(CONCAT('%', :q, '%'))
+                    OR LOWER(COALESCE(s.fakulte, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+                    OR LOWER(COALESCE(s.bolum, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+                    OR LOWER(COALESCE(s.program, '')) LIKE LOWER(CONCAT('%', :q, '%'))
               )
             ORDER BY b.guncellemeTarihi DESC
             """)
-    List<Basvuru> searchAssignedTo(@Param("donemId") Long donemId, @Param("status") ApplicationStatus status,
-                                   @Param("q") String q, @Param("username") String username);
+    List<Basvuru> searchAssignedTo(
+            @Param("donemId") Long donemId,
+            @Param("status") ApplicationStatus status,
+            @Param("q") String q,
+            @Param("fakulte") String fakulte,
+            @Param("username") String username
+    );
+
+    @Query("""
+            SELECT DISTINCT s.fakulte FROM Basvuru b
+            JOIN b.student s
+            WHERE b.basvuruDonemi.id = :donemId
+              AND s.fakulte IS NOT NULL AND s.fakulte <> ''
+            ORDER BY s.fakulte
+            """)
+    List<String> distinctFakulteler(@Param("donemId") Long donemId);
 }

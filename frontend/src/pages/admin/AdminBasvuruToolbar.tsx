@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { api, ApiError, downloadAuthenticatedFile } from "../../api";
 import { FilterChips } from "../../components/FilterChips";
 import {
@@ -25,6 +26,9 @@ type Props = {
   setBelgeTipi: (value: DocumentType | "") => void;
   belgeYukleme: BelgeYuklemeFiltre;
   setBelgeYukleme: (value: BelgeYuklemeFiltre) => void;
+  fakulte: string;
+  setFakulte: (value: string) => void;
+  fakulteler: string[];
   itemsCount: number;
   setError: (message: string) => void;
   load: (
@@ -33,7 +37,8 @@ type Props = {
     nextPeriodId?: number,
     nextOnlyMine?: boolean,
     nextBelgeTipi?: DocumentType | "",
-    nextBelgeYukleme?: BelgeYuklemeFiltre
+    nextBelgeYukleme?: BelgeYuklemeFiltre,
+    nextFakulte?: string
   ) => Promise<void>;
 };
 
@@ -41,8 +46,10 @@ export function AdminBasvuruToolbar(props: Props) {
   const {
     mode, periods, periodId, setPeriodId, onlyMine, setOnlyMine,
     status, setStatus, query, setQuery, belgeTipi, setBelgeTipi, belgeYukleme, setBelgeYukleme,
-    itemsCount, setError, load
+    fakulte, setFakulte, fakulteler, itemsCount, setError, load
   } = props;
+  const debounceRef = useRef<number | undefined>(undefined);
+  const skipQueryDebounce = useRef(true);
 
   const selectedPeriod = periods.find((period) => period.id === periodId);
   const selectedBelge = ADMIN_BELGE_TIPLERI.find((belge) => belge.type === belgeTipi);
@@ -54,14 +61,27 @@ export function AdminBasvuruToolbar(props: Props) {
     nextPeriodId = periodId,
     nextOnlyMine = onlyMine,
     nextBelgeTipi = belgeTipi,
-    nextBelgeYukleme = belgeYukleme
+    nextBelgeYukleme = belgeYukleme,
+    nextFakulte = fakulte
   ) {
     try {
-      await load(nextStatus, nextQuery, nextPeriodId, nextOnlyMine, nextBelgeTipi, nextBelgeYukleme);
+      await load(nextStatus, nextQuery, nextPeriodId, nextOnlyMine, nextBelgeTipi, nextBelgeYukleme, nextFakulte);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Liste alınamadı.");
     }
   }
+
+  useEffect(() => {
+    if (skipQueryDebounce.current) {
+      skipQueryDebounce.current = false;
+      return;
+    }
+    window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(() => {
+      void runLoad();
+    }, 350);
+    return () => window.clearTimeout(debounceRef.current);
+  }, [query]);
 
   return (
     <>
@@ -87,6 +107,22 @@ export function AdminBasvuruToolbar(props: Props) {
               </select>
             </label>
             <label className="filter-label">
+              Fakülte
+              <select
+                value={fakulte}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setFakulte(next);
+                  void runLoad(status, query, periodId, onlyMine, belgeTipi, belgeYukleme, next);
+                }}
+              >
+                <option value="">Tümü</option>
+                {fakulteler.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="filter-label">
               Durum
               <select
                 value={status}
@@ -107,7 +143,7 @@ export function AdminBasvuruToolbar(props: Props) {
             <label className="filter-label filter-label-grow">
               Ara
               <input
-                placeholder="Ad, soyad veya öğrenci no"
+                placeholder="Ad, soyad, T.C. veya öğrenci no"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => {
@@ -129,6 +165,9 @@ export function AdminBasvuruToolbar(props: Props) {
             </label>
             <button type="button" className="btn btn-primary" onClick={() => void runLoad()}>Ara</button>
           </div>
+          <p className="filter-panel-note" style={{ marginTop: 8 }}>
+            Arama ad, soyad, T.C. ve öğrenci numarasında çalışır. İnceleme sekmesi varsayılan olarak yalnızca incelemedeki kayıtları gösterir; tüm öğrenciler için Durum = Tümü seçin.
+          </p>
         </div>
 
         {mode === "export" && (
@@ -183,7 +222,7 @@ export function AdminBasvuruToolbar(props: Props) {
                 className="btn btn-gold"
                 disabled={itemsCount === 0}
                 onClick={() => downloadAuthenticatedFile(
-                  api.adminBasvurularExcelUrl(status, query, periodId, onlyMine, belgeTipi, belgeYukleme),
+                  api.adminBasvurularExcelUrl(status, query, periodId, onlyMine, belgeTipi, belgeYukleme, fakulte),
                   "basvurular.xlsx"
                 ).catch((err) => setError(err instanceof ApiError ? err.message : "Excel indirilemedi."))}
               >
@@ -195,7 +234,7 @@ export function AdminBasvuruToolbar(props: Props) {
                   className="btn btn-gold"
                   disabled={itemsCount === 0 || belgeYukleme === "YOK"}
                   onClick={() => downloadAuthenticatedFile(
-                    api.adminBasvurularBelgeZipUrl(status, query, periodId, onlyMine, belgeTipi, belgeYukleme),
+                    api.adminBasvurularBelgeZipUrl(status, query, periodId, onlyMine, belgeTipi, belgeYukleme, fakulte),
                     api.adminBasvurularBelgeZipFilename(belgeTipi)
                   ).catch((err) => setError(err instanceof ApiError ? err.message : "Dosyalar indirilemedi."))}
                 >
@@ -215,6 +254,7 @@ export function AdminBasvuruToolbar(props: Props) {
       <FilterChips
         items={[
           selectedPeriod ? { label: selectedPeriod.ad, onClear: () => { setPeriodId(undefined); void runLoad(status, query, undefined); } } : { label: "" },
+          fakulte ? { label: fakulte, onClear: () => { setFakulte(""); void runLoad(status, query, periodId, onlyMine, belgeTipi, belgeYukleme, ""); } } : { label: "" },
           status ? { label: STATUS_LABEL[status], onClear: () => { setStatus(""); void runLoad("", query); } } : { label: "" },
           onlyMine ? { label: "Bana atananlar", onClear: () => { setOnlyMine(false); void runLoad(status, query, periodId, false); } } : { label: "" },
           query.trim() ? { label: `Arama: ${query.trim()}`, onClear: () => { setQuery(""); void runLoad(status, ""); } } : { label: "" },

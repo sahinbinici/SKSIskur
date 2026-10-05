@@ -156,7 +156,8 @@ export const api = {
     donemId?: number,
     banaAtanan = false,
     belgeTipi?: DocumentType | "",
-    belgeYukleme?: BelgeYuklemeFiltre
+    belgeYukleme?: BelgeYuklemeFiltre,
+    fakulte?: string
   ) => {
     const params = new URLSearchParams();
     if (status) params.set("status", status);
@@ -165,6 +166,7 @@ export const api = {
     if (banaAtanan) params.set("banaAtanan", "true");
     if (belgeTipi) params.set("belgeTipi", belgeTipi);
     if (belgeYukleme && belgeYukleme !== "TUMU") params.set("belgeYukleme", belgeYukleme);
+    if (fakulte) params.set("fakulte", fakulte);
     return params;
   },
   adminBasvurularExcelUrl: (
@@ -173,9 +175,10 @@ export const api = {
     donemId?: number,
     banaAtanan = false,
     belgeTipi?: DocumentType | "",
-    belgeYukleme?: BelgeYuklemeFiltre
+    belgeYukleme?: BelgeYuklemeFiltre,
+    fakulte?: string
   ) => {
-    const query = api.adminBasvuruQueryParams(status, q, donemId, banaAtanan, belgeTipi, belgeYukleme).toString();
+    const query = api.adminBasvuruQueryParams(status, q, donemId, banaAtanan, belgeTipi, belgeYukleme, fakulte).toString();
     return `/api/admin/basvurular.xlsx${query ? `?${query}` : ""}`;
   },
   adminBasvurularBelgeZipUrl: (
@@ -184,9 +187,10 @@ export const api = {
     donemId?: number,
     banaAtanan = false,
     belgeTipi?: DocumentType | "",
-    belgeYukleme?: BelgeYuklemeFiltre
+    belgeYukleme?: BelgeYuklemeFiltre,
+    fakulte?: string
   ) => {
-    const query = api.adminBasvuruQueryParams(status, q, donemId, banaAtanan, belgeTipi, belgeYukleme).toString();
+    const query = api.adminBasvuruQueryParams(status, q, donemId, banaAtanan, belgeTipi, belgeYukleme, fakulte).toString();
     return `/api/admin/basvurular-belgeler.zip${query ? `?${query}` : ""}`;
   },
   adminBasvurularBelgeZipFilename: (belgeTipi: DocumentType) =>
@@ -208,11 +212,14 @@ export const api = {
     donemId?: number,
     banaAtanan = false,
     belgeTipi?: DocumentType | "",
-    belgeYukleme?: BelgeYuklemeFiltre
+    belgeYukleme?: BelgeYuklemeFiltre,
+    fakulte?: string
   ) => {
-    const query = api.adminBasvuruQueryParams(status, q, donemId, banaAtanan, belgeTipi, belgeYukleme).toString();
+    const query = api.adminBasvuruQueryParams(status, q, donemId, banaAtanan, belgeTipi, belgeYukleme, fakulte).toString();
     return request<Basvuru[]>(`/api/admin/basvurular${query ? `?${query}` : ""}`);
   },
+  adminFakulteler: (donemId?: number) =>
+    request<string[]>(`/api/admin/basvurular/fakulteler${donemId ? `?donemId=${donemId}` : ""}`),
   adminGet: (id: number) => request<Basvuru>(`/api/admin/basvurular/${id}`),
   adminRefreshOcr: (id: number) => request<Basvuru>(`/api/admin/basvurular/${id}/ocr-kontrol`, { method: "POST" }),
   yoneticiler: () => request<AdminUser[]>("/api/admin/yoneticiler"),

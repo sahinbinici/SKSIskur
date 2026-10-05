@@ -41,6 +41,9 @@ export function AdminDashboard() {
     setBelgeTipi,
     belgeYukleme,
     setBelgeYukleme,
+    fakulte,
+    setFakulte,
+    fakulteler,
     load
   } = useAdminBasvuruList(mode === "export" ? "" : "SUBMITTED");
   const prevMode = useRef(mode);
@@ -58,14 +61,14 @@ export function AdminDashboard() {
     if (mode === "export") {
       setStatus("");
       setOnlyMine(false);
-      void load("", query, periodId, false, belgeTipi, belgeYukleme).catch((err) =>
+      void load("", query, periodId, false, belgeTipi, belgeYukleme, fakulte).catch((err) =>
         setError(err instanceof ApiError ? err.message : "Liste alınamadı.")
       );
       return;
     }
     setStatus("SUBMITTED");
     setOnlyMine(false);
-    void load("SUBMITTED", query, periodId, false, belgeTipi, belgeYukleme).catch((err) =>
+    void load("SUBMITTED", query, periodId, false, belgeTipi, belgeYukleme, fakulte).catch((err) =>
       setError(err instanceof ApiError ? err.message : "Liste alınamadı.")
     );
   }, [mode]);
@@ -75,6 +78,7 @@ export function AdminDashboard() {
   const filterLabel = [
     status ? STATUS_LABEL[status] : "Tümü",
     query.trim() ? `Arama: ${query.trim()}` : "",
+    fakulte ? `Fakülte: ${fakulte}` : "",
     selectedBelge && belgeYukleme !== "TUMU"
       ? `${selectedBelge.title}: ${BELGE_YUKLEME_FILTRE_LABEL[belgeYukleme]}`
       : selectedBelge
@@ -88,7 +92,7 @@ export function AdminDashboard() {
     if (next === "ASSIGNED") {
       setOnlyMine(true);
       setStatus("");
-      void load("", query, periodId, true, belgeTipi, belgeYukleme).catch((err) =>
+      void load("", query, periodId, true, belgeTipi, belgeYukleme, fakulte).catch((err) =>
         setError(err instanceof ApiError ? err.message : "Liste alınamadı.")
       );
       return;
@@ -96,7 +100,7 @@ export function AdminDashboard() {
     setOnlyMine(false);
     const nextStatus = next === "ALL" ? "" : next;
     setStatus(nextStatus);
-    void load(nextStatus, query, periodId, false, belgeTipi, belgeYukleme).catch((err) =>
+    void load(nextStatus, query, periodId, false, belgeTipi, belgeYukleme, fakulte).catch((err) =>
       setError(err instanceof ApiError ? err.message : "Liste alınamadı.")
     );
   }
@@ -161,6 +165,9 @@ export function AdminDashboard() {
           setBelgeTipi={setBelgeTipi}
           belgeYukleme={belgeYukleme}
           setBelgeYukleme={setBelgeYukleme}
+          fakulte={fakulte}
+          setFakulte={setFakulte}
+          fakulteler={fakulteler}
           itemsCount={items.length}
           setError={setError}
           load={load}

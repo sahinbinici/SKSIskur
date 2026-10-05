@@ -100,10 +100,11 @@ public class AdminApplicationService {
             String query,
             String assignedTo,
             DocumentType belgeTipi,
-            BelgeYuklemeFiltre belgeYukleme
+            BelgeYuklemeFiltre belgeYukleme,
+            String fakulte
     ) {
         return filterByBelge(
-                searchBasvurular(donemId, status, query, assignedTo).stream().map(mapper::toBasvuru).toList(),
+                searchBasvurular(donemId, status, query, assignedTo, fakulte).stream().map(mapper::toBasvuru).toList(),
                 belgeTipi,
                 belgeYukleme
         );
@@ -116,22 +117,31 @@ public class AdminApplicationService {
             String query,
             String assignedTo,
             DocumentType belgeTipi,
-            BelgeYuklemeFiltre belgeYukleme
+            BelgeYuklemeFiltre belgeYukleme,
+            String fakulte
     ) {
-        return filterBasvurularByBelge(searchBasvurular(donemId, status, query, assignedTo), belgeTipi, belgeYukleme);
+        return filterBasvurularByBelge(searchBasvurular(donemId, status, query, assignedTo, fakulte), belgeTipi, belgeYukleme);
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> fakulteler(Long donemId) {
+        BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
+        return basvuruRepository.distinctFakulteler(donem.getId());
     }
 
     private List<Basvuru> searchBasvurular(
             Long donemId,
             ApplicationStatus status,
             String query,
-            String assignedTo
+            String assignedTo,
+            String fakulte
     ) {
         BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
-        String q = query == null ? "" : query.trim();
+        String q = query == null ? "" : query.trim().replaceAll("\\s+", " ");
+        String faculty = fakulte == null || fakulte.isBlank() ? "" : fakulte.trim();
         return assignedTo == null
-                ? basvuruRepository.search(donem.getId(), status, q)
-                : basvuruRepository.searchAssignedTo(donem.getId(), status, q, assignedTo);
+                ? basvuruRepository.search(donem.getId(), status, q, faculty)
+                : basvuruRepository.searchAssignedTo(donem.getId(), status, q, faculty, assignedTo);
     }
 
     static List<BasvuruResponse> filterByBelge(

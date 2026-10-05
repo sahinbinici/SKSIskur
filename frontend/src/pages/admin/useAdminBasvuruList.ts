@@ -14,6 +14,8 @@ export function useAdminBasvuruList(initialStatus: ApplicationStatus | "" = "SUB
   const [onlyMine, setOnlyMine] = useState(false);
   const [belgeTipi, setBelgeTipi] = useState<DocumentType | "">("");
   const [belgeYukleme, setBelgeYukleme] = useState<BelgeYuklemeFiltre>("TUMU");
+  const [fakulte, setFakulte] = useState("");
+  const [fakulteler, setFakulteler] = useState<string[]>([]);
 
   async function load(
     nextStatus = status,
@@ -21,13 +23,14 @@ export function useAdminBasvuruList(initialStatus: ApplicationStatus | "" = "SUB
     nextPeriodId = periodId,
     nextOnlyMine = onlyMine,
     nextBelgeTipi = belgeTipi,
-    nextBelgeYukleme = belgeYukleme
+    nextBelgeYukleme = belgeYukleme,
+    nextFakulte = fakulte
   ) {
     setLoading(true);
     try {
       const [summary, list] = await Promise.all([
         api.adminSummary(nextPeriodId),
-        api.adminList(nextStatus, nextQuery, nextPeriodId, nextOnlyMine, nextBelgeTipi, nextBelgeYukleme)
+        api.adminList(nextStatus, nextQuery, nextPeriodId, nextOnlyMine, nextBelgeTipi, nextBelgeYukleme, nextFakulte)
       ]);
       setOzet(summary);
       setItems(list);
@@ -53,6 +56,12 @@ export function useAdminBasvuruList(initialStatus: ApplicationStatus | "" = "SUB
       .catch((err) => setError(err instanceof ApiError ? err.message : "Dönemler yüklenemedi."));
   }, []);
 
+  useEffect(() => {
+    api.adminFakulteler(periodId)
+      .then(setFakulteler)
+      .catch(() => setFakulteler([]));
+  }, [periodId]);
+
   return {
     ozet,
     items,
@@ -72,6 +81,9 @@ export function useAdminBasvuruList(initialStatus: ApplicationStatus | "" = "SUB
     setBelgeTipi,
     belgeYukleme,
     setBelgeYukleme,
+    fakulte,
+    setFakulte,
+    fakulteler,
     load
   };
 }

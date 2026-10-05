@@ -73,10 +73,11 @@ public class AdminExportService {
             String query,
             String assignedTo,
             DocumentType belgeTipi,
-            BelgeYuklemeFiltre belgeYukleme
+            BelgeYuklemeFiltre belgeYukleme,
+            String fakulte
     ) {
         List<BasvuruResponse> items = adminApplicationService.list(
-                donemId, status, query, assignedTo, belgeTipi, belgeYukleme);
+                donemId, status, query, assignedTo, belgeTipi, belgeYukleme, fakulte);
         List<String> headers = List.of(
                 "Sıra", "Öğrenci No", "T.C. Kimlik", "Ad", "Soyad", "Fakülte / Bölüm",
                 "Atanan Birim", "İnceleme Sorumlusu", "Durum", "Kayıt", "Belge", "Gönderim"
@@ -109,7 +110,8 @@ public class AdminExportService {
             String query,
             String assignedTo,
             DocumentType belgeTipi,
-            BelgeYuklemeFiltre belgeYukleme
+            BelgeYuklemeFiltre belgeYukleme,
+            String fakulte
     ) {
         if (belgeTipi == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Toplu indirme için belge türü seçmelisiniz.");
@@ -118,7 +120,7 @@ public class AdminExportService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Eksik belge filtresinde indirilecek dosya bulunmaz.");
         }
         List<Basvuru> basvurular = adminApplicationService.listBasvurular(
-                donemId, status, query, assignedTo, belgeTipi, belgeYukleme);
+                donemId, status, query, assignedTo, belgeTipi, belgeYukleme, fakulte);
         String belgeFolder = belgeTipi.name().toLowerCase(Locale.ROOT);
         try (ByteArrayOutputStream output = new ByteArrayOutputStream(); ZipOutputStream zip = new ZipOutputStream(output)) {
             Set<String> usedNames = new HashSet<>();

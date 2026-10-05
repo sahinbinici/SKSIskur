@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError, downloadAuthenticatedFile } from "../api";
 import { useConfirm } from "../components/ConfirmDialog";
-import { FilterChips } from "../components/FilterChips";
+import { SearchableSelect } from "../components/SearchableSelect";
 import { ActionCard, PageHeader } from "../components/PageHeader";
 import { AdminProcessNav } from "../components/AdminProcessNav";
 import { OgrenciKimlikMeta, Shell } from "../components/ui";
@@ -274,12 +274,16 @@ export function AdminTakipPage() {
         </label>
         <label className="filter-label">
           Birim
-          <select value={birimKodu} onChange={(e) => setBirimKodu(e.target.value)} style={{ maxWidth: 280 }}>
-            <option value="">Tüm birimler</option>
-            {units.map((unit) => (
-              <option key={unit.kod} value={unit.kod}>{unit.ad}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            value={birimKodu}
+            onChange={setBirimKodu}
+            placeholder="Birim ara veya seç"
+            emptyLabel="Eşleşen birim yok"
+            options={[
+              { value: "", label: "Tüm birimler" },
+              ...units.map((unit) => ({ value: unit.kod, label: unit.ad, hint: `Kod ${unit.kod}` }))
+            ]}
+          />
         </label>
       </div>
       <AdminProcessNav />

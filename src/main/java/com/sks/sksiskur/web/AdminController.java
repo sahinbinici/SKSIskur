@@ -254,10 +254,16 @@ public class AdminController {
             @RequestParam(defaultValue = "false") boolean banaAtanan,
             @RequestParam(required = false) DocumentType belgeTipi,
             @RequestParam(required = false) BelgeYuklemeFiltre belgeYukleme,
+            @RequestParam(required = false) String fakulte,
             Authentication authentication
     ) {
         return adminApplicationService.list(
-                donemId, status, q, banaAtanan ? username(authentication) : null, belgeTipi, belgeYukleme);
+                donemId, status, q, banaAtanan ? username(authentication) : null, belgeTipi, belgeYukleme, fakulte);
+    }
+
+    @GetMapping("/basvurular/fakulteler")
+    public List<String> basvuruFakulteler(@RequestParam(required = false) Long donemId) {
+        return adminApplicationService.fakulteler(donemId);
     }
 
     @GetMapping("/basvurular.xlsx")
@@ -268,6 +274,7 @@ public class AdminController {
             @RequestParam(defaultValue = "false") boolean banaAtanan,
             @RequestParam(required = false) DocumentType belgeTipi,
             @RequestParam(required = false) BelgeYuklemeFiltre belgeYukleme,
+            @RequestParam(required = false) String fakulte,
             Authentication authentication
     ) {
         return excelAttachment(adminExportService.basvurularExcel(
@@ -276,7 +283,8 @@ public class AdminController {
                 q,
                 banaAtanan ? username(authentication) : null,
                 belgeTipi,
-                belgeYukleme
+                belgeYukleme,
+                fakulte
         ), "basvurular.xlsx");
     }
 
@@ -288,6 +296,7 @@ public class AdminController {
             @RequestParam(defaultValue = "false") boolean banaAtanan,
             @RequestParam(required = false) DocumentType belgeTipi,
             @RequestParam(required = false) BelgeYuklemeFiltre belgeYukleme,
+            @RequestParam(required = false) String fakulte,
             Authentication authentication
     ) {
         String filename = "basvurular-" + belgeTipi.name().toLowerCase() + ".zip";
@@ -297,7 +306,8 @@ public class AdminController {
                 q,
                 banaAtanan ? username(authentication) : null,
                 belgeTipi,
-                belgeYukleme
+                belgeYukleme,
+                fakulte
         ), filename, "application/zip");
     }
 
