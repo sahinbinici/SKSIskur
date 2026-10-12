@@ -309,7 +309,7 @@ export function EkuantSheet({
           <col className="col-name" />
           {weeks.flatMap((week, wi) => week.map((_, di) => (
             <col key={`ek-${wi}-${di}`} className="col-day" />
-          ))}
+          )))}
         </colgroup>
         <thead>
           <tr>
