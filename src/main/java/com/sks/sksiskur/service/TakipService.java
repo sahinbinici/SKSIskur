@@ -7,6 +7,7 @@ import com.sks.sksiskur.domain.PuantajDurum;
 import com.sks.sksiskur.domain.TakipDonem;
 import com.sks.sksiskur.domain.TakipGun;
 import com.sks.sksiskur.domain.TakipKapaliGun;
+import com.sks.sksiskur.domain.TakipGirisKapsam;
 import com.sks.sksiskur.domain.TakipGirisPencere;
 import com.sks.sksiskur.domain.TakipCetvelTuru;
 import com.sks.sksiskur.domain.TakipStatus;
@@ -66,6 +67,8 @@ public class TakipService {
     private static final int MAX_IZIN_GUNU = 10;
 
     private static final ZoneId ZONE = ZoneId.of("Europe/Istanbul");
+    private static final int DONEM_PENCERE_YIL = 0;
+    private static final int DONEM_PENCERE_AY = 0;
 
     private final BasvuruRepository basvuruRepository;
     private final TakipDonemRepository takipDonemRepository;
@@ -339,13 +342,16 @@ public class TakipService {
         LocalDate puantajEnd = request.puantajBitis();
         assertRange("EK-6", ekuantStart, ekuantEnd);
         assertRange("Puantaj", puantajStart, puantajEnd);
+        TakipGirisKapsam kapsam = request.kapsam() == null ? TakipGirisKapsam.AYLIK : request.kapsam();
+        int storeYil = kapsam == TakipGirisKapsam.DONEMLIK ? DONEM_PENCERE_YIL : yil;
+        int storeAy = kapsam == TakipGirisKapsam.DONEMLIK ? DONEM_PENCERE_AY : ay;
         TakipGirisPencere window = takipGirisPencereRepository
-                .findByBasvuruDonemiIdAndYilAndAy(period.getId(), yil, ay)
+                .findByBasvuruDonemiIdAndYilAndAy(period.getId(), storeYil, storeAy)
                 .orElseGet(() -> {
                     TakipGirisPencere created = new TakipGirisPencere();
                     created.setBasvuruDonemi(period);
-                    created.setYil(yil);
-                    created.setAy(ay);
+                    created.setYil(storeYil);
+                    created.setAy(storeAy);
                     return created;
                 });
         window.setEkuantBaslangic(ekuantStart);
@@ -1418,27 +1424,57 @@ public class TakipService {
     }
 
     private TakipGirisPencereResponse toGirisPencere(Long periodId, int yil, int ay, boolean relaxed) {
-        TakipGirisPencere window = takipGirisPencereRepository
+        TakipGirisPencere monthly = takipGirisPencereRepository
                 .findByBasvuruDonemiIdAndYilAndAy(periodId, yil, ay)
                 .orElse(null);
-        LocalDate ekuantStart = window == null ? null : window.getEkuantBaslangic();
-        LocalDate ekuantEnd = window == null ? null : window.getEkuantBitis();
-        LocalDate puantajStart = window == null ? null : window.getPuantajBaslangic();
-        LocalDate puantajEnd = window == null ? null : window.getPuantajBitis();
+        TakipGirisPencere donemlik = takipGirisPencereRepository
+                .findByBasvuruDonemiIdAndYilAndAy(periodId, DONEM_PENCERE_YIL, DONEM_PENCERE_AY)
+                .orElse(null);
+        LocalDate ayEkuantStart = monthly == null ? null : monthly.getEkuantBaslangic();
+        LocalDate ayEkuantEnd = monthly == null ? null : monthly.getEkuantBitis();
+        LocalDate ayPuantajStart = monthly == null ? null : monthly.getPuantajBaslangic();
+        LocalDate ayPuantajEnd = monthly == null ? null : monthly.getPuantajBitis();
+        LocalDate donemEkuantStart = donemlik == null ? null : donemlik.getEkuantBaslangic();
+        LocalDate donemEkuantEnd = donemlik == null ? null : donemlik.getEkuantBitis();
+        LocalDate donemPuantajStart = donemlik == null ? null : donemlik.getPuantajBaslangic();
+        LocalDate donemPuantajEnd = donemlik == null ? null : donemlik.getPuantajBitis();
+        boolean ekuantAylik = completeRange(ayEkuantStart, ayEkuantEnd);
+        boolean puantajAylik = completeRange(ayPuantajStart, ayPuantajEnd);
+        LocalDate ekuantStart = ekuantAylik ? ayEkuantStart : donemEkuantStart;
+        LocalDate ekuantEnd = ekuantAylik ? ayEkuantEnd : donemEkuantEnd;
+        LocalDate puantajStart = puantajAylik ? ayPuantajStart : donemPuantajStart;
+        LocalDate puantajEnd = puantajAylik ? ayPuantajEnd : donemPuantajEnd;
         return new TakipGirisPencereResponse(
                 yil,
                 ay,
                 ekuantStart,
                 ekuantEnd,
                 relaxed || windowOpen(ekuantStart, ekuantEnd),
+                ekuantAylik ? "AYLIK" : completeRange(donemEkuantStart, donemEkuantEnd) ? "DONEMLIK" : "YOK",
                 puantajStart,
                 puantajEnd,
-                relaxed || windowOpen(puantajStart, puantajEnd)
+                relaxed || windowOpen(puantajStart, puantajEnd),
+                puantajAylik ? "AYLIK" : completeRange(donemPuantajStart, donemPuantajEnd) ? "DONEMLIK" : "YOK",
+                ayEkuantStart,
+                ayEkuantEnd,
+                ayPuantajStart,
+                ayPuantajEnd,
+                donemEkuantStart,
+                donemEkuantEnd,
+                donemPuantajStart,
+                donemPuantajEnd
         );
     }
 
+    private boolean completeRange(LocalDate start, LocalDate end) {
+        return start != null && end != null;
+    }
+
     private TakipGirisPencereResponse emptyGirisPencere(int yil, int ay, boolean relaxed) {
-        return new TakipGirisPencereResponse(yil, ay, null, null, relaxed, null, null, relaxed);
+        return new TakipGirisPencereResponse(
+                yil, ay, null, null, relaxed, "YOK", null, null, relaxed, "YOK",
+                null, null, null, null, null, null, null, null
+        );
     }
 
     private boolean windowOpen(LocalDate start, LocalDate end) {
