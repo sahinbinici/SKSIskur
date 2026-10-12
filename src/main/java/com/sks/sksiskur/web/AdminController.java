@@ -815,13 +815,14 @@ public class AdminController {
     public int takipOnaylaGonderilenler(
             @RequestParam int yil,
             @RequestParam int ay,
-            @RequestParam String birimKodu,
+            @RequestParam(required = false) String birimKodu,
             @RequestParam(required = false) Long donemId,
             Authentication authentication
     ) {
         int count = takipService.adminApproveSubmitted(donemId, birimKodu, yil, ay);
         auditLogService.logAdmin(authentication, IslemTuru.TAKIP_ONAY, "BIRIM", null,
-                "Toplu takip onayı: " + birimKodu + " " + yil + "-" + String.format("%02d", ay),
+                "Toplu takip onayı: " + (birimKodu == null || birimKodu.isBlank() ? "tüm birimler" : birimKodu)
+                        + " " + yil + "-" + String.format("%02d", ay),
                 count + " öğrenci");
         return count;
     }
@@ -844,13 +845,14 @@ public class AdminController {
     public int takipIadeGonderilenler(
             @RequestParam int yil,
             @RequestParam int ay,
-            @RequestParam String birimKodu,
+            @RequestParam(required = false) String birimKodu,
             @RequestParam(required = false) Long donemId,
             Authentication authentication
     ) {
         int count = takipService.adminReturnSubmitted(donemId, birimKodu, yil, ay);
         auditLogService.logAdmin(authentication, IslemTuru.TAKIP_IADE, "BIRIM", null,
-                "Toplu takip iadesi: " + birimKodu + " " + yil + "-" + String.format("%02d", ay),
+                "Toplu takip iadesi: " + (birimKodu == null || birimKodu.isBlank() ? "tüm birimler" : birimKodu)
+                        + " " + yil + "-" + String.format("%02d", ay),
                 count + " öğrenci");
         return count;
     }

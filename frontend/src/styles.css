@@ -798,16 +798,36 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
   border-radius: 8px;
   cursor: pointer;
 }
-.search-select.multi .search-select-list button {
+.search-select.multi .search-select-list button,
+.search-select-option {
   flex-direction: row;
   align-items: flex-start;
   gap: 8px;
 }
-.search-select.multi .search-select-list button span {
+.search-select.multi .search-select-list button span,
+.search-select-option span {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
+}
+.search-select-option {
+  width: 100%;
+  display: flex;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.search-select-option input {
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--navy);
+  cursor: pointer;
 }
 .search-select-actions {
   display: flex;

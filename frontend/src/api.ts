@@ -362,6 +362,7 @@ export const api = {
     yil: number,
     ay: number,
     body: {
+      kapsam: "AYLIK" | "DONEMLIK";
       ekuantBaslangic: string | null;
       ekuantBitis: string | null;
       puantajBaslangic: string | null;
@@ -439,8 +440,9 @@ export const api = {
     request<TakipDonem>(`/api/admin/takip/ogrenciler/${basvuruId}/onayla?yil=${yil}&ay=${ay}${donemId ? `&donemId=${donemId}` : ""}`, {
       method: "POST"
     }),
-  adminTakipOnaylaGonderilenler: (yil: number, ay: number, birimKodu: string, donemId?: number) => {
-    const params = new URLSearchParams({ yil: String(yil), ay: String(ay), birimKodu });
+  adminTakipOnaylaGonderilenler: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
+    const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
+    if (birimKodu) params.set("birimKodu", birimKodu);
     if (donemId) params.set("donemId", String(donemId));
     return request<number>(`/api/admin/takip/onayla-gonderilenler?${params}`, { method: "POST" });
   },
@@ -448,8 +450,9 @@ export const api = {
     request<TakipDonem>(`/api/admin/takip/ogrenciler/${basvuruId}/iade?yil=${yil}&ay=${ay}${donemId ? `&donemId=${donemId}` : ""}`, {
       method: "POST"
     }),
-  adminTakipIadeGonderilenler: (yil: number, ay: number, birimKodu: string, donemId?: number) => {
-    const params = new URLSearchParams({ yil: String(yil), ay: String(ay), birimKodu });
+  adminTakipIadeGonderilenler: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
+    const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
+    if (birimKodu) params.set("birimKodu", birimKodu);
     if (donemId) params.set("donemId", String(donemId));
     return request<number>(`/api/admin/takip/iade-gonderilenler?${params}`, { method: "POST" });
   },

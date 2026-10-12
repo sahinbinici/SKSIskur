@@ -288,9 +288,6 @@ public class AdminExportService {
 
     @Transactional(readOnly = true)
     public byte[] takipRaporExcel(Long donemId, String birimKodu, int yil, int ay) {
-        if (birimKodu == null || birimKodu.isBlank()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "EK-6 / puantaj Excel indirmek için en az bir birim seçilmelidir.");
-        }
         BirimAylikRaporResponse rapor = takipService.adminMonthlyReport(donemId, birimKodu, yil, ay);
         if (rapor.ogrenciler().isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Seçili birimde bu ay için öğrenci kaydı yok.");

@@ -160,7 +160,8 @@ public class IskurAylikRaporExportService {
         Sheet sheet = requireSheet(workbook, SHEET_DEVAMSIZLIK);
         setCell(getOrCreateRow(sheet, 0), 2, month.getYear());
         setCell(getOrCreateRow(sheet, 0), 15, MONTHS_TR[month.getMonthValue() - 1]);
-        clearRows(sheet, 6, clearEndRow(6, ogrenciler.size()), 1, 33);
+        int lastDataRow = clearEndRow(6, ogrenciler.size());
+        clearRows(sheet, 6, lastDataRow, 1, 33);
         int rowIndex = 6;
         for (int i = 0; i < ogrenciler.size(); i++) {
             BirimAylikRaporResponse.RaporOgrenci ogrenci = ogrenciler.get(i);
@@ -169,11 +170,20 @@ public class IskurAylikRaporExportService {
             setCell(row, 1, nullToEmpty(ogrenci.tcKimlikNo()));
             setCell(row, 2, adSoyad(ogrenci));
             Map<Integer, String> marks = dayMarks(ogrenci);
+            int filled = 0;
             for (int day = 1; day <= month.lengthOfMonth(); day++) {
                 String mark = marks.get(day);
                 if (mark != null) {
                     setCell(row, 2 + day, mark);
+                    filled++;
                 }
+            }
+            setCell(row, 34, filled);
+        }
+        for (int unused = rowIndex; unused <= lastDataRow; unused++) {
+            Row row = sheet.getRow(unused);
+            if (row != null) {
+                setCell(row, 34, 0);
             }
         }
     }

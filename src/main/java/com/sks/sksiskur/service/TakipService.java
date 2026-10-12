@@ -938,9 +938,6 @@ public class TakipService {
     public int adminApproveSubmitted(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
         YearMonth month = requireMonth(yil, ay);
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
-        if (unitCodes(birimKodu).isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "Toplu onay için en az bir birim seçilmelidir.");
-        }
         List<Basvuru> students = assignedKesin(birimKodu, period).stream()
                 .filter(basvuru -> basvuru.canWorkIn(month))
                 .toList();
@@ -994,9 +991,6 @@ public class TakipService {
     public int adminReturnSubmitted(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
         YearMonth month = requireMonth(yil, ay);
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
-        if (unitCodes(birimKodu).isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "Toplu iade için en az bir birim seçilmelidir.");
-        }
         List<Basvuru> students = assignedKesin(birimKodu, period).stream()
                 .filter(basvuru -> basvuru.canWorkIn(month))
                 .toList();

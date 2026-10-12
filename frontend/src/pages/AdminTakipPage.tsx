@@ -233,13 +233,11 @@ export function AdminTakipPage() {
   }
 
   async function returnSubmittedInUnit() {
-    if (!hasBirim) {
-      setError("Toplu iade için en az bir birim seçin.");
-      return;
-    }
     const ok = await confirm({
-      title: "Seçili birimlerdeki kayıtları iade et",
-      message: "Seçili birimlerde gönderilmiş ve onaylı tüm aylık kayıtlar taslağa alınır; birimler düzeltip yeniden gönderir.",
+      title: hasBirim ? "Seçili birimlerdeki kayıtları iade et" : "Tüm birimlerdeki kayıtları iade et",
+      message: hasBirim
+        ? "Seçili birimlerde gönderilmiş ve onaylı tüm aylık kayıtlar taslağa alınır; birimler düzeltip yeniden gönderir."
+        : "Tüm birimlerde gönderilmiş ve onaylı tüm aylık kayıtlar taslağa alınır; birimler düzeltip yeniden gönderir.",
       confirmLabel: "Toplu iade",
       variant: "danger"
     });
@@ -248,7 +246,7 @@ export function AdminTakipPage() {
     setError("");
     setMessage("");
     try {
-      const count = await api.adminTakipIadeGonderilenler(yil, ay, birimParam!, periodId);
+      const count = await api.adminTakipIadeGonderilenler(yil, ay, birimParam, periodId);
       setMessage(`${count} öğrencinin kaydı birime iade edildi.`);
       const next = await api.adminTakip(yil, ay, birimParam, periodId);
       setOzet(next);
@@ -260,15 +258,11 @@ export function AdminTakipPage() {
   }
 
   async function approveSubmittedInUnit() {
-    if (!hasBirim) {
-      setError("Toplu onay için en az bir birim seçin.");
-      return;
-    }
     setLoading(true);
     setError("");
     setMessage("");
     try {
-      const count = await api.adminTakipOnaylaGonderilenler(yil, ay, birimParam!, periodId);
+      const count = await api.adminTakipOnaylaGonderilenler(yil, ay, birimParam, periodId);
       setMessage(`${count} öğrencinin kaydı onaylandı.`);
       const next = await api.adminTakip(yil, ay, birimParam, periodId);
       setOzet(next);
@@ -291,10 +285,6 @@ export function AdminTakipPage() {
   }
 
   function downloadIskurPaketi() {
-    if (!hasBirim) {
-      setError("İŞKUR ödeme dosyası için üstten en az bir birim seçin.");
-      return;
-    }
     const filename = `iskur-odeme_${fileBirimSlug}_${yil}-${String(ay).padStart(2, "0")}.xlsm`;
     void downloadAuthenticatedFile(
       api.adminIskurPaketiExcelUrl(yil, ay, birimParam, periodId),
@@ -303,10 +293,6 @@ export function AdminTakipPage() {
   }
 
   function downloadTakipRaporExcel() {
-    if (!hasBirim) {
-      setError("EK-6 / puantaj Excel için üstten en az bir birim seçin.");
-      return;
-    }
     const filename = `ek6-puantaj_${fileBirimSlug}_${yil}-${String(ay).padStart(2, "0")}.xlsx`;
     void downloadAuthenticatedFile(
       api.adminTakipRaporExcelUrl(yil, ay, birimParam, periodId),
@@ -357,7 +343,7 @@ export function AdminTakipPage() {
             multiple
             values={birimKodlari}
             onChange={setBirimKodlari}
-            placeholder="Birim ara, birden fazla seçin"
+            placeholder="Birim ara — kutucuklarla birden fazla seçin"
             emptyLabel="Eşleşen birim yok"
             options={units.map((unit) => ({ value: unit.kod, label: unit.ad, hint: `Kod ${unit.kod}` }))}
           />
@@ -369,10 +355,12 @@ export function AdminTakipPage() {
         items={[
           selectedPeriod ? { label: selectedPeriod.ad, onClear: () => setPeriodId(periods.find((p) => p.aktif)?.id) } : { label: "" },
           { label: `${MONTHS[ay - 1]} ${yil}` },
-          ...birimKodlari.map((kod) => ({
-            label: units.find((unit) => unit.kod === kod)?.ad ?? kod,
-            onClear: () => setBirimKodlari((current) => current.filter((item) => item !== kod))
-          }))
+          ...(hasBirim
+            ? birimKodlari.map((kod) => ({
+                label: units.find((unit) => unit.kod === kod)?.ad ?? kod,
+                onClear: () => setBirimKodlari((current) => current.filter((item) => item !== kod))
+              }))
+            : [{ label: "Tüm birimler" }])
         ]}
       />
 
@@ -403,16 +391,11 @@ export function AdminTakipPage() {
         >
           <button
             className="btn btn-gold btn-lg"
-            disabled={!selectedPeriod || loading || !hasBirim || approvedCount === 0}
+            disabled={!selectedPeriod || loading || approvedCount === 0}
             onClick={() => downloadIskurPaketi()}
           >
-            Seçili birimlerin ödeme dosyasını indir
+            {hasBirim ? "Seçili birimlerin ödeme dosyasını indir" : "Tüm birimlerin ödeme dosyasını indir"}
           </button>
-          {!hasBirim && (
-            <p style={{ color: "var(--muted)", marginTop: 12, marginBottom: 0 }}>
-              Ödeme dosyası için bir veya birden fazla birim seçin. «Tümünü seç» ile toplu indirebilirsiniz.
-            </p>
-          )}
         </ActionCard>
       )}
 
@@ -422,7 +405,7 @@ export function AdminTakipPage() {
             <button
               type="button"
               className="btn btn-secondary"
-              disabled={loading || !hasBirim || submittedCount === 0}
+              disabled={loading || submittedCount === 0}
               onClick={downloadTakipRaporExcel}
             >
               EK-6 / puantaj Excel
@@ -430,25 +413,21 @@ export function AdminTakipPage() {
             <button
               type="button"
               className="btn btn-gold"
-              disabled={loading || !hasBirim || !ozet.ogrenciler.some(pendingApproval)}
+              disabled={loading || !ozet.ogrenciler.some(pendingApproval)}
               onClick={() => void approveSubmittedInUnit()}
             >
-              Seçili birimlerde onayla
+              {hasBirim ? "Seçili birimlerde onayla" : "Tüm birimlerde onayla"}
             </button>
             <button
               type="button"
               className="btn btn-danger"
-              disabled={
-                loading
-                || !hasBirim
-                || !ozet.ogrenciler.some(canReturn)
-              }
+              disabled={loading || !ozet.ogrenciler.some(canReturn)}
               onClick={() => void returnSubmittedInUnit()}
             >
-              Seçili birimlerde iade et
+              {hasBirim ? "Seçili birimlerde iade et" : "Tüm birimlerde iade et"}
             </button>
             <span style={{ color: "var(--muted)", fontSize: 13 }}>
-              Bir veya birden fazla birim seçerek Excel indirebilir, gönderilenleri onaylayabilir veya iade edebilirsiniz.
+              Birim seçilmezse tüm birimler; seçilirse yalnızca o birimler.
             </span>
           </div>
         <div className="card" style={{ overflow: "auto" }}>

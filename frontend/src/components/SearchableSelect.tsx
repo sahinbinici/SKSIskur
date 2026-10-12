@@ -92,10 +92,8 @@ export function SearchableSelect(props: Props) {
 
   function displayValue() {
     if (open) return query;
-    if (selectedOptions.length === 0) return "";
+    if (selectedOptions.length === 0) return multiple ? "Tüm birimler" : "";
     if (!multiple) return selectedOptions[0]?.label ?? "";
-    if (selectedOptions.length === 1) return selectedOptions[0].label;
-    if (selectedOptions.length === options.length && options.length > 0) return `Tüm birimler (${options.length})`;
     return `${selectedOptions.length} birim seçildi`;
   }
 
@@ -157,21 +155,37 @@ export function SearchableSelect(props: Props) {
             const checked = selectedValues.includes(option.value);
             return (
               <li key={option.value || "__all"}>
-                <button
-                  type="button"
-                  className={`${index === active ? "active" : ""}${checked ? " selected" : ""}`}
-                  role="option"
-                  aria-selected={checked}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onMouseEnter={() => setActive(index)}
-                  onClick={() => toggle(option.value)}
-                >
-                  {multiple && <span className={`search-select-check${checked ? " on" : ""}`} aria-hidden="true" />}
-                  <span>
-                    <b>{option.label}</b>
-                    {option.hint ? <small>{option.hint}</small> : null}
-                  </span>
-                </button>
+                {multiple ? (
+                  <label
+                    className={`search-select-option${index === active ? " active" : ""}${checked ? " selected" : ""}`}
+                    onMouseEnter={() => setActive(index)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(option.value)}
+                    />
+                    <span>
+                      <b>{option.label}</b>
+                      {option.hint ? <small>{option.hint}</small> : null}
+                    </span>
+                  </label>
+                ) : (
+                  <button
+                    type="button"
+                    className={`${index === active ? "active" : ""}${checked ? " selected" : ""}`}
+                    role="option"
+                    aria-selected={checked}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={() => setActive(index)}
+                    onClick={() => toggle(option.value)}
+                  >
+                    <span>
+                      <b>{option.label}</b>
+                      {option.hint ? <small>{option.hint}</small> : null}
+                    </span>
+                  </button>
+                )}
               </li>
             );
           })}
