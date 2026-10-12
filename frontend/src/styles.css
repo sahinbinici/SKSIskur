@@ -798,6 +798,49 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
   border-radius: 8px;
   cursor: pointer;
 }
+.search-select.multi .search-select-list button {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+}
+.search-select.multi .search-select-list button span {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.search-select-actions {
+  display: flex;
+  gap: 6px;
+  padding: 4px 4px 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+.search-select-actions button {
+  width: auto;
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  background: #f4f6fb;
+}
+.search-select-check {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border: 1.5px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+.search-select-check.on {
+  border-color: var(--navy);
+  background: var(--navy);
+  box-shadow: inset 0 0 0 2px #fff;
+}
+.search-select-list button.selected {
+  background: #eef3fb;
+}
 .search-select-list button.active,
 .search-select-list button:hover {
   background: #f4f6fb;

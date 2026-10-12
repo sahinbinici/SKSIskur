@@ -24,6 +24,8 @@ public record AdminTakipOzetResponse(
             int izinli,
             int raporlu,
             TakipStatus status,
+            TakipStatus ekuantStatus,
+            TakipStatus puantajStatus,
             boolean locked
     ) {
     }

@@ -60,6 +60,8 @@ import com.sks.sksiskur.web.dto.IzinRaporOgrenciResponse;
 import com.sks.sksiskur.web.dto.IadeRequest;
 import com.sks.sksiskur.web.dto.ReviewRequest;
 import com.sks.sksiskur.web.dto.TakipDonemResponse;
+import com.sks.sksiskur.web.dto.TakipGirisPencereKaydetRequest;
+import com.sks.sksiskur.web.dto.TakipGirisPencereResponse;
 import com.sks.sksiskur.web.dto.TakipKapaliGunKaydetRequest;
 import com.sks.sksiskur.web.dto.IskurListeResponse;
 import com.sks.sksiskur.web.dto.IskurListeUploadResponse;
@@ -626,6 +628,31 @@ public class AdminController {
         auditLogService.logAdmin(authentication, IslemTuru.KAPALI_GUN_KAYDET, "DONEM", donemId,
                 "Kapalı günler kaydedildi: " + yil + "-" + String.format("%02d", ay),
                 saved.size() + " gün");
+        return saved;
+    }
+
+    @GetMapping("/takip/giris-pencere")
+    public TakipGirisPencereResponse girisPencere(
+            @RequestParam(required = false) Long donemId,
+            @RequestParam int yil,
+            @RequestParam int ay
+    ) {
+        return takipService.adminGirisPencere(donemId, yil, ay);
+    }
+
+    @PutMapping("/takip/giris-pencere")
+    public TakipGirisPencereResponse saveGirisPencere(
+            @RequestParam(required = false) Long donemId,
+            @RequestParam int yil,
+            @RequestParam int ay,
+            @Valid @RequestBody TakipGirisPencereKaydetRequest request,
+            Authentication authentication
+    ) {
+        TakipGirisPencereResponse saved = takipService.saveAdminGirisPencere(donemId, yil, ay, request);
+        auditLogService.logAdmin(authentication, IslemTuru.GIRIS_PENCERE_KAYDET, "DONEM", donemId,
+                "Giriş tarihleri kaydedildi: " + yil + "-" + String.format("%02d", ay),
+                "EK-6 " + saved.ekuantBaslangic() + "–" + saved.ekuantBitis()
+                        + " / Puantaj " + saved.puantajBaslangic() + "–" + saved.puantajBitis());
         return saved;
     }
 

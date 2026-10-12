@@ -1,4 +1,4 @@
-import type { AdminOzet, AdminRole, AdminTakipOzet, AdminUser, AgreementDocument, AgreementType, ApplicationStatus, AuthResponse, Basvuru, BasvuruDagitim, BasvuruDalga, BasvuruDonemi, BelgeYuklemeFiltre, BirimAylikRapor, BirimDuyuru, BirimDuyuruInbox, BirimKullanici, BirimOgrenci, DagitimBirimi, DagitimSonuc, DemoInfo, DocumentType, ImzaBildirimiGonder, IskurListe, IskurListeUpload, IslemLogPage, IslemTuru, IzinRaporOgrenci, KayitListeFiltre, KayitListesi, KesinListeUpload, OgrenciCalismaOzet, PuantajDurum, Role, SozlesmeImzaBekleyen, StudentAgreement, StudentProfile, TakipDonem, WorkUnit, YoneticiPanosuDuyuru } from "./types";
+import type { AdminOzet, AdminRole, AdminTakipOzet, AdminUser, AgreementDocument, AgreementType, ApplicationStatus, AuthResponse, Basvuru, BasvuruDagitim, BasvuruDalga, BasvuruDonemi, BelgeYuklemeFiltre, BirimAylikRapor, BirimDuyuru, BirimDuyuruInbox, BirimKullanici, BirimOgrenci, DagitimBirimi, DagitimSonuc, DemoInfo, DocumentType, ImzaBildirimiGonder, IskurListe, IskurListeUpload, IslemLogPage, IslemTuru, IzinRaporOgrenci, KayitListeFiltre, KayitListesi, KesinListeUpload, OgrenciCalismaOzet, PuantajDurum, Role, SozlesmeImzaBekleyen, StudentAgreement, StudentProfile, TakipDonem, TakipGirisPencere, WorkUnit, YoneticiPanosuDuyuru } from "./types";
 
 const TOKEN_KEY = "sksiskur.token";
 
@@ -356,6 +356,23 @@ export const api = {
     request<string[]>(`/api/admin/takip/kapali-gunler?yil=${yil}&ay=${ay}${donemId ? `&donemId=${donemId}` : ""}`, {
       method: "PUT", body: JSON.stringify({ gunler })
     }),
+  adminGirisPencere: (yil: number, ay: number, donemId?: number) =>
+    request<TakipGirisPencere>(`/api/admin/takip/giris-pencere?yil=${yil}&ay=${ay}${donemId ? `&donemId=${donemId}` : ""}`),
+  saveAdminGirisPencere: (
+    yil: number,
+    ay: number,
+    body: {
+      ekuantBaslangic: string | null;
+      ekuantBitis: string | null;
+      puantajBaslangic: string | null;
+      puantajBitis: string | null;
+    },
+    donemId?: number
+  ) =>
+    request<TakipGirisPencere>(`/api/admin/takip/giris-pencere?yil=${yil}&ay=${ay}${donemId ? `&donemId=${donemId}` : ""}`, {
+      method: "PUT",
+      body: JSON.stringify(body)
+    }),
   adminTakipRapor: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
     const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
     if (birimKodu) params.set("birimKodu", birimKodu);
@@ -464,15 +481,15 @@ export const api = {
   },
   puantajBelgeUrl: (basvuruId: number, yil: number, ay: number, tarih: string) =>
     `/api/birim/ogrenciler/${basvuruId}/puantaj/belge?yil=${yil}&ay=${ay}&tarih=${tarih}`,
-  gonderTakip: (basvuruId: number, yil: number, ay: number) =>
+  gonderTakip: (basvuruId: number, yil: number, ay: number, cetvel: "EKUANT" | "PUANTAJ") =>
     request<TakipDonem>(`/api/birim/ogrenciler/${basvuruId}/gonder`, {
       method: "POST",
-      body: JSON.stringify({ yil, ay })
+      body: JSON.stringify({ yil, ay, cetvel })
     }),
-  gonderBirimTakip: (yil: number, ay: number) =>
+  gonderBirimTakip: (yil: number, ay: number, cetvel: "EKUANT" | "PUANTAJ") =>
     request<{ yil: number; ay: number; gonderilenOgrenci: number }>("/api/birim/takip/gonder", {
       method: "POST",
-      body: JSON.stringify({ yil, ay })
+      body: JSON.stringify({ yil, ay, cetvel })
     }),
   birimRapor: (yil: number, ay: number) =>
     request<BirimAylikRapor>(`/api/birim/rapor?yil=${yil}&ay=${ay}`),

@@ -327,7 +327,11 @@ export type TakipDonem = {
   yil: number;
   ay: number;
   status: TakipStatus;
+  ekuantStatus?: TakipStatus;
+  puantajStatus?: TakipStatus;
   locked: boolean;
+  ekuantLocked?: boolean;
+  puantajLocked?: boolean;
   gonderimTarihi: string | null;
   ekuantGunler: string[];
   puantaj: PuantajGun[];
@@ -338,6 +342,13 @@ export type TakipDonem = {
   toplamIzinGunu: number;
   izinGunLimiti: number;
   testTakipModu: boolean;
+  gelmediKesimTarihi?: string | null;
+  ekuantGirisBaslangic?: string | null;
+  ekuantGirisBitis?: string | null;
+  ekuantGirisAcik?: boolean;
+  puantajGirisBaslangic?: string | null;
+  puantajGirisBitis?: string | null;
+  puantajGirisAcik?: boolean;
   ogrenci: BirimOgrenci;
 };
 
@@ -364,6 +375,8 @@ export type BirimRaporOgrenci = {
   toplamGun: number;
   toplamSaat: number;
   status?: TakipStatus | null;
+  ekuantStatus?: TakipStatus | null;
+  puantajStatus?: TakipStatus | null;
 };
 
 export type BirimAylikRapor = {
@@ -373,11 +386,30 @@ export type BirimAylikRapor = {
   gunlukSaat: number;
   yazdirilabilir: boolean;
   gonderilebilir: boolean;
+  ekuantGonderilebilir?: boolean;
+  puantajGonderilebilir?: boolean;
   onayliOgrenci: number;
   onayBekleyenOgrenci: number;
   gonderilmeyenOgrenci: number;
   tamamlanmamisOgrenci: number;
+  ekuantGirisAcik?: boolean;
+  puantajGirisAcik?: boolean;
+  ekuantGirisBaslangic?: string | null;
+  ekuantGirisBitis?: string | null;
+  puantajGirisBaslangic?: string | null;
+  puantajGirisBitis?: string | null;
   ogrenciler: BirimRaporOgrenci[];
+};
+
+export type TakipGirisPencere = {
+  yil: number;
+  ay: number;
+  ekuantBaslangic: string | null;
+  ekuantBitis: string | null;
+  ekuantAcik: boolean;
+  puantajBaslangic: string | null;
+  puantajBitis: string | null;
+  puantajAcik: boolean;
 };
 
 export type IzinRaporOgrenci = {
@@ -554,6 +586,8 @@ export type AdminTakipSatir = {
   izinli: number;
   raporlu: number;
   status: TakipStatus | null;
+  ekuantStatus?: TakipStatus | null;
+  puantajStatus?: TakipStatus | null;
   locked: boolean;
 };
 
@@ -588,6 +622,7 @@ export type IslemTuru =
   | "BIRIM_ATAMA_DEGISTIR"
   | "BASVURU_YONETICI_DAGITIM"
   | "KAPALI_GUN_KAYDET"
+  | "GIRIS_PENCERE_KAYDET"
   | "EKUANT_KAYDET"
   | "PUANTAJ_KAYDET"
   | "TAKIP_GONDER"

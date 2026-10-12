@@ -26,7 +26,8 @@ class IskurAylikRaporExportServiceTest {
                 1, 4L, "99010004", "00099010004", "Fatma", "Şahin", "TR000",
                 List.of(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 2)),
                 List.of(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 2)),
-                List.of(), List.of(), List.of(), 2, BigDecimal.TEN, TakipStatus.APPROVED
+                List.of(), List.of(), List.of(), 2, BigDecimal.TEN, TakipStatus.APPROVED,
+                TakipStatus.APPROVED, TakipStatus.APPROVED
         );
         var method = IskurAylikRaporExportService.class.getDeclaredMethod(
                 "buildWorkbook", List.class, YearMonth.class);

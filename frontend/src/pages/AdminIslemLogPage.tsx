@@ -27,6 +27,7 @@ const TUR_LABELS: Record<IslemTuru, string> = {
   BIRIM_ATAMA_DEGISTIR: "Manuel birim ataması",
   BASVURU_YONETICI_DAGITIM: "Yöneticiye dağıtım",
   KAPALI_GUN_KAYDET: "Kapalı gün kaydı",
+  GIRIS_PENCERE_KAYDET: "Giriş tarihi kaydı",
   EKUANT_KAYDET: "Ekuant kaydı",
   PUANTAJ_KAYDET: "Puantaj kaydı",
   TAKIP_GONDER: "Takip gönderimi",

@@ -7,10 +7,13 @@ import com.sks.sksiskur.domain.PuantajDurum;
 import com.sks.sksiskur.domain.TakipDonem;
 import com.sks.sksiskur.domain.TakipGun;
 import com.sks.sksiskur.domain.TakipKapaliGun;
+import com.sks.sksiskur.domain.TakipGirisPencere;
+import com.sks.sksiskur.domain.TakipCetvelTuru;
 import com.sks.sksiskur.domain.TakipStatus;
 import com.sks.sksiskur.exception.ApiException;
 import com.sks.sksiskur.repository.BasvuruRepository;
 import com.sks.sksiskur.repository.TakipDonemRepository;
+import com.sks.sksiskur.repository.TakipGirisPencereRepository;
 import com.sks.sksiskur.repository.TakipKapaliGunRepository;
 import com.sks.sksiskur.takip.WorkScheduleRules;
 import com.sks.sksiskur.web.dto.AdminTakipOzetResponse;
@@ -22,6 +25,8 @@ import com.sks.sksiskur.web.dto.IzinRaporOgrenciResponse;
 import com.sks.sksiskur.web.dto.PuantajKaydetRequest;
 import com.sks.sksiskur.web.dto.OgrenciCalismaOzetResponse;
 import com.sks.sksiskur.web.dto.TakipDonemResponse;
+import com.sks.sksiskur.web.dto.TakipGirisPencereKaydetRequest;
+import com.sks.sksiskur.web.dto.TakipGirisPencereResponse;
 import com.sks.sksiskur.web.dto.TakipKapaliGunKaydetRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -65,6 +70,7 @@ public class TakipService {
     private final BasvuruRepository basvuruRepository;
     private final TakipDonemRepository takipDonemRepository;
     private final TakipKapaliGunRepository takipKapaliGunRepository;
+    private final TakipGirisPencereRepository takipGirisPencereRepository;
     private final FileStorageService fileStorageService;
     private final int daysPerWeek;
     private final BigDecimal gunlukSaat;
@@ -75,6 +81,7 @@ public class TakipService {
             BasvuruRepository basvuruRepository,
             TakipDonemRepository takipDonemRepository,
             TakipKapaliGunRepository takipKapaliGunRepository,
+            TakipGirisPencereRepository takipGirisPencereRepository,
             FileStorageService fileStorageService,
             @Value("${app.takip.haftalik-gun:3}") int daysPerWeek,
             @Value("${app.takip.gunluk-saat:7.5}") BigDecimal gunlukSaat,
@@ -84,6 +91,7 @@ public class TakipService {
         this.basvuruRepository = basvuruRepository;
         this.takipDonemRepository = takipDonemRepository;
         this.takipKapaliGunRepository = takipKapaliGunRepository;
+        this.takipGirisPencereRepository = takipGirisPencereRepository;
         this.fileStorageService = fileStorageService;
         this.daysPerWeek = daysPerWeek;
         this.gunlukSaat = gunlukSaat;
@@ -154,11 +162,15 @@ public class TakipService {
             int izinli = 0;
             int raporlu = 0;
             TakipStatus status = null;
+            TakipStatus ekuantStatus = null;
+            TakipStatus puantajStatus = null;
             boolean locked = false;
             if (donem != null) {
                 ekuant = donem.getGunler().size();
                 status = donem.getStatus();
-                locked = donem.isLocked();
+                ekuantStatus = donem.resolveEkuantStatus();
+                puantajStatus = donem.resolvePuantajStatus();
+                locked = donem.isEkuantLocked() || donem.isPuantajLocked();
                 for (TakipGun gun : donem.getGunler()) {
                     if (gun.getDurum() == PuantajDurum.GELDI) geldi++;
                     else if (gun.getDurum() == PuantajDurum.GELMEDI) gelmedi++;
@@ -179,6 +191,8 @@ public class TakipService {
                     izinli,
                     raporlu,
                     status,
+                    ekuantStatus,
+                    puantajStatus,
                     locked
             ));
         }
@@ -197,9 +211,9 @@ public class TakipService {
     @Transactional(readOnly = true)
     public List<TerminatedStudentRow> terminatedStudents(Long basvuruDonemiId, String birimKodu) {
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
-        String normalizedUnit = blankToNull(birimKodu);
+        List<String> codes = unitCodes(birimKodu);
         return basvuruRepository.findByBasvuruDonemiIdAndIliskiBitisTarihiIsNotNullOrderByIliskiBitisTarihiAsc(period.getId()).stream()
-                .filter(basvuru -> normalizedUnit == null || normalizedUnit.equals(basvuru.getAtananBirimKodu()))
+                .filter(basvuru -> codes.isEmpty() || codes.contains(basvuru.getAtananBirimKodu()))
                 .map(basvuru -> new TerminatedStudentRow(
                         basvuru.getStudent().getOgrenciNo(),
                         basvuru.getStudent().getTcKimlikNo(),
@@ -301,6 +315,60 @@ public class TakipService {
     }
 
     @Transactional(readOnly = true)
+    public TakipGirisPencereResponse adminGirisPencere(Long basvuruDonemiId, int yil, int ay) {
+        BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
+        requireMonth(yil, ay);
+        return toGirisPencere(period.getId(), yil, ay, false);
+    }
+
+    @Transactional
+    public TakipGirisPencereResponse saveAdminGirisPencere(
+            Long basvuruDonemiId,
+            int yil,
+            int ay,
+            TakipGirisPencereKaydetRequest request
+    ) {
+        BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
+        if (!period.isAktif()) {
+            throw new ApiException(HttpStatus.CONFLICT, "Kapalı dönemlerde giriş tarihleri değiştirilemez.");
+        }
+        requireMonth(yil, ay);
+        LocalDate ekuantStart = request.ekuantBaslangic();
+        LocalDate ekuantEnd = request.ekuantBitis();
+        LocalDate puantajStart = request.puantajBaslangic();
+        LocalDate puantajEnd = request.puantajBitis();
+        assertRange("EK-6", ekuantStart, ekuantEnd);
+        assertRange("Puantaj", puantajStart, puantajEnd);
+        TakipGirisPencere window = takipGirisPencereRepository
+                .findByBasvuruDonemiIdAndYilAndAy(period.getId(), yil, ay)
+                .orElseGet(() -> {
+                    TakipGirisPencere created = new TakipGirisPencere();
+                    created.setBasvuruDonemi(period);
+                    created.setYil(yil);
+                    created.setAy(ay);
+                    return created;
+                });
+        window.setEkuantBaslangic(ekuantStart);
+        window.setEkuantBitis(ekuantEnd);
+        window.setPuantajBaslangic(puantajStart);
+        window.setPuantajBitis(puantajEnd);
+        takipGirisPencereRepository.save(window);
+        return toGirisPencere(period.getId(), yil, ay, false);
+    }
+
+    private void assertRange(String label, LocalDate start, LocalDate end) {
+        if (start == null && end == null) {
+            return;
+        }
+        if (start == null || end == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, label + " için başlangıç ve bitiş tarihi birlikte girilmelidir.");
+        }
+        if (end.isBefore(start)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, label + " bitiş tarihi başlangıçtan önce olamaz.");
+        }
+    }
+
+    @Transactional(readOnly = true)
     public TakipDonemResponse adminGet(Long basvuruDonemiId, Long basvuruId, int yil, int ay) {
         YearMonth month = requireMonth(yil, ay);
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
@@ -325,22 +393,52 @@ public class TakipService {
         int onayBekleyen = 0;
         int gonderilmeyen = 0;
         int tamamlanmamis = 0;
+        int ekuantHazir = 0;
+        int ekuantKilitli = 0;
+        int puantajHazir = 0;
         String birimKodu = basvurular.isEmpty() ? null : basvurular.getFirst().getAtananBirimKodu();
+        YearMonth month = YearMonth.of(yil, ay);
         for (Basvuru basvuru : basvurular) {
             TakipDonem donem = donemler.get(basvuru.getId());
-            if (donem == null || donem.getStatus() == TakipStatus.DRAFT) {
-                gonderilmeyen++;
-                if (!readyToSubmit(donem, basvuru, YearMonth.of(yil, ay), birimKodu)) {
-                    tamamlanmamis++;
-                }
-            } else if (donem.getStatus() == TakipStatus.SUBMITTED) {
+            TakipStatus ekuantStatus = donem == null ? TakipStatus.DRAFT : donem.resolveEkuantStatus();
+            TakipStatus puantajStatus = donem == null ? TakipStatus.DRAFT : donem.resolvePuantajStatus();
+            if (ekuantStatus == TakipStatus.SUBMITTED || puantajStatus == TakipStatus.SUBMITTED) {
                 onayBekleyen++;
-            } else if (donem.getStatus() == TakipStatus.APPROVED) {
+            }
+            if (puantajStatus == TakipStatus.APPROVED) {
                 onayli++;
             }
+            if (ekuantStatus == TakipStatus.DRAFT && puantajStatus == TakipStatus.DRAFT) {
+                gonderilmeyen++;
+            }
+            boolean ekuantLocked = donem != null && donem.isEkuantLocked();
+            boolean puantajLocked = donem != null && donem.isPuantajLocked();
+            if (ekuantLocked) {
+                ekuantKilitli++;
+            } else if (readyToSubmitEkuant(donem, month, birimKodu)) {
+                ekuantHazir++;
+            } else {
+                tamamlanmamis++;
+            }
+            if (!puantajLocked && ekuantStatus == TakipStatus.APPROVED && readyToSubmitPuantaj(donem, month, birimKodu)) {
+                puantajHazir++;
+            }
         }
+        Long periodId = basvurular.isEmpty() || basvurular.getFirst().getBasvuruDonemi() == null
+                ? null : basvurular.getFirst().getBasvuruDonemi().getId();
+        boolean relaxed = isRelaxedBirim(birimKodu);
+        TakipGirisPencereResponse window = periodId == null
+                ? emptyGirisPencere(yil, ay, relaxed)
+                : toGirisPencere(periodId, yil, ay, relaxed);
+        boolean ekuantGonderilebilir = !basvurular.isEmpty()
+                && ekuantHazir == basvurular.size()
+                && window.ekuantAcik();
+        boolean puantajGonderilebilir = !basvurular.isEmpty()
+                && puantajHazir == basvurular.size()
+                && ekuantKilitli == basvurular.size()
+                && window.puantajAcik();
         boolean yazdirilabilir = !basvurular.isEmpty() && onayli == basvurular.size();
-        boolean gonderilebilir = !basvurular.isEmpty() && gonderilmeyen == basvurular.size() && tamamlanmamis == 0;
+        boolean gonderilebilir = ekuantGonderilebilir || puantajGonderilebilir;
         List<BirimAylikRaporResponse.RaporOgrenci> rows = new ArrayList<>();
         int sira = 1;
         for (Basvuru basvuru : basvurular) {
@@ -370,7 +468,9 @@ public class TakipService {
                     raporlu,
                     geldi.size(),
                     toplamSaat,
-                    donem == null ? null : donem.getStatus()
+                    donem == null ? null : donem.getStatus(),
+                    donem == null ? null : donem.resolveEkuantStatus(),
+                    donem == null ? null : donem.resolvePuantajStatus()
             ));
         }
         return new BirimAylikRaporResponse(
@@ -380,10 +480,18 @@ public class TakipService {
                 gunlukSaat.setScale(1, RoundingMode.HALF_UP),
                 birimView ? yazdirilabilir : true,
                 birimView && gonderilebilir,
+                birimView && ekuantGonderilebilir,
+                birimView && puantajGonderilebilir,
                 onayli,
                 onayBekleyen,
                 gonderilmeyen,
                 birimView ? tamamlanmamis : 0,
+                window.ekuantAcik(),
+                window.puantajAcik(),
+                window.ekuantBaslangic(),
+                window.ekuantBitis(),
+                window.puantajBaslangic(),
+                window.puantajBitis(),
                 rows
         );
     }
@@ -409,22 +517,45 @@ public class TakipService {
     }
 
     private List<Basvuru> assignedKesin(String birimKodu, BasvuruDonemi donem) {
-        if (birimKodu == null || birimKodu.isBlank()) {
-            return basvuruRepository.findByAtananBirimKoduIsNotNullAndBasvuruDonemiIdOrderByStudentSoyadAscStudentAdAsc(donem.getId());
+        List<Basvuru> assigned = basvuruRepository
+                .findByAtananBirimKoduIsNotNullAndBasvuruDonemiIdOrderByStudentSoyadAscStudentAdAsc(donem.getId());
+        List<String> codes = unitCodes(birimKodu);
+        if (codes.isEmpty()) {
+            return assigned;
         }
-        return basvuruRepository.findByAtananBirimKoduAndStatusAndBasvuruDonemiIdOrderByStudentSoyadAscStudentAdAsc(
-                birimKodu, ApplicationStatus.APPROVED, donem.getId());
+        if (codes.size() == 1) {
+            return basvuruRepository.findByAtananBirimKoduAndStatusAndBasvuruDonemiIdOrderByStudentSoyadAscStudentAdAsc(
+                    codes.getFirst(), ApplicationStatus.APPROVED, donem.getId());
+        }
+        return assigned.stream()
+                .filter(basvuru -> codes.contains(basvuru.getAtananBirimKodu()))
+                .toList();
     }
 
     private String reportBirimAdi(String birimKodu, BasvuruDonemi donem) {
-        if (birimKodu == null || birimKodu.isBlank()) {
+        List<String> codes = unitCodes(birimKodu);
+        if (codes.isEmpty()) {
             return "Tüm birimler";
+        }
+        if (codes.size() > 1) {
+            return codes.size() + " birim";
         }
         return assignedKesin(birimKodu, donem).stream()
                 .map(Basvuru::getAtananBirimAdi)
                 .filter(ad -> ad != null && !ad.isBlank())
                 .findFirst()
-                .orElse(birimKodu);
+                .orElse(codes.getFirst());
+    }
+
+    private List<String> unitCodes(String birimKodu) {
+        if (birimKodu == null || birimKodu.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(birimKodu.split("[,;]"))
+                .map(String::trim)
+                .filter(code -> !code.isEmpty())
+                .distinct()
+                .toList();
     }
 
     private String blankToNull(String value) {
@@ -469,7 +600,7 @@ public class TakipService {
         YearMonth month = requireMonth(request.yil(), request.ay());
         boolean relaxed = isRelaxedBirim(birimKodu);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, request.yil(), request.ay());
-        assertEditable(donem);
+        assertEkuantEditable(donem);
         Set<LocalDate> days = request.gunler() == null ? Set.of() : new HashSet<>(request.gunler());
         for (LocalDate date : days) {
             if (!YearMonth.from(date).equals(month)) {
@@ -505,13 +636,14 @@ public class TakipService {
         YearMonth month = requireMonth(request.yil(), request.ay());
         boolean relaxed = isRelaxedBirim(birimKodu);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, request.yil(), request.ay());
-        assertEditable(donem);
+        assertPuantajEditable(donem, relaxed);
         Map<LocalDate, TakipGun> byDate = donem.getGunler().stream()
                 .collect(Collectors.toMap(TakipGun::getTarih, Function.identity()));
         if (request.kayitlar() != null) {
             if (!relaxed) {
                 assertPermissionLimit(basvuruId, byDate, request.kayitlar());
             }
+            LocalDate gelmediKesim = firstGelmediDate(donem, request.kayitlar());
             for (PuantajKaydetRequest.Kayit kayit : request.kayitlar()) {
                 TakipGun gun = byDate.get(kayit.tarih());
                 if (gun == null) {
@@ -520,12 +652,13 @@ public class TakipService {
                 if (!relaxed) {
                     assertEntryOpen(donem.getBasvuru(), kayit.tarih());
                     assertPuantajDate(kayit.tarih());
+                    if (gelmediKesim != null && kayit.tarih().isAfter(gelmediKesim)) {
+                        throw new ApiException(HttpStatus.CONFLICT,
+                                "Mazeretsiz gelmediği girilen günden sonraki puantaj kilitlidir.");
+                    }
                 }
                 PuantajDurum onceki = gun.getDurum();
                 gun.setDurum(kayit.durum());
-                if (kayit.durum() == PuantajDurum.GELMEDI && donem.getBasvuru().getIliskiBitisTarihi() == null) {
-                    donem.getBasvuru().setIliskiBitisTarihi(month.plusMonths(1).atDay(1));
-                }
                 if (kayit.durum() != PuantajDurum.IZINLI && kayit.durum() != PuantajDurum.RAPORLU
                         && (onceki == PuantajDurum.IZINLI || onceki == PuantajDurum.RAPORLU)) {
                     fileStorageService.deleteQuietly(gun.getBelgeYolu());
@@ -535,6 +668,7 @@ public class TakipService {
                 }
             }
         }
+        applyGelmediCutoff(donem, month);
         return toResponse(takipDonemRepository.save(donem), month);
     }
 
@@ -550,9 +684,10 @@ public class TakipService {
         YearMonth month = requireMonth(yil, ay);
         boolean relaxed = isRelaxedBirim(birimKodu);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, yil, ay);
-        assertEditable(donem);
+        assertPuantajEditable(donem, relaxed);
         if (!relaxed) {
             assertEntryOpen(donem.getBasvuru(), tarih);
+            assertNotAfterGelmedi(donem, tarih);
         }
         TakipGun gun = donem.getGunler().stream()
                 .filter(item -> item.getTarih().equals(tarih))
@@ -612,7 +747,10 @@ public class TakipService {
     }
 
     @Transactional
-    public BirimAyGonderResponse submitBirimAy(String birimKodu, int yil, int ay) {
+    public BirimAyGonderResponse submitBirimAy(String birimKodu, int yil, int ay, TakipCetvelTuru cetvel) {
+        if (cetvel == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Gönderilecek cetvel (EK-6 veya puantaj) belirtilmelidir.");
+        }
         YearMonth month = requireMonth(yil, ay);
         List<Basvuru> basvurular = assignedKesin(birimKodu, basvuruDonemiService.requireActive()).stream()
                 .filter(basvuru -> isRelaxedBirim(birimKodu) || basvuru.canWorkIn(month))
@@ -623,28 +761,35 @@ public class TakipService {
         Map<Long, TakipDonem> donemler = loadDonemler(basvurular, yil, ay);
         for (Basvuru basvuru : basvurular) {
             TakipDonem donem = donemler.get(basvuru.getId());
-            if (donem != null && donem.isLocked()) {
+            if (cetvel == TakipCetvelTuru.EKUANT && donem != null && donem.isEkuantLocked()) {
                 throw new ApiException(HttpStatus.CONFLICT,
-                        "Bu ay için gönderilmiş veya onaylı kayıtlar var. Yeniden göndermek için SKS yöneticisinin iade etmesi gerekir.");
+                        "Bu ayın EK-6 kaydı gönderilmiş veya onaylı. Yeniden göndermek için SKS yöneticisinin iade etmesi gerekir.");
+            }
+            if (cetvel == TakipCetvelTuru.PUANTAJ && donem != null && donem.isPuantajLocked()) {
+                throw new ApiException(HttpStatus.CONFLICT,
+                        "Bu ayın puantajı gönderilmiş veya onaylı. Yeniden göndermek için SKS yöneticisinin iade etmesi gerekir.");
             }
         }
         List<String> sorunlar = new ArrayList<>();
         for (Basvuru basvuru : basvurular) {
             TakipDonem donem = donemler.get(basvuru.getId());
-            if (!readyToSubmit(donem, basvuru, month, birimKodu)) {
+            boolean ready = cetvel == TakipCetvelTuru.EKUANT
+                    ? readyToSubmitEkuant(donem, month, birimKodu)
+                    : readyToSubmitPuantaj(donem, month, birimKodu);
+            if (!ready) {
                 sorunlar.add(basvuru.getStudent().getAdSoyad());
             }
         }
         if (!sorunlar.isEmpty()) {
+            String ne = cetvel == TakipCetvelTuru.EKUANT ? "EK-6" : "puantaj";
             throw new ApiException(HttpStatus.BAD_REQUEST,
-                    "Tüm öğrencilerin EK-6 ve puantajı tamamlanmadan ay gönderilemez. Eksik veya hatalı: "
+                    "Tüm öğrencilerin " + ne + " kaydı tamamlanmadan ay gönderilemez. Eksik veya hatalı: "
                             + String.join(", ", sorunlar));
         }
         int count = 0;
         for (Basvuru basvuru : basvurular) {
             TakipDonem donem = getOrCreateEntity(birimKodu, basvuru.getId(), yil, ay);
-            assertEditable(donem);
-            finalizeSubmit(donem, month, birimKodu);
+            finalizeSubmit(donem, month, birimKodu, cetvel);
             takipDonemRepository.save(donem);
             count++;
         }
@@ -652,31 +797,45 @@ public class TakipService {
     }
 
     @Transactional
-    public TakipDonemResponse submit(String birimKodu, Long basvuruId, int yil, int ay) {
+    public TakipDonemResponse submit(String birimKodu, Long basvuruId, int yil, int ay, TakipCetvelTuru cetvel) {
+        if (cetvel == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Gönderilecek cetvel (EK-6 veya puantaj) belirtilmelidir.");
+        }
         YearMonth month = requireMonth(yil, ay);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, yil, ay);
-        assertEditable(donem);
-        assertReadyToSubmit(donem, month, birimKodu);
-        finalizeSubmit(donem, month, birimKodu);
+        finalizeSubmit(donem, month, birimKodu, cetvel);
         return toResponse(takipDonemRepository.save(donem), month);
     }
 
-    private boolean readyToSubmit(TakipDonem donem, Basvuru basvuru, YearMonth month, String birimKodu) {
+    private boolean readyToSubmitEkuant(TakipDonem donem, YearMonth month, String birimKodu) {
         try {
-            assertReadyToSubmit(donem, month, birimKodu);
+            assertReadyToSubmitEkuant(donem, month, birimKodu);
             return true;
         } catch (ApiException ex) {
             return false;
         }
     }
 
-    private void assertReadyToSubmit(TakipDonem donem, YearMonth month, String birimKodu) {
+    private boolean readyToSubmitPuantaj(TakipDonem donem, YearMonth month, String birimKodu) {
+        try {
+            assertReadyToSubmitPuantaj(donem, month, birimKodu);
+            return true;
+        } catch (ApiException ex) {
+            return false;
+        }
+    }
+
+    private void assertReadyToSubmitEkuant(TakipDonem donem, YearMonth month, String birimKodu) {
         boolean relaxed = isRelaxedBirim(birimKodu);
         LocalDate today = LocalDate.now(ZONE);
         if (donem == null || donem.getGunler().isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Göndermeden önce EK-6 günleri seçilmelidir.");
         }
+        if (donem.isEkuantLocked()) {
+            throw new ApiException(HttpStatus.CONFLICT, "Gönderilen EK-6 değiştirilemez.");
+        }
         if (!relaxed) {
+            assertEkuantWindowOpen(donem.getBasvuru(), month);
             if (month.isAfter(YearMonth.from(today))) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "Gelecek ay gönderilemez.");
             }
@@ -691,7 +850,29 @@ public class TakipService {
                 throw new ApiException(HttpStatus.BAD_REQUEST, weeklyErrors.getFirst());
             }
         }
+    }
+
+    private void assertReadyToSubmitPuantaj(TakipDonem donem, YearMonth month, String birimKodu) {
+        boolean relaxed = isRelaxedBirim(birimKodu);
+        LocalDate today = LocalDate.now(ZONE);
+        if (donem == null || donem.getGunler().isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Göndermeden önce EK-6 günleri seçilmelidir.");
+        }
+        if (!relaxed && donem.resolveEkuantStatus() != TakipStatus.APPROVED) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Puantaj, EK-6 SKS tarafından onaylandıktan sonra gönderilir.");
+        }
+        if (donem.isPuantajLocked()) {
+            throw new ApiException(HttpStatus.CONFLICT, "Gönderilen puantaj değiştirilemez.");
+        }
+        if (!relaxed) {
+            assertPuantajWindowOpen(donem.getBasvuru(), month);
+        }
+        LocalDate gelmediKesim = firstGelmediDate(donem, List.of());
         for (TakipGun gun : donem.getGunler()) {
+            if (gelmediKesim != null && gun.getTarih().isAfter(gelmediKesim)) {
+                continue;
+            }
             if (!relaxed && gun.getTarih().isAfter(today)) {
                 throw new ApiException(HttpStatus.BAD_REQUEST,
                         "Gelecek günler için puantaj girilemez. " + gun.getTarih()
@@ -709,11 +890,22 @@ public class TakipService {
         }
     }
 
-    private void finalizeSubmit(TakipDonem donem, YearMonth month, String birimKodu) {
-        assertReadyToSubmit(donem, month, birimKodu);
-        donem.setStatus(TakipStatus.SUBMITTED);
-        donem.setGonderimTarihi(Instant.now());
+    private void finalizeSubmit(TakipDonem donem, YearMonth month, String birimKodu, TakipCetvelTuru cetvel) {
+        Instant now = Instant.now();
+        if (cetvel == TakipCetvelTuru.EKUANT) {
+            assertReadyToSubmitEkuant(donem, month, birimKodu);
+            donem.setEkuantStatus(TakipStatus.SUBMITTED);
+            donem.setEkuantGonderimTarihi(now);
+            donem.setEkuantOnayTarihi(null);
+        } else {
+            assertReadyToSubmitPuantaj(donem, month, birimKodu);
+            donem.setPuantajStatus(TakipStatus.SUBMITTED);
+            donem.setPuantajGonderimTarihi(now);
+            donem.setPuantajOnayTarihi(null);
+        }
+        donem.setGonderimTarihi(now);
         donem.setOnayTarihi(null);
+        donem.syncOverallStatus();
     }
 
     @Transactional
@@ -727,11 +919,18 @@ public class TakipService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Birime atanmış öğrenci bulunamadı."));
         TakipDonem donem = takipDonemRepository.findByBasvuruIdAndYilAndAy(basvuruId, yil, ay)
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Öğrenci bu ay için kayıt göndermedi."));
-        if (donem.getStatus() != TakipStatus.SUBMITTED) {
-            throw new ApiException(HttpStatus.CONFLICT, "Yalnızca gönderilmiş kayıtlar onaylanabilir.");
+        Instant now = Instant.now();
+        if (donem.resolvePuantajStatus() == TakipStatus.SUBMITTED) {
+            donem.setPuantajStatus(TakipStatus.APPROVED);
+            donem.setPuantajOnayTarihi(now);
+        } else if (donem.resolveEkuantStatus() == TakipStatus.SUBMITTED) {
+            donem.setEkuantStatus(TakipStatus.APPROVED);
+            donem.setEkuantOnayTarihi(now);
+        } else {
+            throw new ApiException(HttpStatus.CONFLICT, "Yalnızca gönderilmiş EK-6 veya puantaj kayıtları onaylanabilir.");
         }
-        donem.setStatus(TakipStatus.APPROVED);
-        donem.setOnayTarihi(Instant.now());
+        donem.setOnayTarihi(now);
+        donem.syncOverallStatus();
         return toResponse(takipDonemRepository.save(donem), month);
     }
 
@@ -739,11 +938,10 @@ public class TakipService {
     public int adminApproveSubmitted(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
         YearMonth month = requireMonth(yil, ay);
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
-        String normalizedUnit = blankToNull(birimKodu);
-        if (normalizedUnit == null) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "Toplu onay için birim seçilmelidir.");
+        if (unitCodes(birimKodu).isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Toplu onay için en az bir birim seçilmelidir.");
         }
-        List<Basvuru> students = assignedKesin(normalizedUnit, period).stream()
+        List<Basvuru> students = assignedKesin(birimKodu, period).stream()
                 .filter(basvuru -> basvuru.canWorkIn(month))
                 .toList();
         Map<Long, TakipDonem> donemler = loadDonemler(students, yil, ay);
@@ -751,9 +949,22 @@ public class TakipService {
         int count = 0;
         for (Basvuru basvuru : students) {
             TakipDonem donem = donemler.get(basvuru.getId());
-            if (donem != null && donem.getStatus() == TakipStatus.SUBMITTED) {
-                donem.setStatus(TakipStatus.APPROVED);
+            if (donem == null) {
+                continue;
+            }
+            boolean approved = false;
+            if (donem.resolvePuantajStatus() == TakipStatus.SUBMITTED) {
+                donem.setPuantajStatus(TakipStatus.APPROVED);
+                donem.setPuantajOnayTarihi(now);
+                approved = true;
+            } else if (donem.resolveEkuantStatus() == TakipStatus.SUBMITTED) {
+                donem.setEkuantStatus(TakipStatus.APPROVED);
+                donem.setEkuantOnayTarihi(now);
+                approved = true;
+            }
+            if (approved) {
                 donem.setOnayTarihi(now);
+                donem.syncOverallStatus();
                 count++;
             }
         }
@@ -775,13 +986,7 @@ public class TakipService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Birime atanmış öğrenci bulunamadı."));
         TakipDonem donem = takipDonemRepository.findByBasvuruIdAndYilAndAy(basvuruId, yil, ay)
                 .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "Öğrenci bu ay için kayıt göndermedi."));
-        if (donem.getStatus() != TakipStatus.SUBMITTED && donem.getStatus() != TakipStatus.APPROVED) {
-            throw new ApiException(HttpStatus.CONFLICT,
-                    "Yalnızca gönderilmiş veya onaylanmış kayıtlar birime iade edilebilir.");
-        }
-        donem.setStatus(TakipStatus.DRAFT);
-        donem.setGonderimTarihi(null);
-        donem.setOnayTarihi(null);
+        returnToDraft(donem);
         return toResponse(takipDonemRepository.save(donem), month);
     }
 
@@ -789,22 +994,18 @@ public class TakipService {
     public int adminReturnSubmitted(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
         YearMonth month = requireMonth(yil, ay);
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
-        String normalizedUnit = blankToNull(birimKodu);
-        if (normalizedUnit == null) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "Toplu iade için birim seçilmelidir.");
+        if (unitCodes(birimKodu).isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Toplu iade için en az bir birim seçilmelidir.");
         }
-        List<Basvuru> students = assignedKesin(normalizedUnit, period).stream()
+        List<Basvuru> students = assignedKesin(birimKodu, period).stream()
                 .filter(basvuru -> basvuru.canWorkIn(month))
                 .toList();
         Map<Long, TakipDonem> donemler = loadDonemler(students, yil, ay);
         int count = 0;
         for (Basvuru basvuru : students) {
             TakipDonem donem = donemler.get(basvuru.getId());
-            if (donem != null
-                    && (donem.getStatus() == TakipStatus.SUBMITTED || donem.getStatus() == TakipStatus.APPROVED)) {
-                donem.setStatus(TakipStatus.DRAFT);
-                donem.setGonderimTarihi(null);
-                donem.setOnayTarihi(null);
+            if (donem != null && (donem.isEkuantLocked() || donem.isPuantajLocked())) {
+                returnToDraft(donem);
                 count++;
             }
         }
@@ -824,6 +1025,8 @@ public class TakipService {
             created.setYil(yil);
             created.setAy(ay);
             created.setStatus(TakipStatus.DRAFT);
+            created.setEkuantStatus(TakipStatus.DRAFT);
+            created.setPuantajStatus(TakipStatus.DRAFT);
             return takipDonemRepository.save(created);
         });
     }
@@ -835,9 +1038,94 @@ public class TakipService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Bu birime atanmış öğrenci bulunamadı."));
     }
 
-    private void assertEditable(TakipDonem donem) {
-        if (donem.isLocked()) {
-            throw new ApiException(HttpStatus.CONFLICT, "Gönderilen ay değiştirilemez.");
+    private void assertEkuantEditable(TakipDonem donem) {
+        if (donem.isEkuantLocked()) {
+            throw new ApiException(HttpStatus.CONFLICT, "Gönderilen EK-6 değiştirilemez.");
+        }
+        if (!isRelaxedBirim(donem.getBasvuru().getAtananBirimKodu())) {
+            assertEkuantWindowOpen(donem.getBasvuru(), YearMonth.of(donem.getYil(), donem.getAy()));
+        }
+    }
+
+    private void assertPuantajEditable(TakipDonem donem, boolean relaxed) {
+        if (donem.isPuantajLocked()) {
+            throw new ApiException(HttpStatus.CONFLICT, "Gönderilen puantaj değiştirilemez.");
+        }
+        if (!relaxed && donem.resolveEkuantStatus() != TakipStatus.APPROVED) {
+            throw new ApiException(HttpStatus.BAD_REQUEST,
+                    "Puantaj, gönderilen EK-6 SKS tarafından onaylandıktan sonra doldurulur.");
+        }
+        if (!relaxed) {
+            assertPuantajWindowOpen(donem.getBasvuru(), YearMonth.of(donem.getYil(), donem.getAy()));
+        }
+    }
+
+    private void returnToDraft(TakipDonem donem) {
+        if (donem.isPuantajLocked()) {
+            donem.setPuantajStatus(TakipStatus.DRAFT);
+            donem.setPuantajGonderimTarihi(null);
+            donem.setPuantajOnayTarihi(null);
+        } else if (donem.isEkuantLocked()) {
+            donem.setEkuantStatus(TakipStatus.DRAFT);
+            donem.setEkuantGonderimTarihi(null);
+            donem.setEkuantOnayTarihi(null);
+        } else {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Yalnızca gönderilmiş veya onaylanmış kayıtlar birime iade edilebilir.");
+        }
+        donem.setOnayTarihi(null);
+        donem.syncOverallStatus();
+        if (donem.getStatus() == TakipStatus.DRAFT) {
+            donem.setGonderimTarihi(null);
+        }
+    }
+
+    private LocalDate firstGelmediDate(TakipDonem donem, List<PuantajKaydetRequest.Kayit> kayitlar) {
+        Map<LocalDate, PuantajDurum> statuses = new HashMap<>();
+        for (TakipGun gun : donem.getGunler()) {
+            statuses.put(gun.getTarih(), gun.getDurum());
+        }
+        if (kayitlar != null) {
+            for (PuantajKaydetRequest.Kayit kayit : kayitlar) {
+                statuses.put(kayit.tarih(), kayit.durum());
+            }
+        }
+        return statuses.entrySet().stream()
+                .filter(entry -> entry.getValue() == PuantajDurum.GELMEDI)
+                .map(Map.Entry::getKey)
+                .min(LocalDate::compareTo)
+                .orElse(null);
+    }
+
+    private void applyGelmediCutoff(TakipDonem donem, YearMonth month) {
+        LocalDate cutoff = firstGelmediDate(donem, List.of());
+        Basvuru basvuru = donem.getBasvuru();
+        LocalDate expectedEnd = month.plusMonths(1).atDay(1);
+        if (cutoff == null) {
+            if (expectedEnd.equals(basvuru.getIliskiBitisTarihi())) {
+                basvuru.setIliskiBitisTarihi(null);
+            }
+            return;
+        }
+        for (TakipGun gun : donem.getGunler()) {
+            if (gun.getTarih().isAfter(cutoff)) {
+                fileStorageService.deleteQuietly(gun.getBelgeYolu());
+                gun.setDurum(null);
+                gun.setBelgeYolu(null);
+                gun.setBelgeAdi(null);
+                gun.setIcerikTipi(null);
+            }
+        }
+        if (basvuru.getIliskiBitisTarihi() == null) {
+            basvuru.setIliskiBitisTarihi(expectedEnd);
+        }
+    }
+
+    private void assertNotAfterGelmedi(TakipDonem donem, LocalDate tarih) {
+        LocalDate cutoff = firstGelmediDate(donem, List.of());
+        if (cutoff != null && tarih.isAfter(cutoff)) {
+            throw new ApiException(HttpStatus.CONFLICT,
+                    "Mazeretsiz gelmediği girilen günden sonraki puantaj kilitlidir.");
         }
     }
 
@@ -859,12 +1147,18 @@ public class TakipService {
     private TakipDonemResponse emptyDraft(Basvuru basvuru, YearMonth month) {
         String birimKodu = basvuru.getAtananBirimKodu();
         boolean relaxed = isRelaxedBirim(birimKodu);
+        TakipGirisPencereResponse window = toGirisPencere(
+                basvuru.getBasvuruDonemi().getId(), month.getYear(), month.getMonthValue(), relaxed);
         return new TakipDonemResponse(
                 null,
                 basvuru.getId(),
                 month.getYear(),
                 month.getMonthValue(),
                 TakipStatus.DRAFT,
+                TakipStatus.DRAFT,
+                TakipStatus.DRAFT,
+                false,
+                false,
                 false,
                 null,
                 List.of(),
@@ -876,6 +1170,13 @@ public class TakipService {
                 countPermissionDays(basvuru.getId()),
                 MAX_IZIN_GUNU,
                 relaxed,
+                null,
+                window.ekuantBaslangic(),
+                window.ekuantBitis(),
+                window.ekuantAcik(),
+                window.puantajBaslangic(),
+                window.puantajBitis(),
+                window.puantajAcik(),
                 toOgrenci(basvuru)
         );
     }
@@ -898,13 +1199,19 @@ public class TakipService {
         String birimKodu = donem.getBasvuru().getAtananBirimKodu();
         boolean relaxed = isRelaxedBirim(birimKodu);
         List<String> warnings = relaxed ? List.of() : ekuantWarnings(donem.getBasvuru(), month);
+        TakipGirisPencereResponse window = toGirisPencere(
+                donem.getBasvuru().getBasvuruDonemi().getId(), month.getYear(), month.getMonthValue(), relaxed);
         return new TakipDonemResponse(
                 donem.getId(),
                 donem.getBasvuru().getId(),
                 donem.getYil(),
                 donem.getAy(),
                 donem.getStatus(),
+                donem.resolveEkuantStatus(),
+                donem.resolvePuantajStatus(),
                 donem.isLocked(),
+                donem.isEkuantLocked(),
+                donem.isPuantajLocked(),
                 donem.getGonderimTarihi(),
                 ekuant,
                 puantaj,
@@ -915,6 +1222,13 @@ public class TakipService {
                 countPermissionDays(donem.getBasvuru().getId()),
                 MAX_IZIN_GUNU,
                 relaxed,
+                firstGelmediDate(donem, List.of()),
+                window.ekuantBaslangic(),
+                window.ekuantBitis(),
+                window.ekuantAcik(),
+                window.puantajBaslangic(),
+                window.puantajBitis(),
+                window.puantajAcik(),
                 toOgrenci(donem.getBasvuru())
         );
     }
@@ -1057,7 +1371,7 @@ public class TakipService {
                     boolean locked = false;
                     if (donem != null) {
                         status = donem.getStatus();
-                        locked = donem.isLocked();
+                        locked = donem.isPuantajLocked();
                         for (TakipGun gun : donem.getGunler()) {
                             if (gun.getDurum() == PuantajDurum.GELDI) {
                                 buAyTamGun++;
@@ -1080,6 +1394,65 @@ public class TakipService {
                             locked
                     ));
                 });
+    }
+
+    private void assertEkuantWindowOpen(Basvuru basvuru, YearMonth month) {
+        TakipGirisPencereResponse window = toGirisPencere(
+                basvuru.getBasvuruDonemi().getId(), month.getYear(), month.getMonthValue(), false);
+        if (window.ekuantAcik()) {
+            return;
+        }
+        throw new ApiException(HttpStatus.CONFLICT, windowMessage(
+                "EK-6", window.ekuantBaslangic(), window.ekuantBitis()));
+    }
+
+    private void assertPuantajWindowOpen(Basvuru basvuru, YearMonth month) {
+        TakipGirisPencereResponse window = toGirisPencere(
+                basvuru.getBasvuruDonemi().getId(), month.getYear(), month.getMonthValue(), false);
+        if (window.puantajAcik()) {
+            return;
+        }
+        throw new ApiException(HttpStatus.CONFLICT, windowMessage(
+                "Puantaj", window.puantajBaslangic(), window.puantajBitis()));
+    }
+
+    private String windowMessage(String label, LocalDate start, LocalDate end) {
+        if (start == null || end == null) {
+            return label + " girişi için SKS henüz tarih aralığı belirlemedi.";
+        }
+        return label + " girişi yalnızca " + start + " – " + end + " tarihleri arasında yapılabilir.";
+    }
+
+    private TakipGirisPencereResponse toGirisPencere(Long periodId, int yil, int ay, boolean relaxed) {
+        TakipGirisPencere window = takipGirisPencereRepository
+                .findByBasvuruDonemiIdAndYilAndAy(periodId, yil, ay)
+                .orElse(null);
+        LocalDate ekuantStart = window == null ? null : window.getEkuantBaslangic();
+        LocalDate ekuantEnd = window == null ? null : window.getEkuantBitis();
+        LocalDate puantajStart = window == null ? null : window.getPuantajBaslangic();
+        LocalDate puantajEnd = window == null ? null : window.getPuantajBitis();
+        return new TakipGirisPencereResponse(
+                yil,
+                ay,
+                ekuantStart,
+                ekuantEnd,
+                relaxed || windowOpen(ekuantStart, ekuantEnd),
+                puantajStart,
+                puantajEnd,
+                relaxed || windowOpen(puantajStart, puantajEnd)
+        );
+    }
+
+    private TakipGirisPencereResponse emptyGirisPencere(int yil, int ay, boolean relaxed) {
+        return new TakipGirisPencereResponse(yil, ay, null, null, relaxed, null, null, relaxed);
+    }
+
+    private boolean windowOpen(LocalDate start, LocalDate end) {
+        if (start == null || end == null) {
+            return false;
+        }
+        LocalDate today = LocalDate.now(ZONE);
+        return !today.isBefore(start) && !today.isAfter(end);
     }
 
     private BirimOgrenciResponse toOgrenci(Basvuru basvuru) {

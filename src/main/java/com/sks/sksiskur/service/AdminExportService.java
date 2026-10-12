@@ -289,15 +289,16 @@ public class AdminExportService {
     @Transactional(readOnly = true)
     public byte[] takipRaporExcel(Long donemId, String birimKodu, int yil, int ay) {
         if (birimKodu == null || birimKodu.isBlank()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "EK-6 / puantaj Excel indirmek için birim seçilmelidir.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "EK-6 / puantaj Excel indirmek için en az bir birim seçilmelidir.");
         }
         BirimAylikRaporResponse rapor = takipService.adminMonthlyReport(donemId, birimKodu, yil, ay);
         if (rapor.ogrenciler().isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Seçili birimde bu ay için öğrenci kaydı yok.");
         }
         boolean hasSubmitted = rapor.ogrenciler().stream()
-                .anyMatch(ogrenci -> ogrenci.status() == com.sks.sksiskur.domain.TakipStatus.SUBMITTED
-                        || ogrenci.status() == com.sks.sksiskur.domain.TakipStatus.APPROVED);
+                .anyMatch(ogrenci -> isSent(ogrenci.status())
+                        || isSent(ogrenci.ekuantStatus())
+                        || isSent(ogrenci.puantajStatus()));
         if (!hasSubmitted) {
             throw new ApiException(HttpStatus.CONFLICT,
                     "Birim henüz bu ayı göndermedi. Excel, gönderilmiş veya onaylı kayıtlar için indirilebilir.");
@@ -416,6 +417,10 @@ public class AdminExportService {
             return "Kesin listede değil";
         }
         return item.status() == ApplicationStatus.APPROVED ? "İŞKUR kesin listesi bekleniyor" : "—";
+    }
+
+    private static boolean isSent(TakipStatus status) {
+        return status == TakipStatus.SUBMITTED || status == TakipStatus.APPROVED;
     }
 
     private static String takipStatusLabel(TakipStatus status) {

@@ -54,7 +54,8 @@ public class IskurAylikRaporExportService {
     public byte[] export(Long donemId, String birimKodu, int yil, int ay) {
         BirimAylikRaporResponse rapor = takipService.adminMonthlyReport(donemId, birimKodu, yil, ay);
         List<BirimAylikRaporResponse.RaporOgrenci> ogrenciler = rapor.ogrenciler().stream()
-                .filter(student -> student.status() == TakipStatus.APPROVED)
+                .filter(student -> student.puantajStatus() == TakipStatus.APPROVED
+                        || student.status() == TakipStatus.APPROVED)
                 .sorted(Comparator.comparing(student -> adSoyad(student).toUpperCase(Locale.forLanguageTag("tr-TR"))))
                 .toList();
         if (ogrenciler.isEmpty()) {

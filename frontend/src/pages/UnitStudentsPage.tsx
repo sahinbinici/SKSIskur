@@ -56,7 +56,7 @@ export function UnitStudentsPage() {
     <Shell home="/birim">
       <h3 className="section">Birim öğrenci listesi</h3>
       <p style={{ color: "var(--muted)", marginTop: -8, marginBottom: 18 }}>
-        {session?.birimAdi || session?.displayName}. Her öğrenci için EK-6 ve puantajı doldurun; tüm liste tamamlandığında Aylık rapor ekranından ayı tek seferde SKS’ye gönderin.
+        {session?.birimAdi || session?.displayName}. Dönem kapanana kadar öğrenciler bu listede kalır. Her ay önce EK-6’yı gönderip onaylatın; ay sonunda aynı EK-6 günlerine puantaj doldurup gönderin.
       </p>
       {error && <div className="alert alert-error">{error}</div>}
 

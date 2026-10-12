@@ -58,6 +58,10 @@ function statusLabel(status?: TakipStatus | null) {
   return "Eksik";
 }
 
+function phaseLabel(ekuant?: TakipStatus | null, puantaj?: TakipStatus | null) {
+  return `EK-6: ${statusLabel(ekuant)} · Puantaj: ${statusLabel(puantaj)}`;
+}
+
 export function UnitReportPage() {
   const confirm = useConfirm();
   const { session } = useAuth();
@@ -115,21 +119,22 @@ export function UnitReportPage() {
     ).catch((err) => setError(err instanceof ApiError ? err.message : "Excel indirilemedi."));
   }
 
-  async function submitMonth() {
-    if (!data?.gonderilebilir) return;
-    if (!await confirm({
-      title: "Ayı SKS'ye gönder",
-      message: `${MONTHS[ay - 1]} ${yil} için tüm öğrencilerin EK-6 ve puantaj kaydı birlikte gönderilecek. Gönderilen ay birim tarafından değiştirilemez.`,
-      confirmLabel: "Gönder"
-    })) {
+  async function submitMonth(cetvel: "EKUANT" | "PUANTAJ") {
+    const canSend = cetvel === "EKUANT" ? data?.ekuantGonderilebilir : data?.puantajGonderilebilir;
+    if (!canSend) return;
+    const title = cetvel === "EKUANT" ? "EK-6'yı SKS'ye gönder" : "Puantajı SKS'ye gönder";
+    const message = cetvel === "EKUANT"
+      ? `${MONTHS[ay - 1]} ${yil} için tüm öğrencilerin EK-6 çizelgesi gönderilecek. Onaylandıktan sonra ay sonunda puantaj doldurulur.`
+      : `${MONTHS[ay - 1]} ${yil} için tüm öğrencilerin puantajı, onaylı EK-6 günlerine göre gönderilecek.`;
+    if (!await confirm({ title, message, confirmLabel: "Gönder" })) {
       return;
     }
     setLoading(true);
     setError("");
     setMessage("");
     try {
-      const result = await api.gonderBirimTakip(yil, ay);
-      setMessage(`${result.gonderilenOgrenci} öğrencinin kaydı gönderildi. SKS onayı bekleniyor.`);
+      const result = await api.gonderBirimTakip(yil, ay, cetvel);
+      setMessage(`${result.gonderilenOgrenci} öğrencinin ${cetvel === "EKUANT" ? "EK-6" : "puantaj"} kaydı gönderildi. SKS onayı bekleniyor.`);
       await reload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Gönderim tamamlanamadı.");
@@ -144,7 +149,7 @@ export function UnitReportPage() {
         <div>
           <h3 className="section" style={{ margin: 0 }}>Aylık EK-6 / puantaj raporu</h3>
           <p style={{ color: "var(--muted)", margin: "6px 0 0" }}>
-            Önce listedeki her öğrenci için EK-6 ve puantajı tamamlayın; ardından bu ekrandan ayı tek seferde SKS’ye gönderin. Onay sonrası cetveli Excel veya yazdırı ile indirin.
+            Ay başında EK-6’yı gönderip onaylatın; ay sonunda aynı günlere puantaj doldurup gönderin. Dönem açık olduğu sürece her ay bu akış tekrarlanır.
           </p>
         </div>
         <div className="toolbar" style={{ margin: 0 }}>
@@ -172,23 +177,42 @@ export function UnitReportPage() {
           <button type="button" className="btn btn-gold" onClick={printReport} disabled={loading || !data?.yazdirilabilir}>
             Yazdır / PDF
           </button>
-          <button type="button" className="btn btn-gold" onClick={() => void submitMonth()} disabled={loading || !data?.gonderilebilir}>
-            Yöneticiye gönder
+          <button type="button" className="btn btn-gold" onClick={() => void submitMonth("EKUANT")} disabled={loading || !data?.ekuantGonderilebilir}>
+            EK-6 gönder
+          </button>
+          <button type="button" className="btn btn-gold" onClick={() => void submitMonth("PUANTAJ")} disabled={loading || !data?.puantajGonderilebilir}>
+            Puantaj gönder
           </button>
         </div>
       </div>
       {message && <div className="alert alert-ok no-print">{message}</div>}
+      {data && data.ekuantGirisAcik === false && (
+        <div className="alert alert-wait no-print">
+          {data.ekuantGirisBaslangic && data.ekuantGirisBitis
+            ? `EK-6 girişi / gönderimi yalnızca ${data.ekuantGirisBaslangic.slice(0, 10)} – ${data.ekuantGirisBitis.slice(0, 10)} arasında açıktır.`
+            : "SKS henüz bu ay için EK-6 giriş tarihlerini belirlemedi."}
+        </div>
+      )}
+      {data && data.puantajGirisAcik === false && (
+        <div className="alert alert-wait no-print">
+          {data.puantajGirisBaslangic && data.puantajGirisBitis
+            ? `Puantaj girişi / gönderimi yalnızca ${data.puantajGirisBaslangic.slice(0, 10)} – ${data.puantajGirisBitis.slice(0, 10)} arasında açıktır.`
+            : "SKS henüz bu ay için puantaj giriş tarihlerini belirlemedi."}
+        </div>
+      )}
       {data && !data.yazdirilabilir && (
         <div className="alert alert-wait no-print">
           {data.onayBekleyenOgrenci > 0
             ? `${data.onayBekleyenOgrenci} öğrencinin kaydı yönetici onayı bekliyor.`
-            : data.tamamlanmamisOgrenci > 0
-              ? `${data.tamamlanmamisOgrenci} öğrencinin EK-6 veya puantajı eksik. Öğrenci satırından tamamlayın.`
-              : data.gonderilebilir
-                ? "Tüm öğrenciler hazır; «Yöneticiye gönder» ile ayı iletin."
-                : data.gonderilmeyenOgrenci > 0
-                  ? `${data.gonderilmeyenOgrenci} öğrencinin ayı henüz gönderilmedi.`
-                  : "Bu ay için yazdırma henüz açılmadı."}
+            : data.ekuantGonderilebilir
+              ? "Tüm öğrencilerin EK-6’sı hazır; «EK-6 gönder» ile iletin."
+              : data.puantajGonderilebilir
+                ? "Onaylı EK-6’ya göre puantaj tamam; «Puantaj gönder» ile iletin."
+                : data.tamamlanmamisOgrenci > 0
+                  ? `${data.tamamlanmamisOgrenci} öğrencinin EK-6’sı eksik. Öğrenci satırından tamamlayın.`
+                  : data.gonderilmeyenOgrenci > 0
+                    ? `${data.gonderilmeyenOgrenci} öğrencinin bu ayı henüz gönderilmedi.`
+                    : "Bu ay için yazdırma henüz açılmadı."}
           {data.tamamlanmamisOgrenci > 0 && (
             <span> <Link to="/birim">Öğrenci listesi</Link> üzerinden eksikleri tamamlayın.</span>
           )}
@@ -223,7 +247,7 @@ export function UnitReportPage() {
                   </td>
                   <td>{ogrenci.ekuantGunler.length}</td>
                   <td>{ogrenci.toplamGun > 0 ? `${ogrenci.toplamGun} geldi` : "—"}</td>
-                  <td>{statusLabel(ogrenci.status)}</td>
+                  <td>{phaseLabel(ogrenci.ekuantStatus ?? ogrenci.status, ogrenci.puantajStatus)}</td>
                 </tr>
               ))}
             </tbody>

@@ -28,10 +28,18 @@ class CetvelExcelExportServiceTest {
                 new BigDecimal("7.5"),
                 true,
                 false,
+                false,
+                false,
                 1,
                 0,
                 0,
                 0,
+                true,
+                true,
+                null,
+                null,
+                null,
+                null,
                 List.of(new BirimAylikRaporResponse.RaporOgrenci(
                         1,
                         10L,
@@ -47,7 +55,9 @@ class CetvelExcelExportServiceTest {
                         List.of(),
                         2,
                         new BigDecimal("15.0"),
-                        TakipStatus.SUBMITTED
+                        TakipStatus.SUBMITTED,
+                        TakipStatus.SUBMITTED,
+                        TakipStatus.DRAFT
                 ))
         );
 

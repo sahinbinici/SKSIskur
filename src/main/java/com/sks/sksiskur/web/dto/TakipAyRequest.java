@@ -1,4 +1,11 @@
 package com.sks.sksiskur.web.dto;
 
-public record TakipAyRequest(int yil, int ay) {
+import com.sks.sksiskur.domain.TakipCetvelTuru;
+import jakarta.validation.constraints.NotNull;
+
+public record TakipAyRequest(
+        int yil,
+        int ay,
+        @NotNull TakipCetvelTuru cetvel
+) {
 }

@@ -49,11 +49,31 @@ public class TakipDonem {
     @Column(nullable = false, length = 20)
     private TakipStatus status = TakipStatus.DRAFT;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "ekuant_status", length = 20)
+    private TakipStatus ekuantStatus = TakipStatus.DRAFT;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "puantaj_status", length = 20)
+    private TakipStatus puantajStatus = TakipStatus.DRAFT;
+
     @Column(name = "gonderim_tarihi")
     private Instant gonderimTarihi;
 
+    @Column(name = "ekuant_gonderim_tarihi")
+    private Instant ekuantGonderimTarihi;
+
+    @Column(name = "puantaj_gonderim_tarihi")
+    private Instant puantajGonderimTarihi;
+
     @Column(name = "onay_tarihi")
     private Instant onayTarihi;
+
+    @Column(name = "ekuant_onay_tarihi")
+    private Instant ekuantOnayTarihi;
+
+    @Column(name = "puantaj_onay_tarihi")
+    private Instant puantajOnayTarihi;
 
     @Column(name = "olusturma_tarihi", nullable = false)
     private Instant olusturmaTarihi;
@@ -64,8 +84,37 @@ public class TakipDonem {
     @OneToMany(mappedBy = "donem", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TakipGun> gunler = new ArrayList<>();
 
+    public TakipStatus resolveEkuantStatus() {
+        return ekuantStatus != null ? ekuantStatus : status;
+    }
+
+    public TakipStatus resolvePuantajStatus() {
+        return puantajStatus != null ? puantajStatus : status;
+    }
+
+    public boolean isEkuantLocked() {
+        TakipStatus value = resolveEkuantStatus();
+        return value == TakipStatus.SUBMITTED || value == TakipStatus.APPROVED;
+    }
+
+    public boolean isPuantajLocked() {
+        TakipStatus value = resolvePuantajStatus();
+        return value == TakipStatus.SUBMITTED || value == TakipStatus.APPROVED;
+    }
+
     public boolean isLocked() {
-        return status == TakipStatus.SUBMITTED || status == TakipStatus.APPROVED;
+        return isEkuantLocked() && isPuantajLocked();
+    }
+
+    public void syncOverallStatus() {
+        if (resolvePuantajStatus() == TakipStatus.APPROVED) {
+            status = TakipStatus.APPROVED;
+        } else if (resolveEkuantStatus() == TakipStatus.SUBMITTED
+                || resolvePuantajStatus() == TakipStatus.SUBMITTED) {
+            status = TakipStatus.SUBMITTED;
+        } else {
+            status = TakipStatus.DRAFT;
+        }
     }
 
     @PrePersist

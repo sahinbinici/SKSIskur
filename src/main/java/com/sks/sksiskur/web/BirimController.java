@@ -163,10 +163,10 @@ public class BirimController {
     @PostMapping("/takip/gonder")
     public BirimAyGonderResponse submitAy(
             Authentication authentication,
-            @RequestBody TakipAyRequest request
+            @Valid @RequestBody TakipAyRequest request
     ) {
         String birimKodu = birimKodu(authentication);
-        BirimAyGonderResponse result = takipService.submitBirimAy(birimKodu, request.yil(), request.ay());
+        BirimAyGonderResponse result = takipService.submitBirimAy(birimKodu, request.yil(), request.ay(), request.cetvel());
         auditLogService.logBirim(authentication, birimKodu, IslemTuru.TAKIP_GONDER, "BIRIM", null,
                 "Aylık takip toplu gönderildi: " + request.yil() + "-" + String.format("%02d", request.ay()),
                 result.gonderilenOgrenci() + " öğrenci");
@@ -177,9 +177,9 @@ public class BirimController {
     public TakipDonemResponse submit(
             Authentication authentication,
             @PathVariable Long basvuruId,
-            @RequestBody TakipAyRequest request
+            @Valid @RequestBody TakipAyRequest request
     ) {
-        TakipDonemResponse saved = takipService.submit(birimKodu(authentication), basvuruId, request.yil(), request.ay());
+        TakipDonemResponse saved = takipService.submit(birimKodu(authentication), basvuruId, request.yil(), request.ay(), request.cetvel());
         auditLogService.logBirim(authentication, birimKodu(authentication), IslemTuru.TAKIP_GONDER, "BASVURU", basvuruId,
                 "Aylık takip gönderildi: " + request.yil() + "-" + String.format("%02d", request.ay()), null);
         return saved;

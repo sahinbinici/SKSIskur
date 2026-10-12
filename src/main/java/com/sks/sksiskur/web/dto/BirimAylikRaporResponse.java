@@ -13,10 +13,18 @@ public record BirimAylikRaporResponse(
         BigDecimal gunlukSaat,
         boolean yazdirilabilir,
         boolean gonderilebilir,
+        boolean ekuantGonderilebilir,
+        boolean puantajGonderilebilir,
         int onayliOgrenci,
         int onayBekleyenOgrenci,
         int gonderilmeyenOgrenci,
         int tamamlanmamisOgrenci,
+        boolean ekuantGirisAcik,
+        boolean puantajGirisAcik,
+        LocalDate ekuantGirisBaslangic,
+        LocalDate ekuantGirisBitis,
+        LocalDate puantajGirisBaslangic,
+        LocalDate puantajGirisBitis,
         List<RaporOgrenci> ogrenciler
 ) {
     public record RaporOgrenci(
@@ -34,7 +42,9 @@ public record BirimAylikRaporResponse(
             List<LocalDate> raporluGunler,
             int toplamGun,
             BigDecimal toplamSaat,
-            TakipStatus status
+            TakipStatus status,
+            TakipStatus ekuantStatus,
+            TakipStatus puantajStatus
     ) {
     }
 }

@@ -108,8 +108,13 @@ export function UnitTrackingPage() {
   }, [donem]);
 
   const selectedGun = selected ? puantajByDate.get(selected) : undefined;
-  const locked = Boolean(donem?.locked);
+  const ekuantLocked = Boolean(donem?.ekuantLocked);
+  const puantajLocked = Boolean(donem?.puantajLocked);
+  const ekuantApproved = donem?.ekuantStatus === "APPROVED";
+  const gelmediKesim = donem?.gelmediKesimTarihi ? ymd(donem.gelmediKesimTarihi) : null;
   const testMode = Boolean(donem?.testTakipModu);
+  const ekuantWindowOpen = Boolean(testMode || donem?.ekuantGirisAcik);
+  const puantajWindowOpen = Boolean(testMode || donem?.puantajGirisAcik);
   const quotaCount = donem?.ekuantKotaGunSayisi ?? 0;
   const quotaLimit = donem?.ekuantKotaGunLimiti ?? DAYS_PER_WEEK * 4;
   const currentWeekMonday = mondayOf(toYmd(now));
@@ -154,36 +159,47 @@ export function UnitTrackingPage() {
       };
     });
   }, [cells, workDays, currentWeekMonday, ay, yil, now, todayYmd]);
+  const afterGelmedi = (date: string) => Boolean(gelmediKesim && date > gelmediKesim);
   const puantajDayOpen = (date: string) =>
-    !locked && workDays.has(date) && (testMode || !closedDays.has(date)) && (testMode || date <= todayYmd);
+    !puantajLocked
+    && puantajWindowOpen
+    && (testMode || ekuantApproved)
+    && workDays.has(date)
+    && !afterGelmedi(date)
+    && (testMode || !closedDays.has(date))
+    && (testMode || date <= todayYmd);
   const puantajEditable = selected ? puantajDayOpen(selected) : false;
   const izinLimitiDolu = (donem?.toplamIzinGunu ?? 0) >= (donem?.izinGunLimiti ?? 10);
   const kullanilanIzin = donem?.toplamIzinGunu ?? 0;
   const izinLimiti = donem?.izinGunLimiti ?? 10;
   const kalanIzin = Math.max(0, izinLimiti - kullanilanIzin);
   const missingPuantaj = [...workDays].filter((date) =>
-    (testMode || date <= todayYmd) && !puantajByDate.get(date)?.durum
+    !afterGelmedi(date) && (testMode || date <= todayYmd) && !puantajByDate.get(date)?.durum
   );
   const missingDocs = testMode ? [] : [...workDays].filter((date) => {
     const gun = puantajByDate.get(date);
-    return date <= todayYmd && needsDocument(gun?.durum) && !gun?.belgeVar;
+    return !afterGelmedi(date) && date <= todayYmd && needsDocument(gun?.durum) && !gun?.belgeVar;
   });
-  const futureWorkDays = testMode ? [] : [...workDays].filter((date) => date > todayYmd);
+  const futureWorkDays = testMode ? [] : [...workDays].filter((date) => !afterGelmedi(date) && date > todayYmd);
   const incompleteWeeks = weekPlans.filter((week) => week.selected < week.required).length;
-  const studentReady = !locked
-    && (testMode || (donem?.ekuantUyarilari.length ?? 0) === 0)
+  const ekuantReady = !ekuantLocked && ekuantWindowOpen && workDays.size > 0 && (testMode || (donem?.ekuantUyarilari.length ?? 0) === 0);
+  const puantajReady = (testMode || ekuantApproved) && puantajWindowOpen && !puantajLocked
     && missingPuantaj.length === 0
     && missingDocs.length === 0
     && futureWorkDays.length === 0
     && workDays.size > 0;
-  const draftHint = studentReady
-    ? "Bu öğrenci için kayıt tamam. Tüm öğrenciler hazır olduğunda Aylık rapor ekranından ayı gönderin."
-    : [
-        !testMode && incompleteWeeks > 0 ? `${incompleteWeeks} haftanın EK-6 planı eksik` : "",
-        missingPuantaj.length > 0 ? `${missingPuantaj.length} puantaj eksik` : "",
-        futureWorkDays.length > 0 ? `${futureWorkDays.length} gelecek gün seçili` : "",
-        missingDocs.length > 0 ? `${missingDocs.length} belge eksik` : ""
-      ].filter(Boolean).join(" · ") || "EK-6 günlerini seçip puantajı işaretleyin.";
+  const studentReady = ekuantReady || puantajReady;
+  const draftHint = puantajReady
+    ? "Puantaj tamam. Tüm öğrenciler hazır olduğunda Aylık rapor ekranından puantajı gönderin."
+    : ekuantReady && !ekuantApproved
+      ? "EK-6 tamam. Tüm öğrenciler hazır olduğunda Aylık rapor ekranından EK-6’yı gönderin; onay sonrası puantaj açılır."
+      : [
+          !ekuantLocked && !testMode && incompleteWeeks > 0 ? `${incompleteWeeks} haftanın EK-6 planı eksik` : "",
+          ekuantApproved && missingPuantaj.length > 0 ? `${missingPuantaj.length} puantaj eksik` : "",
+          ekuantApproved && futureWorkDays.length > 0 ? `${futureWorkDays.length} gelecek gün seçili` : "",
+          ekuantApproved && missingDocs.length > 0 ? `${missingDocs.length} belge eksik` : "",
+          !testMode && ekuantLocked && !ekuantApproved ? "EK-6 onay bekliyor; puantaj henüz açılamaz." : ""
+        ].filter(Boolean).join(" · ") || "EK-6 günlerini seçin; onaydan sonra puantaj işaretleyin.";
 
   function shiftMonth(delta: number) {
     const next = new Date(yil, ay - 1 + delta, 1);
@@ -210,7 +226,7 @@ export function UnitTrackingPage() {
   }
 
   async function toggleEkuant(date: string) {
-    if (locked || busy) return;
+    if (ekuantLocked || !ekuantWindowOpen || busy) return;
     if (!testMode && closedDays.has(date)) {
       setError("Bu gün için EK-6 ve puantaj girişi yönetici tarafından kapatıldı.");
       return;
@@ -295,14 +311,32 @@ export function UnitTrackingPage() {
         <p style={{ margin: "6px 0 0", color: "var(--muted)", lineHeight: 1.55 }}>
           {testMode
             ? "Geçmiş ve gelecek aylar için EK-6 ve puantaj girebilir, haftalık/aylık kota ve belge zorunluluğu uygulanmaz. Tüm EK-6 günlerine puantaj işaretleyip istediğiniz zaman gönderebilirsiniz."
-            : "Haftada en fazla 3 gün EK-6 seçin. Ayın 29–31. günleri sonraki ayın 12 günlük kotasına sayılır. Puantaj yalnızca gelmiş günlere girilir; içinde bulunulan ay, bugüne kadarki haftalar tamamsa gönderilebilir."}
+            : "Ay başında haftada 3 gün EK-6 seçip gönderin. SKS onayından sonra ay ilerledikçe puantaj doldurulur ve ay sonunda gönderilir. Mazeretsiz gelmedi işaretlenirse o günden sonraki puantaj kapanır; öğrenci sonraki ay listede görünmez."}
         </p>
       </section>
-      {locked && (
-        <div className={`alert ${donem?.status === "APPROVED" ? "alert-ok" : "alert-wait"}`}>
-          {donem?.status === "APPROVED"
-            ? `Bu ay SKS tarafından onaylandı. Aylık rapor ekranından EK-6 ve puantaj cetvellerini Excel indirip veya yazdırıp imzalayabilirsiniz.`
-            : `Bu ay ${formatDate(donem?.gonderimTarihi)} tarihinde gönderildi; yönetici onayı bekleniyor. Gönderilen kayıt değiştirilemez.`}
+      {!testMode && !ekuantWindowOpen && (
+        <div className="alert alert-wait">
+          {donem?.ekuantGirisBaslangic && donem?.ekuantGirisBitis
+            ? `EK-6 girişi yalnızca ${donem.ekuantGirisBaslangic.slice(0, 10)} – ${donem.ekuantGirisBitis.slice(0, 10)} arasında açıktır.`
+            : "SKS henüz bu ay için EK-6 giriş tarihlerini belirlemedi."}
+        </div>
+      )}
+      {!testMode && ekuantApproved && !puantajWindowOpen && (
+        <div className="alert alert-wait">
+          {donem?.puantajGirisBaslangic && donem?.puantajGirisBitis
+            ? `Puantaj girişi yalnızca ${donem.puantajGirisBaslangic.slice(0, 10)} – ${donem.puantajGirisBitis.slice(0, 10)} arasında açıktır.`
+            : "SKS henüz bu ay için puantaj giriş tarihlerini belirlemedi."}
+        </div>
+      )}
+      {(ekuantLocked || puantajLocked) && (
+        <div className={`alert ${donem?.puantajStatus === "APPROVED" ? "alert-ok" : "alert-wait"}`}>
+          {donem?.puantajStatus === "APPROVED"
+            ? `Bu ayın puantajı SKS tarafından onaylandı. Aylık rapor ekranından cetvelleri indirebilirsiniz.`
+            : donem?.ekuantStatus === "APPROVED" && !puantajLocked
+              ? "EK-6 onaylandı. Ay sonuna doğru EK-6 günlerine puantaj doldurup gönderin."
+              : donem?.ekuantStatus === "SUBMITTED"
+                ? `EK-6 ${formatDate(donem?.gonderimTarihi)} tarihinde gönderildi; onay bekleniyor. Onaydan sonra puantaj açılır.`
+                : `Puantaj ${formatDate(donem?.gonderimTarihi)} tarihinde gönderildi; yönetici onayı bekleniyor.`}
         </div>
       )}
       {izinLimitiDolu && (
@@ -328,8 +362,8 @@ export function UnitTrackingPage() {
               <h4>EK-6</h4>
               <p>Her hafta tam {DAYS_PER_WEEK} gün seçilir; ay toplamı {quotaLimit} gündür. Ayın 29–31. günleri sonraki ayın kotasına sayılır.</p>
             </div>
-            <span className={`badge ${donem?.status === "APPROVED" ? "APPROVED" : locked ? "SUBMITTED" : "DRAFT"}`}>
-              {donem?.status === "APPROVED" ? "Onaylandı" : locked ? "Onay bekliyor" : "Taslak"}
+            <span className={`badge ${donem?.ekuantStatus === "APPROVED" ? "APPROVED" : ekuantLocked ? "SUBMITTED" : "DRAFT"}`}>
+              {donem?.ekuantStatus === "APPROVED" ? "Onaylandı" : ekuantLocked ? "Onay bekliyor" : "Taslak"}
             </span>
           </div>
           <CalendarGrid
@@ -339,7 +373,7 @@ export function UnitTrackingPage() {
             closedDays={closedDays}
             puantajByDate={puantajByDate}
             selected={selected}
-            locked={locked || busy}
+            locked={ekuantLocked || !ekuantWindowOpen || busy}
             quotaFull={!testMode && quotaCount >= quotaLimit}
             testMode={testMode}
             onDay={(cell) => toggleEkuant(cell.date)}
@@ -363,7 +397,7 @@ export function UnitTrackingPage() {
           <div className="cal-head">
             <div>
               <h4>Puantaj</h4>
-              <p>Yoklama ay içindeki EK-6 günlerine girilir; gelecek günler ay ilerledikçe açılır.</p>
+              <p>Yoklama, onaylı EK-6 günlerine girilir; gelecek günler ay ilerledikçe açılır. Mazeretsiz gelmedi sonrası günler kilitlenir.</p>
             </div>
           </div>
           <CalendarGrid
@@ -373,9 +407,10 @@ export function UnitTrackingPage() {
             closedDays={closedDays}
             puantajByDate={puantajByDate}
             selected={selected}
-            locked={locked || busy}
+            locked={puantajLocked || !puantajWindowOpen || (!testMode && !ekuantApproved) || busy}
             todayYmd={todayYmd}
             testMode={testMode}
+            gelmediKesim={gelmediKesim}
             onDay={(cell) => {
               if (!workDays.has(cell.date)) return;
               setError("");
@@ -398,7 +433,21 @@ export function UnitTrackingPage() {
         <section className="card puantaj-panel">
           <div>
             <h4>{formatLong(selected)}</h4>
-            <p>{!testMode && closedDays.has(selected) ? "Bu gün için EK-6 ve puantaj girişi yönetici tarafından kapatıldı." : !testMode && selected > todayYmd ? "Bu gün henüz gelmedi; puantaj ay ilerledikçe girilebilir." : puantajEditable ? (testMode ? "Test modu: yoklama durumunu seçin." : izinLimitiDolu ? `İzin kotası doldu; yeni “İzinli” seçilemez. Rapor veya geldi/gelmedi işaretleyebilirsiniz.` : `Bu gün için yoklama durumunu seçin. Kalan izin: ${kalanIzin}/${izinLimiti} gün.`) : "Bu ay gönderildiği için puantaj değiştirilemez."}</p>
+            <p>{
+              afterGelmedi(selected)
+                ? "Mazeretsiz gelmediği girildiği için bu günden sonraki puantaj kapalıdır."
+                : !puantajWindowOpen
+                  ? "Puantaj girişi SKS’nin belirlediği tarihler dışında kapalıdır."
+                : !testMode && !ekuantApproved
+                  ? "Puantaj, EK-6 onaylandıktan sonra doldurulur."
+                  : !testMode && closedDays.has(selected)
+                    ? "Bu gün için EK-6 ve puantaj girişi yönetici tarafından kapatıldı."
+                    : !testMode && selected > todayYmd
+                      ? "Bu gün henüz gelmedi; puantaj ay ilerledikçe girilebilir."
+                      : puantajEditable
+                        ? (testMode ? "Test modu: yoklama durumunu seçin." : izinLimitiDolu ? `İzin kotası doldu; yeni “İzinli” seçilemez. Rapor veya geldi/gelmedi işaretleyebilirsiniz.` : `Bu gün için yoklama durumunu seçin. Kalan izin: ${kalanIzin}/${izinLimiti} gün.`)
+                        : "Bu ayın puantajı gönderildiği için değiştirilemez."
+            }</p>
           </div>
           <div className="status-row">
             {STATUSES.map((status) => (
@@ -439,7 +488,7 @@ export function UnitTrackingPage() {
 
       <section className={`submit-bar card ${studentReady ? "ready" : ""}`} aria-live="polite">
         <div>
-          <b>{studentReady ? "Öğrenci kaydı tamam" : "Bu öğrenci için kalanlar"}</b>
+          <b>{puantajReady ? "Puantaj tamam" : ekuantReady ? "EK-6 tamam" : "Bu öğrenci için kalanlar"}</b>
           <span>{draftHint}</span>
         </div>
         <Link className="btn btn-gold" to={`/birim/rapor?yil=${yil}&ay=${ay}`}>
@@ -461,6 +510,7 @@ function CalendarGrid({
   quotaFull = false,
   todayYmd,
   testMode = false,
+  gelmediKesim,
   onDay
 }: {
   cells: CalCell[];
@@ -473,6 +523,7 @@ function CalendarGrid({
   quotaFull?: boolean;
   todayYmd?: string;
   testMode?: boolean;
+  gelmediKesim?: string | null;
   onDay: (cell: CalCell) => void;
 }) {
   return (
@@ -492,6 +543,7 @@ function CalendarGrid({
         const quotaBlocked = quotaFull && !nextMonthQuota;
         const weekSelectedCount = [...workDays].filter((date) => mondayOf(date) === monday).length;
         const weekBlocked = !testMode && mode === "ekuant" && !isWork && weekSelectedCount >= DAYS_PER_WEEK;
+        const afterGelmedi = Boolean(gelmediKesim && cell.date > gelmediKesim);
         const futurePuantajDay = !testMode && mode === "puantaj" && isWork && todayYmd != null && cell.date > todayYmd;
         const classes = ["cal-day"];
         if (!cell.weekday) classes.push("weekend");
@@ -499,16 +551,18 @@ function CalendarGrid({
         if (mode === "puantaj" && isWork) classes.push(gun?.durum || "pending");
         if (mode === "puantaj" && !isWork) classes.push("idle");
         if (mode === "ekuant" && !isWork && (quotaBlocked || weekBlocked)) classes.push("idle");
-        if (futurePuantajDay) classes.push("closed");
+        if (futurePuantajDay || (mode === "puantaj" && afterGelmedi)) classes.push("closed");
         if (isClosed) classes.push("closed");
         if (selected === cell.date) classes.push("selected");
         const clickable = mode === "ekuant"
           ? !locked && !isClosed && (isWork || testMode || (!quotaBlocked && !weekBlocked))
-          : isWork && !locked && !isClosed && (testMode || !futurePuantajDay);
+          : isWork && !locked && !isClosed && !afterGelmedi && (testMode || !futurePuantajDay);
         const title = mode === "ekuant" && !isWork && (quotaBlocked || weekBlocked)
           ? quotaBlocked ? "Bu ayın 4 haftalık kotası dolu" : `Bu hafta ${DAYS_PER_WEEK} EK-6 günü seçildi`
           : isClosed
             ? "Bu gün için giriş yönetici tarafından kapatıldı"
+            : afterGelmedi && mode === "puantaj"
+            ? "Mazeretsiz gelmediği girilen günden sonraki puantaj kapalı"
             : futurePuantajDay
             ? "Gelecek günler için puantaj girilemez"
             : undefined;

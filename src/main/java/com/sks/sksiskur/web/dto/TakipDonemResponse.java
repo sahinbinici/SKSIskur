@@ -13,7 +13,11 @@ public record TakipDonemResponse(
         int yil,
         int ay,
         TakipStatus status,
+        TakipStatus ekuantStatus,
+        TakipStatus puantajStatus,
         boolean locked,
+        boolean ekuantLocked,
+        boolean puantajLocked,
         Instant gonderimTarihi,
         List<LocalDate> ekuantGunler,
         List<PuantajGunResponse> puantaj,
@@ -24,6 +28,13 @@ public record TakipDonemResponse(
         int toplamIzinGunu,
         int izinGunLimiti,
         boolean testTakipModu,
+        LocalDate gelmediKesimTarihi,
+        LocalDate ekuantGirisBaslangic,
+        LocalDate ekuantGirisBitis,
+        boolean ekuantGirisAcik,
+        LocalDate puantajGirisBaslangic,
+        LocalDate puantajGirisBitis,
+        boolean puantajGirisAcik,
         BirimOgrenciResponse ogrenci
 ) {
     public record PuantajGunResponse(

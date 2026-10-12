@@ -3,8 +3,8 @@ export function FilterChips({ items }: { items: { label: string; onClear?: () =>
   if (active.length === 0) return null;
   return (
     <div className="filter-chips no-print" aria-label="Aktif filtreler">
-      {active.map((item) => (
-        <span key={item.label} className="filter-chip">
+      {active.map((item, index) => (
+        <span key={`${item.label}-${index}`} className="filter-chip">
           {item.label}
           {item.onClear && (
             <button type="button" className="filter-chip-clear" onClick={item.onClear} aria-label={`${item.label} filtresini kaldır`}>

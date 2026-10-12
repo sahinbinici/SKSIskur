@@ -8,7 +8,7 @@ import { ActionCard, PageHeader } from "../components/PageHeader";
 import { AdminProcessNav } from "../components/AdminProcessNav";
 import { OgrenciKimlikMeta, Shell } from "../components/ui";
 import { EkuantSheet, MONTHS, PuantajSheet, calendarWeeks } from "./UnitReportPage";
-import type { AdminTakipOzet, BasvuruDonemi, BirimAylikRapor, IzinRaporOgrenci, WorkUnit } from "../types";
+import type { AdminTakipOzet, BasvuruDonemi, BirimAylikRapor, IzinRaporOgrenci, TakipGirisPencere, TakipStatus, WorkUnit } from "../types";
 
 type PageTab = "paket" | "ozet" | "ayarlar" | "cetvel";
 type CetvelKind = "ekuant" | "puantaj";
@@ -18,7 +18,7 @@ export function AdminTakipPage() {
   const now = new Date();
   const [yil, setYil] = useState(now.getFullYear());
   const [ay, setAy] = useState(now.getMonth() + 1);
-  const [birimKodu, setBirimKodu] = useState("");
+  const [birimKodlari, setBirimKodlari] = useState<string[]>([]);
   const [pageTab, setPageTab] = useState<PageTab>("ozet");
   const [cetvelKind, setCetvelKind] = useState<CetvelKind>("ekuant");
   const [units, setUnits] = useState<WorkUnit[]>([]);
@@ -30,7 +30,17 @@ export function AdminTakipPage() {
   const [kapaliGunTarihi, setKapaliGunTarihi] = useState("");
   const [izinRaporlular, setIzinRaporlular] = useState<IzinRaporOgrenci[]>([]);
   const [kapaliOpen, setKapaliOpen] = useState(false);
+  const [pencereOpen, setPencereOpen] = useState(true);
   const [izinOpen, setIzinOpen] = useState(false);
+  const [pencere, setPencere] = useState<TakipGirisPencere | null>(null);
+  const [ekuantBaslangic, setEkuantBaslangic] = useState("");
+  const [ekuantBitis, setEkuantBitis] = useState("");
+  const [puantajBaslangic, setPuantajBaslangic] = useState("");
+  const [puantajBitis, setPuantajBitis] = useState("");
+  const [donemEkuantBaslangic, setDonemEkuantBaslangic] = useState("");
+  const [donemEkuantBitis, setDonemEkuantBitis] = useState("");
+  const [donemPuantajBaslangic, setDonemPuantajBaslangic] = useState("");
+  const [donemPuantajBitis, setDonemPuantajBitis] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -52,35 +62,56 @@ export function AdminTakipPage() {
   useEffect(() => {
     setLoading(true);
     setError("");
-    const kod = birimKodu || undefined;
+    const kod = birimKodlari.join(",") || undefined;
     const load = needsRapor
       ? api.adminTakipRapor(yil, ay, kod, periodId).then(setRapor)
       : api.adminTakip(yil, ay, kod, periodId).then(setOzet);
     load
       .catch((err) => setError(err instanceof ApiError ? err.message : "Takip bilgisi alınamadı."))
       .finally(() => setLoading(false));
-  }, [yil, ay, birimKodu, periodId, needsRapor]);
+  }, [yil, ay, birimKodlari, periodId, needsRapor]);
 
   useEffect(() => {
     api.adminKapaliGunler(yil, ay, periodId).then(setKapaliGunler).catch((err) =>
       setError(err instanceof ApiError ? err.message : "Kapalı günler yüklenemedi.")
     );
+    api.adminGirisPencere(yil, ay, periodId)
+      .then((next) => {
+        applyPencere(next);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Giriş tarihleri yüklenemedi."));
     setKapaliGunTarihi(`${yil}-${String(ay).padStart(2, "0")}-01`);
   }, [yil, ay, periodId]);
 
   useEffect(() => {
-    api.adminIzinRaporlular(yil, ay, birimKodu || undefined, periodId)
+    api.adminIzinRaporlular(yil, ay, birimKodlari.join(",") || undefined, periodId)
       .then(setIzinRaporlular)
       .catch((err) => setError(err instanceof ApiError ? err.message : "İzin/rapor listesi yüklenemedi."));
-  }, [yil, ay, birimKodu, periodId]);
+  }, [yil, ay, birimKodlari, periodId]);
 
   const selectedPeriod = periods.find((period) => period.id === periodId) ?? periods.find((period) => period.aktif);
   const monthPrefix = `${yil}-${String(ay).padStart(2, "0")}`;
   const lastDay = new Date(yil, ay, 0).getDate();
   const periodLabel = selectedPeriod?.ad ?? "Dönem seçin";
-  const birimLabel = birimKodu ? units.find((unit) => unit.kod === birimKodu)?.ad ?? birimKodu : "Tüm birimler";
-  const approvedCount = ozet?.ogrenciler.filter((row) => row.status === "APPROVED").length ?? 0;
-  const submittedCount = ozet?.ogrenciler.filter((row) => row.status === "SUBMITTED" || row.status === "APPROVED").length ?? 0;
+  const birimParam = birimKodlari.join(",") || undefined;
+  const hasBirim = birimKodlari.length > 0;
+  const birimLabel = !hasBirim
+    ? "Tüm birimler"
+    : birimKodlari.length === 1
+      ? units.find((unit) => unit.kod === birimKodlari[0])?.ad ?? birimKodlari[0]
+      : `${birimKodlari.length} birim`;
+  const fileBirimSlug = !hasBirim
+    ? "tum-birimler"
+    : birimKodlari.length === 1
+      ? birimKodlari[0]
+      : `${birimKodlari.length}-birim`;
+  const phaseSent = (status?: TakipStatus | null) => status === "SUBMITTED" || status === "APPROVED";
+  const pendingApproval = (row: AdminTakipOzet["ogrenciler"][number]) =>
+    row.ekuantStatus === "SUBMITTED" || row.puantajStatus === "SUBMITTED" || row.status === "SUBMITTED";
+  const canReturn = (row: AdminTakipOzet["ogrenciler"][number]) =>
+    phaseSent(row.ekuantStatus) || phaseSent(row.puantajStatus) || phaseSent(row.status);
+  const approvedCount = ozet?.ogrenciler.filter((row) => (row.puantajStatus ?? row.status) === "APPROVED").length ?? 0;
+  const submittedCount = ozet?.ogrenciler.filter((row) => canReturn(row)).length ?? 0;
   const ogrenciSayisi = pageTab === "cetvel" ? rapor?.ogrenciler.length ?? 0 : ozet?.ogrenciler.length ?? 0;
 
   async function saveClosedDays(next: string[]) {
@@ -98,6 +129,49 @@ export function AdminTakipPage() {
     }
   }
 
+  function applyPencere(next: TakipGirisPencere) {
+    setPencere(next);
+    setEkuantBaslangic(next.ayEkuantBaslangic?.slice(0, 10) ?? "");
+    setEkuantBitis(next.ayEkuantBitis?.slice(0, 10) ?? "");
+    setPuantajBaslangic(next.ayPuantajBaslangic?.slice(0, 10) ?? "");
+    setPuantajBitis(next.ayPuantajBitis?.slice(0, 10) ?? "");
+    setDonemEkuantBaslangic(next.donemEkuantBaslangic?.slice(0, 10) ?? "");
+    setDonemEkuantBitis(next.donemEkuantBitis?.slice(0, 10) ?? "");
+    setDonemPuantajBaslangic(next.donemPuantajBaslangic?.slice(0, 10) ?? "");
+    setDonemPuantajBitis(next.donemPuantajBitis?.slice(0, 10) ?? "");
+  }
+
+  async function saveGirisPencere(kapsam: "AYLIK" | "DONEMLIK") {
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const saved = await api.saveAdminGirisPencere(yil, ay, kapsam === "DONEMLIK"
+        ? {
+            kapsam,
+            ekuantBaslangic: donemEkuantBaslangic || null,
+            ekuantBitis: donemEkuantBitis || null,
+            puantajBaslangic: donemPuantajBaslangic || null,
+            puantajBitis: donemPuantajBitis || null
+          }
+        : {
+            kapsam,
+            ekuantBaslangic: ekuantBaslangic || null,
+            ekuantBitis: ekuantBitis || null,
+            puantajBaslangic: puantajBaslangic || null,
+            puantajBitis: puantajBitis || null
+          }, periodId);
+      applyPencere(saved);
+      setMessage(kapsam === "DONEMLIK"
+        ? "Dönemlik giriş tarihleri kaydedildi. Ay özel tarihi yoksa tüm aylarda bu aralık kullanılır."
+        : `${MONTHS[ay - 1]} ${yil} giriş tarihleri kaydedildi. Bu ay dönemlik aralığın yerine geçer.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Giriş tarihleri kaydedilemedi.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function addClosedDay() {
     if (!kapaliGunTarihi.startsWith(monthPrefix) || kapaliGunler.includes(kapaliGunTarihi)) return;
     void saveClosedDays([...kapaliGunler, kapaliGunTarihi].sort());
@@ -105,14 +179,14 @@ export function AdminTakipPage() {
 
   function downloadTerminatedStudents() {
     void downloadAuthenticatedFile(
-      api.adminKesilenOgrencilerExcelUrl(birimKodu || undefined, periodId),
+      api.adminKesilenOgrencilerExcelUrl(birimParam, periodId),
       "iliskisi-kesilen-ogrenciler.xlsx"
     ).catch((err) => setError(err instanceof ApiError ? err.message : "Liste indirilemedi."));
   }
 
   function downloadLeaveReportList() {
     void downloadAuthenticatedFile(
-      api.adminIzinRaporExcelUrl(yil, ay, birimKodu || undefined, periodId),
+      api.adminIzinRaporExcelUrl(yil, ay, birimParam, periodId),
       "izinli-raporlu-ogrenciler.xlsx"
     ).catch((err) => setError(err instanceof ApiError ? err.message : "Liste indirilemedi."));
   }
@@ -124,7 +198,7 @@ export function AdminTakipPage() {
     try {
       await api.adminTakipOnayla(basvuruId, yil, ay, periodId);
       setMessage("Öğrenci kaydı onaylandı.");
-      const next = await api.adminTakip(yil, ay, birimKodu || undefined, periodId);
+      const next = await api.adminTakip(yil, ay, birimParam, periodId);
       setOzet(next);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Onay verilemedi.");
@@ -149,7 +223,7 @@ export function AdminTakipPage() {
     try {
       await api.adminTakipIade(basvuruId, yil, ay, periodId);
       setMessage("Kayıt birime iade edildi.");
-      const next = await api.adminTakip(yil, ay, birimKodu || undefined, periodId);
+      const next = await api.adminTakip(yil, ay, birimParam, periodId);
       setOzet(next);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "İade edilemedi.");
@@ -159,13 +233,13 @@ export function AdminTakipPage() {
   }
 
   async function returnSubmittedInUnit() {
-    if (!birimKodu) {
-      setError("Toplu iade için bir birim seçin.");
+    if (!hasBirim) {
+      setError("Toplu iade için en az bir birim seçin.");
       return;
     }
     const ok = await confirm({
-      title: "Birimdeki kayıtları iade et",
-      message: "Seçili birimde gönderilmiş ve onaylı tüm aylık kayıtlar taslağa alınır; birim düzeltip yeniden gönderir.",
+      title: "Seçili birimlerdeki kayıtları iade et",
+      message: "Seçili birimlerde gönderilmiş ve onaylı tüm aylık kayıtlar taslağa alınır; birimler düzeltip yeniden gönderir.",
       confirmLabel: "Toplu iade",
       variant: "danger"
     });
@@ -174,9 +248,9 @@ export function AdminTakipPage() {
     setError("");
     setMessage("");
     try {
-      const count = await api.adminTakipIadeGonderilenler(yil, ay, birimKodu, periodId);
+      const count = await api.adminTakipIadeGonderilenler(yil, ay, birimParam!, periodId);
       setMessage(`${count} öğrencinin kaydı birime iade edildi.`);
-      const next = await api.adminTakip(yil, ay, birimKodu, periodId);
+      const next = await api.adminTakip(yil, ay, birimParam, periodId);
       setOzet(next);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Toplu iade yapılamadı.");
@@ -186,17 +260,17 @@ export function AdminTakipPage() {
   }
 
   async function approveSubmittedInUnit() {
-    if (!birimKodu) {
-      setError("Toplu onay için bir birim seçin.");
+    if (!hasBirim) {
+      setError("Toplu onay için en az bir birim seçin.");
       return;
     }
     setLoading(true);
     setError("");
     setMessage("");
     try {
-      const count = await api.adminTakipOnaylaGonderilenler(yil, ay, birimKodu, periodId);
+      const count = await api.adminTakipOnaylaGonderilenler(yil, ay, birimParam!, periodId);
       setMessage(`${count} öğrencinin kaydı onaylandı.`);
-      const next = await api.adminTakip(yil, ay, birimKodu, periodId);
+      const next = await api.adminTakip(yil, ay, birimParam, periodId);
       setOzet(next);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Toplu onay verilemedi.");
@@ -205,40 +279,44 @@ export function AdminTakipPage() {
     }
   }
 
-  function takipDurumLabel(row: AdminTakipOzet["ogrenciler"][number]) {
-    if (row.status === "APPROVED") return "Onaylandı";
-    if (row.status === "SUBMITTED") return "Onay bekliyor";
-    if (row.status === "DRAFT") return "Taslak";
+  function phaseLabel(status?: TakipStatus | null) {
+    if (status === "APPROVED") return "Onaylandı";
+    if (status === "SUBMITTED") return "Onay bekliyor";
+    if (status === "DRAFT") return "Taslak";
     return "—";
   }
 
+  function takipDurumLabel(row: AdminTakipOzet["ogrenciler"][number]) {
+    return `EK-6 ${phaseLabel(row.ekuantStatus ?? row.status)} · Puantaj ${phaseLabel(row.puantajStatus)}`;
+  }
+
   function downloadIskurPaketi() {
-    if (!birimKodu) {
-      setError("İŞKUR ödeme dosyası için üstten bir birim seçin.");
+    if (!hasBirim) {
+      setError("İŞKUR ödeme dosyası için üstten en az bir birim seçin.");
       return;
     }
-    const filename = `iskur-odeme_${birimKodu}_${yil}-${String(ay).padStart(2, "0")}.xlsm`;
+    const filename = `iskur-odeme_${fileBirimSlug}_${yil}-${String(ay).padStart(2, "0")}.xlsm`;
     void downloadAuthenticatedFile(
-      api.adminIskurPaketiExcelUrl(yil, ay, birimKodu, periodId),
+      api.adminIskurPaketiExcelUrl(yil, ay, birimParam, periodId),
       filename
     ).catch((err) => setError(err instanceof ApiError ? err.message : "İŞKUR paketi indirilemedi."));
   }
 
   function downloadTakipRaporExcel() {
-    if (!birimKodu) {
-      setError("EK-6 / puantaj Excel için üstten bir birim seçin.");
+    if (!hasBirim) {
+      setError("EK-6 / puantaj Excel için üstten en az bir birim seçin.");
       return;
     }
-    const filename = `ek6-puantaj_${birimKodu}_${yil}-${String(ay).padStart(2, "0")}.xlsx`;
+    const filename = `ek6-puantaj_${fileBirimSlug}_${yil}-${String(ay).padStart(2, "0")}.xlsx`;
     void downloadAuthenticatedFile(
-      api.adminTakipRaporExcelUrl(yil, ay, birimKodu, periodId),
+      api.adminTakipRaporExcelUrl(yil, ay, birimParam, periodId),
       filename
     ).catch((err) => setError(err instanceof ApiError ? err.message : "Excel indirilemedi."));
   }
 
   function downloadLeaveReportDocuments() {
     void downloadAuthenticatedFile(
-      api.adminIzinRaporBelgeleriZipUrl(yil, ay, birimKodu || undefined, periodId),
+      api.adminIzinRaporBelgeleriZipUrl(yil, ay, birimParam, periodId),
       "izin-rapor-dilekceleri.zip"
     ).catch((err) => setError(err instanceof ApiError ? err.message : "Dosyalar indirilemedi."));
   }
@@ -247,7 +325,7 @@ export function AdminTakipPage() {
     <Shell home="/admin" full>
       <PageHeader
         title="Aylık devam ve ödeme"
-        description="Birim ayı toplu gönderir; siz onaylayın veya iade edin. Gönderilen EK-6 / puantaj Excel’i birim seçerek indirilir; İŞKUR ödeme dosyası onaylı kayıtlarla ayrı sekmeden alınır."
+        description="Birim önce EK-6’yı, onay sonrası ay sonunda puantajı gönderir. Her aşamayı ayrı onaylayın veya iade edin. Ödeme dosyası yalnızca onaylı puantajlarla alınır."
       />
 
       <div className="filter-bar no-print">
@@ -276,14 +354,12 @@ export function AdminTakipPage() {
         <div className="filter-field">
           <span className="filter-label">Birim</span>
           <SearchableSelect
-            value={birimKodu}
-            onChange={setBirimKodu}
-            placeholder="Birim adı veya kodu yazın"
+            multiple
+            values={birimKodlari}
+            onChange={setBirimKodlari}
+            placeholder="Birim ara, birden fazla seçin"
             emptyLabel="Eşleşen birim yok"
-            options={[
-              { value: "", label: "Tüm birimler" },
-              ...units.map((unit) => ({ value: unit.kod, label: unit.ad, hint: `Kod ${unit.kod}` }))
-            ]}
+            options={units.map((unit) => ({ value: unit.kod, label: unit.ad, hint: `Kod ${unit.kod}` }))}
           />
         </div>
       </div>
@@ -293,7 +369,10 @@ export function AdminTakipPage() {
         items={[
           selectedPeriod ? { label: selectedPeriod.ad, onClear: () => setPeriodId(periods.find((p) => p.aktif)?.id) } : { label: "" },
           { label: `${MONTHS[ay - 1]} ${yil}` },
-          birimKodu ? { label: birimLabel, onClear: () => setBirimKodu("") } : { label: "" }
+          ...birimKodlari.map((kod) => ({
+            label: units.find((unit) => unit.kod === kod)?.ad ?? kod,
+            onClear: () => setBirimKodlari((current) => current.filter((item) => item !== kod))
+          }))
         ]}
       />
 
@@ -317,21 +396,21 @@ export function AdminTakipPage() {
               <span className="meta-chip">{periodLabel}</span>
               <span className="meta-chip">{MONTHS[ay - 1]} {yil}</span>
               <span className="meta-chip">{birimLabel}</span>
-              <span className="meta-chip">{ozet?.ogrenciler.filter((row) => row.status === "APPROVED").length ?? 0} onaylı</span>
+              <span className="meta-chip">{ozet?.ogrenciler.filter((row) => (row.puantajStatus ?? row.status) === "APPROVED").length ?? 0} onaylı puantaj</span>
               <span className="meta-chip">{ogrenciSayisi} öğrenci</span>
             </>
           )}
         >
           <button
             className="btn btn-gold btn-lg"
-            disabled={!selectedPeriod || loading || !birimKodu || approvedCount === 0}
+            disabled={!selectedPeriod || loading || !hasBirim || approvedCount === 0}
             onClick={() => downloadIskurPaketi()}
           >
-            Seçili birimin ödeme dosyasını indir
+            Seçili birimlerin ödeme dosyasını indir
           </button>
-          {!birimKodu && (
+          {!hasBirim && (
             <p style={{ color: "var(--muted)", marginTop: 12, marginBottom: 0 }}>
-              Ödeme dosyası için filtrelerden bir birim seçin; tüm birimler alt alta listelenmez.
+              Ödeme dosyası için bir veya birden fazla birim seçin. «Tümünü seç» ile toplu indirebilirsiniz.
             </p>
           )}
         </ActionCard>
@@ -343,7 +422,7 @@ export function AdminTakipPage() {
             <button
               type="button"
               className="btn btn-secondary"
-              disabled={loading || !birimKodu || submittedCount === 0}
+              disabled={loading || !hasBirim || submittedCount === 0}
               onClick={downloadTakipRaporExcel}
             >
               EK-6 / puantaj Excel
@@ -351,25 +430,25 @@ export function AdminTakipPage() {
             <button
               type="button"
               className="btn btn-gold"
-              disabled={loading || !birimKodu || !ozet.ogrenciler.some((row) => row.status === "SUBMITTED")}
+              disabled={loading || !hasBirim || !ozet.ogrenciler.some(pendingApproval)}
               onClick={() => void approveSubmittedInUnit()}
             >
-              Birimdeki gönderilenleri onayla
+              Seçili birimlerde onayla
             </button>
             <button
               type="button"
               className="btn btn-danger"
               disabled={
                 loading
-                || !birimKodu
-                || !ozet.ogrenciler.some((row) => row.status === "SUBMITTED" || row.status === "APPROVED")
+                || !hasBirim
+                || !ozet.ogrenciler.some(canReturn)
               }
               onClick={() => void returnSubmittedInUnit()}
             >
-              Birimdeki kayıtları iade et
+              Seçili birimlerde iade et
             </button>
             <span style={{ color: "var(--muted)", fontSize: 13 }}>
-              Birim seçiliyken gönderilen kayıtların EK-6 ve puantajını Excel indirebilirsiniz.
+              Bir veya birden fazla birim seçerek Excel indirebilir, gönderilenleri onaylayabilir veya iade edebilirsiniz.
             </span>
           </div>
         <div className="card" style={{ overflow: "auto" }}>
@@ -403,17 +482,17 @@ export function AdminTakipPage() {
                   <td>{takipDurumLabel(row)}</td>
                   <td className="no-wrap">
                     <button className="btn btn-secondary btn-compact" onClick={() => navigate(`/admin/takip/${row.basvuruId}?yil=${yil}&ay=${ay}${periodId ? `&donemId=${periodId}` : ""}`)}>İncele</button>
-                    {row.status === "SUBMITTED" && (
+                    {pendingApproval(row) && (
                       <button className="btn btn-gold btn-compact" style={{ marginLeft: 6 }} disabled={loading} onClick={() => void approveStudent(row.basvuruId)}>
                         Onayla
                       </button>
                     )}
-                    {(row.status === "SUBMITTED" || row.status === "APPROVED") && (
+                    {canReturn(row) && (
                       <button
                         className="btn btn-danger btn-compact"
                         style={{ marginLeft: 6 }}
                         disabled={loading}
-                        onClick={() => void returnStudent(row.basvuruId, row.status === "APPROVED")}
+                        onClick={() => void returnStudent(row.basvuruId, (row.puantajStatus ?? row.status) === "APPROVED")}
                       >
                         İade
                       </button>
@@ -436,6 +515,77 @@ export function AdminTakipPage() {
 
       {pageTab === "ayarlar" && (
         <>
+          <section className="card collapsible-section no-print">
+            <button type="button" className="collapsible-section-toggle" onClick={() => setPencereOpen((v) => !v)}>
+              <span>EK-6 ve puantaj giriş tarihleri</span>
+              <span className="collapsible-section-hint">{pencereOpen ? "Gizle" : "Göster"}</span>
+            </button>
+            {pencereOpen && (
+              <div className="collapsible-section-body">
+                <p style={{ color: "var(--muted)", marginTop: 0 }}>
+                  Dönemlik aralık tüm aylara uygulanır. Aylık aralık yalnızca seçili ay için geçerlidir ve dönemliği ezer. Aralık dışında birim EK-6 / puantaj dolduramaz.
+                </p>
+                {selectedPeriod?.aktif ? (
+                  <>
+                    <h4 style={{ margin: "8px 0 6px" }}>Dönemlik ({selectedPeriod.ad})</h4>
+                    <div className="row" style={{ alignItems: "end", flexWrap: "wrap", gap: 12 }}>
+                      <label className="filter-label">
+                        EK-6 başlangıç
+                        <input type="date" value={donemEkuantBaslangic} onChange={(e) => setDonemEkuantBaslangic(e.target.value)} disabled={loading} />
+                      </label>
+                      <label className="filter-label">
+                        EK-6 bitiş
+                        <input type="date" value={donemEkuantBitis} onChange={(e) => setDonemEkuantBitis(e.target.value)} disabled={loading} />
+                      </label>
+                      <label className="filter-label">
+                        Puantaj başlangıç
+                        <input type="date" value={donemPuantajBaslangic} onChange={(e) => setDonemPuantajBaslangic(e.target.value)} disabled={loading} />
+                      </label>
+                      <label className="filter-label">
+                        Puantaj bitiş
+                        <input type="date" value={donemPuantajBitis} onChange={(e) => setDonemPuantajBitis(e.target.value)} disabled={loading} />
+                      </label>
+                      <button type="button" className="btn btn-gold" disabled={loading} onClick={() => void saveGirisPencere("DONEMLIK")}>
+                        Dönemliği kaydet
+                      </button>
+                    </div>
+                    <h4 style={{ margin: "18px 0 6px" }}>Aylık ({MONTHS[ay - 1]} {yil})</h4>
+                    <div className="row" style={{ alignItems: "end", flexWrap: "wrap", gap: 12 }}>
+                      <label className="filter-label">
+                        EK-6 başlangıç
+                        <input type="date" value={ekuantBaslangic} onChange={(e) => setEkuantBaslangic(e.target.value)} disabled={loading} />
+                      </label>
+                      <label className="filter-label">
+                        EK-6 bitiş
+                        <input type="date" value={ekuantBitis} onChange={(e) => setEkuantBitis(e.target.value)} disabled={loading} />
+                      </label>
+                      <label className="filter-label">
+                        Puantaj başlangıç
+                        <input type="date" value={puantajBaslangic} onChange={(e) => setPuantajBaslangic(e.target.value)} disabled={loading} />
+                      </label>
+                      <label className="filter-label">
+                        Puantaj bitiş
+                        <input type="date" value={puantajBitis} onChange={(e) => setPuantajBitis(e.target.value)} disabled={loading} />
+                      </label>
+                      <button type="button" className="btn btn-gold" disabled={loading} onClick={() => void saveGirisPencere("AYLIK")}>
+                        Bu ayı kaydet
+                      </button>
+                    </div>
+                    {pencere && (
+                      <p style={{ color: "var(--muted)", marginBottom: 0, marginTop: 12 }}>
+                        {MONTHS[ay - 1]} {yil} uygulanan aralık: EK-6 {pencere.ekuantAcik ? "açık" : "kapalı"}
+                        {pencere.ekuantBaslangic && pencere.ekuantBitis ? ` (${pencere.ekuantBaslangic.slice(0, 10)} – ${pencere.ekuantBitis.slice(0, 10)}, ${pencere.ekuantKaynak === "AYLIK" ? "aylık" : pencere.ekuantKaynak === "DONEMLIK" ? "dönemlik" : "yok"})` : " · tarih yok"}
+                        {" · "}Puantaj {pencere.puantajAcik ? "açık" : "kapalı"}
+                        {pencere.puantajBaslangic && pencere.puantajBitis ? ` (${pencere.puantajBaslangic.slice(0, 10)} – ${pencere.puantajBitis.slice(0, 10)}, ${pencere.puantajKaynak === "AYLIK" ? "aylık" : pencere.puantajKaynak === "DONEMLIK" ? "dönemlik" : "yok"})` : " · tarih yok"}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p style={{ color: "var(--muted)" }}>Kapalı dönemlerde giriş tarihleri değiştirilemez.</p>
+                )}
+              </div>
+            )}
+          </section>
           <section className="card collapsible-section no-print">
             <button type="button" className="collapsible-section-toggle" onClick={() => setKapaliOpen((v) => !v)}>
               <span>EK-6 ve puantaj girişine kapalı günler</span>

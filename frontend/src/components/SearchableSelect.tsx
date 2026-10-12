@@ -6,31 +6,40 @@ export type SearchableSelectOption = {
   hint?: string;
 };
 
-type Props = {
-  value: string;
-  onChange: (value: string) => void;
+type BaseProps = {
   options: SearchableSelectOption[];
   placeholder?: string;
   emptyLabel?: string;
 };
 
+type SingleProps = BaseProps & {
+  multiple?: false;
+  value: string;
+  onChange: (value: string) => void;
+};
+
+type MultiProps = BaseProps & {
+  multiple: true;
+  values: string[];
+  onChange: (values: string[]) => void;
+};
+
+type Props = SingleProps | MultiProps;
+
 function normalize(value: string) {
   return value.toLocaleLowerCase("tr-TR").trim();
 }
 
-export function SearchableSelect({
-  value,
-  onChange,
-  options,
-  placeholder = "Ara...",
-  emptyLabel = "Sonuç yok"
-}: Props) {
+export function SearchableSelect(props: Props) {
+  const { options, placeholder = "Ara...", emptyLabel = "Sonuç yok" } = props;
+  const multiple = props.multiple === true;
+  const selectedValues = multiple ? props.values : props.value ? [props.value] : [];
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
 
-  const selected = options.find((option) => option.value === value);
+  const selectedOptions = options.filter((option) => selectedValues.includes(option.value));
   const filtered = useMemo(() => {
     const q = normalize(query);
     if (!q) return options;
@@ -55,10 +64,39 @@ export function SearchableSelect({
     setActive(0);
   }, [query, open]);
 
-  function choose(next: string) {
-    onChange(next);
+  function commit(next: string[]) {
+    if (multiple) {
+      props.onChange(next);
+      return;
+    }
+    props.onChange(next[0] ?? "");
     setOpen(false);
     setQuery("");
+  }
+
+  function toggle(value: string) {
+    if (!multiple) {
+      commit([value]);
+      return;
+    }
+    commit(selectedValues.includes(value)
+      ? selectedValues.filter((item) => item !== value)
+      : [...selectedValues, value]);
+  }
+
+  function selectFiltered() {
+    const next = new Set(selectedValues);
+    filtered.forEach((option) => next.add(option.value));
+    commit([...next]);
+  }
+
+  function displayValue() {
+    if (open) return query;
+    if (selectedOptions.length === 0) return "";
+    if (!multiple) return selectedOptions[0]?.label ?? "";
+    if (selectedOptions.length === 1) return selectedOptions[0].label;
+    if (selectedOptions.length === options.length && options.length > 0) return `Tüm birimler (${options.length})`;
+    return `${selectedOptions.length} birim seçildi`;
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -76,7 +114,7 @@ export function SearchableSelect({
     if (event.key === "Enter") {
       event.preventDefault();
       const option = filtered[active];
-      if (option) choose(option.value);
+      if (option) toggle(option.value);
       return;
     }
     if (event.key === "Escape") {
@@ -86,9 +124,9 @@ export function SearchableSelect({
   }
 
   return (
-    <div className={`search-select${open ? " open" : ""}`} ref={rootRef}>
+    <div className={`search-select${open ? " open" : ""}${multiple ? " multi" : ""}`} ref={rootRef}>
       <input
-        value={open ? query : selected?.label ?? ""}
+        value={displayValue()}
         placeholder={placeholder}
         onFocus={() => {
           setOpen(true);
@@ -104,23 +142,39 @@ export function SearchableSelect({
         autoComplete="off"
       />
       {open && (
-        <ul className="search-select-list" role="listbox">
-          {filtered.map((option, index) => (
-            <li key={option.value || "__all"}>
-              <button
-                type="button"
-                className={index === active ? "active" : ""}
-                role="option"
-                aria-selected={option.value === value}
-                onMouseDown={(event) => event.preventDefault()}
-                onMouseEnter={() => setActive(index)}
-                onClick={() => choose(option.value)}
-              >
-                <b>{option.label}</b>
-                {option.hint ? <small>{option.hint}</small> : null}
+        <ul className="search-select-list" role="listbox" aria-multiselectable={multiple}>
+          {multiple && (
+            <li className="search-select-actions">
+              <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={selectFiltered}>
+                {query ? "Filtrelenenleri seç" : "Tümünü seç"}
+              </button>
+              <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => commit([])}>
+                Temizle
               </button>
             </li>
-          ))}
+          )}
+          {filtered.map((option, index) => {
+            const checked = selectedValues.includes(option.value);
+            return (
+              <li key={option.value || "__all"}>
+                <button
+                  type="button"
+                  className={`${index === active ? "active" : ""}${checked ? " selected" : ""}`}
+                  role="option"
+                  aria-selected={checked}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActive(index)}
+                  onClick={() => toggle(option.value)}
+                >
+                  {multiple && <span className={`search-select-check${checked ? " on" : ""}`} aria-hidden="true" />}
+                  <span>
+                    <b>{option.label}</b>
+                    {option.hint ? <small>{option.hint}</small> : null}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
           {filtered.length === 0 && <li className="search-select-empty">{emptyLabel}</li>}
         </ul>
       )}
