@@ -610,23 +610,23 @@ public class AdminController {
     @GetMapping("/takip/kapali-gunler")
     public List<LocalDate> kapaliGunler(
             @RequestParam(required = false) Long donemId,
-            @RequestParam int yil,
-            @RequestParam int ay
+            @RequestParam(required = false) Integer yil,
+            @RequestParam(required = false) Integer ay
     ) {
-        return takipService.adminKapaliGunler(donemId, yil, ay);
+        return takipService.adminKapaliGunler(donemId);
     }
 
     @PutMapping("/takip/kapali-gunler")
     public List<LocalDate> saveKapaliGunler(
             @RequestParam(required = false) Long donemId,
-            @RequestParam int yil,
-            @RequestParam int ay,
+            @RequestParam(required = false) Integer yil,
+            @RequestParam(required = false) Integer ay,
             @RequestBody TakipKapaliGunKaydetRequest request,
             Authentication authentication
     ) {
-        List<LocalDate> saved = takipService.saveAdminKapaliGunler(donemId, yil, ay, request);
+        List<LocalDate> saved = takipService.saveAdminKapaliGunler(donemId, request);
         auditLogService.logAdmin(authentication, IslemTuru.KAPALI_GUN_KAYDET, "DONEM", donemId,
-                "Kapalı günler kaydedildi: " + yil + "-" + String.format("%02d", ay),
+                "Kapalı günler kaydedildi",
                 saved.size() + " gün");
         return saved;
     }

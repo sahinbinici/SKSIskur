@@ -350,10 +350,10 @@ export const api = {
     if (donemId) params.set("donemId", String(donemId));
     return request<AdminTakipOzet>(`/api/admin/takip?${params}`);
   },
-  adminKapaliGunler: (yil: number, ay: number, donemId?: number) =>
-    request<string[]>(`/api/admin/takip/kapali-gunler?yil=${yil}&ay=${ay}${donemId ? `&donemId=${donemId}` : ""}`),
-  saveAdminKapaliGunler: (yil: number, ay: number, gunler: string[], donemId?: number) =>
-    request<string[]>(`/api/admin/takip/kapali-gunler?yil=${yil}&ay=${ay}${donemId ? `&donemId=${donemId}` : ""}`, {
+  adminKapaliGunler: (donemId?: number) =>
+    request<string[]>(`/api/admin/takip/kapali-gunler${donemId ? `?donemId=${donemId}` : ""}`),
+  saveAdminKapaliGunler: (gunler: string[], donemId?: number) =>
+    request<string[]>(`/api/admin/takip/kapali-gunler${donemId ? `?donemId=${donemId}` : ""}`, {
       method: "PUT", body: JSON.stringify({ gunler })
     }),
   adminGirisPencere: (yil: number, ay: number, donemId?: number) =>
@@ -362,7 +362,7 @@ export const api = {
     yil: number,
     ay: number,
     body: {
-      kapsam: "AYLIK" | "DONEMLIK";
+      aylar: { yil: number; ay: number }[];
       ekuantBaslangic: string | null;
       ekuantBitis: string | null;
       puantajBaslangic: string | null;

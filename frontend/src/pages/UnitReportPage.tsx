@@ -303,6 +303,14 @@ export function EkuantSheet({
         <p className="report-month">{upper(MONTHS[ay - 1])} ({yil})</p>
       </header>
       <table className="report-table">
+        <colgroup>
+          <col className="col-sira" />
+          <col className="col-tc" />
+          <col className="col-name" />
+          {weeks.flatMap((week, wi) => week.map((_, di) => (
+            <col key={`ek-${wi}-${di}`} className="col-day" />
+          ))}
+        </colgroup>
         <thead>
           <tr>
             <th rowSpan={2}>SIRA</th>
@@ -331,7 +339,7 @@ export function EkuantSheet({
             return (
               <tr key={row.basvuruId}>
                 <td>{row.siraNo}</td>
-                <td>{row.tcKimlikNo || ""}</td>
+                <td className="tc">{row.tcKimlikNo || ""}</td>
                 <td className="name">{upper(`${row.ad} ${row.soyad}`)}</td>
                 {groups.flatMap((group, gi) =>
                   group.weeks.flatMap((week, wi) =>
@@ -385,6 +393,18 @@ export function PuantajSheet({
         </p>
       </header>
       <table className="report-table">
+        <colgroup>
+          <col className="col-sira" />
+          <col className="col-tc" />
+          <col className="col-name" />
+          <col className="col-name" />
+          <col className="col-iban" />
+          {days.map((day) => (
+            <col key={`p-${day}`} className="col-day" />
+          ))}
+          <col className="col-total" />
+          <col className="col-total" />
+        </colgroup>
         <thead>
           <tr>
             <th rowSpan={2}>SIRA NO</th>
@@ -408,7 +428,7 @@ export function PuantajSheet({
             return (
               <tr key={row.basvuruId}>
                 <td>{row.siraNo}</td>
-                <td>{row.tcKimlikNo || ""}</td>
+                <td className="tc">{row.tcKimlikNo || ""}</td>
                 <td className="name">{upper(row.ad)}</td>
                 <td className="name">{upper(row.soyad)}</td>
                 <td className="iban">{row.iban || ""}</td>

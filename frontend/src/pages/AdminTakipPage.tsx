@@ -37,10 +37,9 @@ export function AdminTakipPage() {
   const [ekuantBitis, setEkuantBitis] = useState("");
   const [puantajBaslangic, setPuantajBaslangic] = useState("");
   const [puantajBitis, setPuantajBitis] = useState("");
-  const [donemEkuantBaslangic, setDonemEkuantBaslangic] = useState("");
-  const [donemEkuantBitis, setDonemEkuantBitis] = useState("");
-  const [donemPuantajBaslangic, setDonemPuantajBaslangic] = useState("");
-  const [donemPuantajBitis, setDonemPuantajBitis] = useState("");
+  const [pencereAylar, setPencereAylar] = useState<number[]>([now.getMonth() + 1]);
+  const [kapaliAylar, setKapaliAylar] = useState<number[]>([now.getMonth() + 1]);
+  const [kapaliGunNolari, setKapaliGunNolari] = useState<number[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -72,7 +71,7 @@ export function AdminTakipPage() {
   }, [yil, ay, birimKodlari, periodId, needsRapor]);
 
   useEffect(() => {
-    api.adminKapaliGunler(yil, ay, periodId).then(setKapaliGunler).catch((err) =>
+    api.adminKapaliGunler(periodId).then(setKapaliGunler).catch((err) =>
       setError(err instanceof ApiError ? err.message : "Kapalı günler yüklenemedi.")
     );
     api.adminGirisPencere(yil, ay, periodId)
@@ -81,6 +80,8 @@ export function AdminTakipPage() {
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Giriş tarihleri yüklenemedi."));
     setKapaliGunTarihi(`${yil}-${String(ay).padStart(2, "0")}-01`);
+    setPencereAylar((current) => (current.includes(ay) ? current : [...current, ay].sort((a, b) => a - b)));
+    setKapaliAylar((current) => (current.includes(ay) ? current : [...current, ay].sort((a, b) => a - b)));
   }, [yil, ay, periodId]);
 
   useEffect(() => {
@@ -90,8 +91,6 @@ export function AdminTakipPage() {
   }, [yil, ay, birimKodlari, periodId]);
 
   const selectedPeriod = periods.find((period) => period.id === periodId) ?? periods.find((period) => period.aktif);
-  const monthPrefix = `${yil}-${String(ay).padStart(2, "0")}`;
-  const lastDay = new Date(yil, ay, 0).getDate();
   const periodLabel = selectedPeriod?.ad ?? "Dönem seçin";
   const birimParam = birimKodlari.join(",") || undefined;
   const hasBirim = birimKodlari.length > 0;
@@ -119,7 +118,7 @@ export function AdminTakipPage() {
     setError("");
     setMessage("");
     try {
-      const saved = await api.saveAdminKapaliGunler(yil, ay, next, periodId);
+      const saved = await api.saveAdminKapaliGunler(next, periodId);
       setKapaliGunler(saved);
       setMessage("Kapalı gün ayarları kaydedildi.");
     } catch (err) {
@@ -131,40 +130,34 @@ export function AdminTakipPage() {
 
   function applyPencere(next: TakipGirisPencere) {
     setPencere(next);
-    setEkuantBaslangic(next.ayEkuantBaslangic?.slice(0, 10) ?? "");
-    setEkuantBitis(next.ayEkuantBitis?.slice(0, 10) ?? "");
-    setPuantajBaslangic(next.ayPuantajBaslangic?.slice(0, 10) ?? "");
-    setPuantajBitis(next.ayPuantajBitis?.slice(0, 10) ?? "");
-    setDonemEkuantBaslangic(next.donemEkuantBaslangic?.slice(0, 10) ?? "");
-    setDonemEkuantBitis(next.donemEkuantBitis?.slice(0, 10) ?? "");
-    setDonemPuantajBaslangic(next.donemPuantajBaslangic?.slice(0, 10) ?? "");
-    setDonemPuantajBitis(next.donemPuantajBitis?.slice(0, 10) ?? "");
+    setEkuantBaslangic(next.ayEkuantBaslangic?.slice(0, 10) ?? next.ekuantBaslangic?.slice(0, 10) ?? "");
+    setEkuantBitis(next.ayEkuantBitis?.slice(0, 10) ?? next.ekuantBitis?.slice(0, 10) ?? "");
+    setPuantajBaslangic(next.ayPuantajBaslangic?.slice(0, 10) ?? next.puantajBaslangic?.slice(0, 10) ?? "");
+    setPuantajBitis(next.ayPuantajBitis?.slice(0, 10) ?? next.puantajBitis?.slice(0, 10) ?? "");
   }
 
-  async function saveGirisPencere(kapsam: "AYLIK" | "DONEMLIK") {
+  function toggleNumber(values: number[], value: number, setter: (next: number[]) => void) {
+    setter(values.includes(value) ? values.filter((item) => item !== value) : [...values, value].sort((a, b) => a - b));
+  }
+
+  async function saveGirisPencere() {
+    if (pencereAylar.length === 0) {
+      setError("Giriş tarihleri için en az bir ay seçin.");
+      return;
+    }
     setLoading(true);
     setError("");
     setMessage("");
     try {
-      const saved = await api.saveAdminGirisPencere(yil, ay, kapsam === "DONEMLIK"
-        ? {
-            kapsam,
-            ekuantBaslangic: donemEkuantBaslangic || null,
-            ekuantBitis: donemEkuantBitis || null,
-            puantajBaslangic: donemPuantajBaslangic || null,
-            puantajBitis: donemPuantajBitis || null
-          }
-        : {
-            kapsam,
-            ekuantBaslangic: ekuantBaslangic || null,
-            ekuantBitis: ekuantBitis || null,
-            puantajBaslangic: puantajBaslangic || null,
-            puantajBitis: puantajBitis || null
-          }, periodId);
+      const saved = await api.saveAdminGirisPencere(yil, ay, {
+        aylar: pencereAylar.map((month) => ({ yil, ay: month })),
+        ekuantBaslangic: ekuantBaslangic || null,
+        ekuantBitis: ekuantBitis || null,
+        puantajBaslangic: puantajBaslangic || null,
+        puantajBitis: puantajBitis || null
+      }, periodId);
       applyPencere(saved);
-      setMessage(kapsam === "DONEMLIK"
-        ? "Dönemlik giriş tarihleri kaydedildi. Ay özel tarihi yoksa tüm aylarda bu aralık kullanılır."
-        : `${MONTHS[ay - 1]} ${yil} giriş tarihleri kaydedildi. Bu ay dönemlik aralığın yerine geçer.`);
+      setMessage(`Giriş tarihleri ${pencereAylar.map((month) => MONTHS[month - 1]).join(", ")} ${yil} için kaydedildi.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Giriş tarihleri kaydedilemedi.");
     } finally {
@@ -173,8 +166,25 @@ export function AdminTakipPage() {
   }
 
   function addClosedDay() {
-    if (!kapaliGunTarihi.startsWith(monthPrefix) || kapaliGunler.includes(kapaliGunTarihi)) return;
+    if (!kapaliGunTarihi || kapaliGunler.includes(kapaliGunTarihi)) return;
     void saveClosedDays([...kapaliGunler, kapaliGunTarihi].sort());
+  }
+
+  function addClosedDaysBulk() {
+    if (kapaliAylar.length === 0 || kapaliGunNolari.length === 0) {
+      setError("Toplu kapalı gün için en az bir ay ve bir gün numarası seçin.");
+      return;
+    }
+    const next = new Set(kapaliGunler);
+    for (const month of kapaliAylar) {
+      const dim = new Date(yil, month, 0).getDate();
+      for (const day of kapaliGunNolari) {
+        if (day <= dim) {
+          next.add(`${yil}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+        }
+      }
+    }
+    void saveClosedDays([...next].sort());
   }
 
   function downloadTerminatedStudents() {
@@ -502,33 +512,26 @@ export function AdminTakipPage() {
             {pencereOpen && (
               <div className="collapsible-section-body">
                 <p style={{ color: "var(--muted)", marginTop: 0 }}>
-                  Dönemlik aralık tüm aylara uygulanır. Aylık aralık yalnızca seçili ay için geçerlidir ve dönemliği ezer. Aralık dışında birim EK-6 / puantaj dolduramaz.
+                  Aynı tarih aralığını bir veya birden fazla aya kaydedin. Aralık dışında birim EK-6 / puantaj dolduramaz.
                 </p>
                 {selectedPeriod?.aktif ? (
                   <>
-                    <h4 style={{ margin: "8px 0 6px" }}>Dönemlik ({selectedPeriod.ad})</h4>
-                    <div className="row" style={{ alignItems: "end", flexWrap: "wrap", gap: 12 }}>
-                      <label className="filter-label">
-                        EK-6 başlangıç
-                        <input type="date" value={donemEkuantBaslangic} onChange={(e) => setDonemEkuantBaslangic(e.target.value)} disabled={loading} />
-                      </label>
-                      <label className="filter-label">
-                        EK-6 bitiş
-                        <input type="date" value={donemEkuantBitis} onChange={(e) => setDonemEkuantBitis(e.target.value)} disabled={loading} />
-                      </label>
-                      <label className="filter-label">
-                        Puantaj başlangıç
-                        <input type="date" value={donemPuantajBaslangic} onChange={(e) => setDonemPuantajBaslangic(e.target.value)} disabled={loading} />
-                      </label>
-                      <label className="filter-label">
-                        Puantaj bitiş
-                        <input type="date" value={donemPuantajBitis} onChange={(e) => setDonemPuantajBitis(e.target.value)} disabled={loading} />
-                      </label>
-                      <button type="button" className="btn btn-gold" disabled={loading} onClick={() => void saveGirisPencere("DONEMLIK")}>
-                        Dönemliği kaydet
-                      </button>
+                    <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                      {MONTHS.map((name, index) => {
+                        const month = index + 1;
+                        return (
+                          <label key={name} className="filter-label" style={{ flexDirection: "row", alignItems: "center", gap: 6, textTransform: "none" }}>
+                            <input
+                              type="checkbox"
+                              checked={pencereAylar.includes(month)}
+                              onChange={() => toggleNumber(pencereAylar, month, setPencereAylar)}
+                              disabled={loading}
+                            />
+                            {name}
+                          </label>
+                        );
+                      })}
                     </div>
-                    <h4 style={{ margin: "18px 0 6px" }}>Aylık ({MONTHS[ay - 1]} {yil})</h4>
                     <div className="row" style={{ alignItems: "end", flexWrap: "wrap", gap: 12 }}>
                       <label className="filter-label">
                         EK-6 başlangıç
@@ -546,16 +549,16 @@ export function AdminTakipPage() {
                         Puantaj bitiş
                         <input type="date" value={puantajBitis} onChange={(e) => setPuantajBitis(e.target.value)} disabled={loading} />
                       </label>
-                      <button type="button" className="btn btn-gold" disabled={loading} onClick={() => void saveGirisPencere("AYLIK")}>
-                        Bu ayı kaydet
+                      <button type="button" className="btn btn-gold" disabled={loading || pencereAylar.length === 0} onClick={() => void saveGirisPencere()}>
+                        Seçilen aylara kaydet
                       </button>
                     </div>
                     {pencere && (
                       <p style={{ color: "var(--muted)", marginBottom: 0, marginTop: 12 }}>
                         {MONTHS[ay - 1]} {yil} uygulanan aralık: EK-6 {pencere.ekuantAcik ? "açık" : "kapalı"}
-                        {pencere.ekuantBaslangic && pencere.ekuantBitis ? ` (${pencere.ekuantBaslangic.slice(0, 10)} – ${pencere.ekuantBitis.slice(0, 10)}, ${pencere.ekuantKaynak === "AYLIK" ? "aylık" : pencere.ekuantKaynak === "DONEMLIK" ? "dönemlik" : "yok"})` : " · tarih yok"}
+                        {pencere.ekuantBaslangic && pencere.ekuantBitis ? ` (${pencere.ekuantBaslangic.slice(0, 10)} – ${pencere.ekuantBitis.slice(0, 10)})` : " · tarih yok"}
                         {" · "}Puantaj {pencere.puantajAcik ? "açık" : "kapalı"}
-                        {pencere.puantajBaslangic && pencere.puantajBitis ? ` (${pencere.puantajBaslangic.slice(0, 10)} – ${pencere.puantajBitis.slice(0, 10)}, ${pencere.puantajKaynak === "AYLIK" ? "aylık" : pencere.puantajKaynak === "DONEMLIK" ? "dönemlik" : "yok"})` : " · tarih yok"}
+                        {pencere.puantajBaslangic && pencere.puantajBitis ? ` (${pencere.puantajBaslangic.slice(0, 10)} – ${pencere.puantajBitis.slice(0, 10)})` : " · tarih yok"}
                       </p>
                     )}
                   </>
@@ -573,23 +576,59 @@ export function AdminTakipPage() {
             {kapaliOpen && (
               <div className="collapsible-section-body">
                 <p style={{ color: "var(--muted)", marginTop: 0 }}>
-                  Bu günlerde hiçbir birim EK-6 seçimi, puantaj durumu veya izin/rapor belgesi girişi yapamaz.
+                  Birden fazla ay ve gün numarası seçerek aynı anda kapatın; veya tek tarih ekleyin. Bu günlerde hiçbir birim EK-6, puantaj veya izin/rapor girişi yapamaz.
                 </p>
                 {selectedPeriod?.aktif ? (
-                  <div className="row" style={{ alignItems: "center" }}>
-                    <input
-                      type="date"
-                      value={kapaliGunTarihi}
-                      min={`${monthPrefix}-01`}
-                      max={`${monthPrefix}-${String(lastDay).padStart(2, "0")}`}
-                      disabled={loading}
-                      onChange={(event) => setKapaliGunTarihi(event.target.value)}
-                      style={{ margin: 0, maxWidth: 190 }}
-                    />
-                    <button className="btn btn-danger" disabled={loading || !kapaliGunTarihi.startsWith(monthPrefix) || kapaliGunler.includes(kapaliGunTarihi)} onClick={addClosedDay}>
-                      Günü kapat
-                    </button>
-                  </div>
+                  <>
+                    <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                      {MONTHS.map((name, index) => {
+                        const month = index + 1;
+                        return (
+                          <label key={`k-${name}`} className="filter-label" style={{ flexDirection: "row", alignItems: "center", gap: 6, textTransform: "none" }}>
+                            <input
+                              type="checkbox"
+                              checked={kapaliAylar.includes(month)}
+                              onChange={() => toggleNumber(kapaliAylar, month, setKapaliAylar)}
+                              disabled={loading}
+                            />
+                            {name}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div className="row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                      {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
+                        <label key={day} className="filter-label" style={{ flexDirection: "row", alignItems: "center", gap: 4, textTransform: "none", minWidth: 42 }}>
+                          <input
+                            type="checkbox"
+                            checked={kapaliGunNolari.includes(day)}
+                            onChange={() => toggleNumber(kapaliGunNolari, day, setKapaliGunNolari)}
+                            disabled={loading}
+                          />
+                          {day}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="row" style={{ alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                      <button
+                        className="btn btn-danger"
+                        disabled={loading || kapaliAylar.length === 0 || kapaliGunNolari.length === 0}
+                        onClick={addClosedDaysBulk}
+                      >
+                        Seçilen ay ve günleri kapat
+                      </button>
+                      <input
+                        type="date"
+                        value={kapaliGunTarihi}
+                        disabled={loading}
+                        onChange={(event) => setKapaliGunTarihi(event.target.value)}
+                        style={{ margin: 0, maxWidth: 190 }}
+                      />
+                      <button className="btn btn-secondary" disabled={loading || !kapaliGunTarihi || kapaliGunler.includes(kapaliGunTarihi)} onClick={addClosedDay}>
+                        Tek gün ekle
+                      </button>
+                    </div>
+                  </>
                 ) : (
                   <p style={{ color: "var(--muted)" }}>Kapalı dönemlerde gün ayarları değiştirilemez.</p>
                 )}
@@ -608,7 +647,7 @@ export function AdminTakipPage() {
                       </button>
                     ))}
                   </div>
-                ) : <p style={{ color: "var(--muted)", marginBottom: 0 }}>Bu ay için kapalı gün tanımlanmadı.</p>}
+                ) : <p style={{ color: "var(--muted)", marginBottom: 0 }}>Kapalı gün tanımlanmadı.</p>}
               </div>
             )}
           </section>

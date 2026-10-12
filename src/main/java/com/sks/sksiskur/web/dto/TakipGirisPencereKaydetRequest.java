@@ -1,12 +1,12 @@
 package com.sks.sksiskur.web.dto;
 
-import com.sks.sksiskur.domain.TakipGirisKapsam;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.Valid;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public record TakipGirisPencereKaydetRequest(
-        @NotNull TakipGirisKapsam kapsam,
+        @Valid List<TakipAySecim> aylar,
         LocalDate ekuantBaslangic,
         LocalDate ekuantBitis,
         LocalDate puantajBaslangic,

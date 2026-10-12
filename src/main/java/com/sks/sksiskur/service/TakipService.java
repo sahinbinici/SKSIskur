@@ -7,7 +7,6 @@ import com.sks.sksiskur.domain.PuantajDurum;
 import com.sks.sksiskur.domain.TakipDonem;
 import com.sks.sksiskur.domain.TakipGun;
 import com.sks.sksiskur.domain.TakipKapaliGun;
-import com.sks.sksiskur.domain.TakipGirisKapsam;
 import com.sks.sksiskur.domain.TakipGirisPencere;
 import com.sks.sksiskur.domain.TakipCetvelTuru;
 import com.sks.sksiskur.domain.TakipStatus;
@@ -26,6 +25,7 @@ import com.sks.sksiskur.web.dto.IzinRaporOgrenciResponse;
 import com.sks.sksiskur.web.dto.PuantajKaydetRequest;
 import com.sks.sksiskur.web.dto.OgrenciCalismaOzetResponse;
 import com.sks.sksiskur.web.dto.TakipDonemResponse;
+import com.sks.sksiskur.web.dto.TakipAySecim;
 import com.sks.sksiskur.web.dto.TakipGirisPencereKaydetRequest;
 import com.sks.sksiskur.web.dto.TakipGirisPencereResponse;
 import com.sks.sksiskur.web.dto.TakipKapaliGunKaydetRequest;
@@ -288,25 +288,21 @@ public class TakipService {
     }
 
     @Transactional(readOnly = true)
-    public List<LocalDate> adminKapaliGunler(Long basvuruDonemiId, int yil, int ay) {
+    public List<LocalDate> adminKapaliGunler(Long basvuruDonemiId) {
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
-        return closedDays(period.getId(), requireMonth(yil, ay));
+        return takipKapaliGunRepository.findByBasvuruDonemiIdOrderByTarihAsc(period.getId()).stream()
+                .map(TakipKapaliGun::getTarih)
+                .toList();
     }
 
     @Transactional
-    public List<LocalDate> saveAdminKapaliGunler(Long basvuruDonemiId, int yil, int ay, TakipKapaliGunKaydetRequest request) {
+    public List<LocalDate> saveAdminKapaliGunler(Long basvuruDonemiId, TakipKapaliGunKaydetRequest request) {
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
         if (!period.isAktif()) {
             throw new ApiException(HttpStatus.CONFLICT, "Kapalı dönemlerde giriş günleri değiştirilemez.");
         }
-        YearMonth month = requireMonth(yil, ay);
         Set<LocalDate> days = request.gunler() == null ? Set.of() : new HashSet<>(request.gunler());
-        for (LocalDate date : days) {
-            if (!YearMonth.from(date).equals(month)) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, date + " seçilen aya ait değil.");
-            }
-        }
-        takipKapaliGunRepository.deleteByBasvuruDonemiIdAndTarihBetween(period.getId(), month.atDay(1), month.atEndOfMonth());
+        takipKapaliGunRepository.deleteByBasvuruDonemiId(period.getId());
         List<TakipKapaliGun> closed = days.stream().sorted().map(date -> {
             TakipKapaliGun item = new TakipKapaliGun();
             item.setBasvuruDonemi(period);
@@ -342,23 +338,26 @@ public class TakipService {
         LocalDate puantajEnd = request.puantajBitis();
         assertRange("EK-6", ekuantStart, ekuantEnd);
         assertRange("Puantaj", puantajStart, puantajEnd);
-        TakipGirisKapsam kapsam = request.kapsam() == null ? TakipGirisKapsam.AYLIK : request.kapsam();
-        int storeYil = kapsam == TakipGirisKapsam.DONEMLIK ? DONEM_PENCERE_YIL : yil;
-        int storeAy = kapsam == TakipGirisKapsam.DONEMLIK ? DONEM_PENCERE_AY : ay;
-        TakipGirisPencere window = takipGirisPencereRepository
-                .findByBasvuruDonemiIdAndYilAndAy(period.getId(), storeYil, storeAy)
-                .orElseGet(() -> {
-                    TakipGirisPencere created = new TakipGirisPencere();
-                    created.setBasvuruDonemi(period);
-                    created.setYil(storeYil);
-                    created.setAy(storeAy);
-                    return created;
-                });
-        window.setEkuantBaslangic(ekuantStart);
-        window.setEkuantBitis(ekuantEnd);
-        window.setPuantajBaslangic(puantajStart);
-        window.setPuantajBitis(puantajEnd);
-        takipGirisPencereRepository.save(window);
+        List<TakipAySecim> aylar = request.aylar() == null || request.aylar().isEmpty()
+                ? List.of(new TakipAySecim(yil, ay))
+                : request.aylar();
+        for (TakipAySecim secim : aylar) {
+            requireMonth(secim.yil(), secim.ay());
+            TakipGirisPencere window = takipGirisPencereRepository
+                    .findByBasvuruDonemiIdAndYilAndAy(period.getId(), secim.yil(), secim.ay())
+                    .orElseGet(() -> {
+                        TakipGirisPencere created = new TakipGirisPencere();
+                        created.setBasvuruDonemi(period);
+                        created.setYil(secim.yil());
+                        created.setAy(secim.ay());
+                        return created;
+                    });
+            window.setEkuantBaslangic(ekuantStart);
+            window.setEkuantBitis(ekuantEnd);
+            window.setPuantajBaslangic(puantajStart);
+            window.setPuantajBitis(puantajEnd);
+            takipGirisPencereRepository.save(window);
+        }
         return toGirisPencere(period.getId(), yil, ay, false);
     }
 

@@ -10,5 +10,9 @@ public interface TakipKapaliGunRepository extends JpaRepository<TakipKapaliGun, 
 
     List<TakipKapaliGun> findByBasvuruDonemiIdAndTarihBetweenOrderByTarihAsc(Long basvuruDonemiId, LocalDate start, LocalDate end);
 
+    List<TakipKapaliGun> findByBasvuruDonemiIdOrderByTarihAsc(Long basvuruDonemiId);
+
     long deleteByBasvuruDonemiIdAndTarihBetween(Long basvuruDonemiId, LocalDate start, LocalDate end);
+
+    long deleteByBasvuruDonemiId(Long basvuruDonemiId);
 }
