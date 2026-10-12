@@ -29,6 +29,8 @@ export function AdminTakipPage() {
   const [kapaliGunler, setKapaliGunler] = useState<string[]>([]);
   const [kapaliGunTarihi, setKapaliGunTarihi] = useState("");
   const [izinRaporlular, setIzinRaporlular] = useState<IzinRaporOgrenci[]>([]);
+  const [izinDurum, setIzinDurum] = useState<"" | "IZINLI" | "RAPORLU">("");
+  const [iliskiSecim, setIliskiSecim] = useState<number[]>([]);
   const [kapaliOpen, setKapaliOpen] = useState(false);
   const [pencereOpen, setPencereOpen] = useState(true);
   const [izinOpen, setIzinOpen] = useState(false);
@@ -64,7 +66,10 @@ export function AdminTakipPage() {
     const kod = birimKodlari.join(",") || undefined;
     const load = needsRapor
       ? api.adminTakipRapor(yil, ay, kod, periodId).then(setRapor)
-      : api.adminTakip(yil, ay, kod, periodId).then(setOzet);
+      : api.adminTakip(yil, ay, kod, periodId).then((next) => {
+          setOzet(next);
+          setIliskiSecim([]);
+        });
     load
       .catch((err) => setError(err instanceof ApiError ? err.message : "Takip bilgisi alınamadı."))
       .finally(() => setLoading(false));
@@ -85,10 +90,10 @@ export function AdminTakipPage() {
   }, [yil, ay, periodId]);
 
   useEffect(() => {
-    api.adminIzinRaporlular(yil, ay, birimKodlari.join(",") || undefined, periodId)
+    api.adminIzinRaporlular(yil, ay, birimKodlari.join(",") || undefined, periodId, izinDurum || undefined)
       .then(setIzinRaporlular)
       .catch((err) => setError(err instanceof ApiError ? err.message : "İzin/rapor listesi yüklenemedi."));
-  }, [yil, ay, birimKodlari, periodId]);
+  }, [yil, ay, birimKodlari, periodId, izinDurum]);
 
   const selectedPeriod = periods.find((period) => period.id === periodId) ?? periods.find((period) => period.aktif);
   const periodLabel = selectedPeriod?.ad ?? "Dönem seçin";
@@ -195,9 +200,14 @@ export function AdminTakipPage() {
   }
 
   function downloadLeaveReportList() {
+    const name = izinDurum === "IZINLI"
+      ? "izinli-ogrenciler.xlsx"
+      : izinDurum === "RAPORLU"
+        ? "raporlu-ogrenciler.xlsx"
+        : "izinli-raporlu-ogrenciler.xlsx";
     void downloadAuthenticatedFile(
-      api.adminIzinRaporExcelUrl(yil, ay, birimParam, periodId),
-      "izinli-raporlu-ogrenciler.xlsx"
+      api.adminIzinRaporExcelUrl(yil, ay, birimParam, periodId, izinDurum || undefined),
+      name
     ).catch((err) => setError(err instanceof ApiError ? err.message : "Liste indirilemedi."));
   }
 
@@ -283,6 +293,69 @@ export function AdminTakipPage() {
     }
   }
 
+  function aktifBuAy(row: AdminTakipOzet["ogrenciler"][number]) {
+    if (!row.iliskiBitisTarihi) return true;
+    return row.iliskiBitisTarihi.slice(0, 7) > `${yil}-${String(ay).padStart(2, "0")}`;
+  }
+
+  function toggleIliskiSecim(basvuruId: number) {
+    setIliskiSecim((current) =>
+      current.includes(basvuruId) ? current.filter((id) => id !== basvuruId) : [...current, basvuruId]
+    );
+  }
+
+  async function terminateStudent(basvuruId: number) {
+    const ok = await confirm({
+      title: "Öğrenci ilişiğini kes",
+      message: `${MONTHS[ay - 1]} ${yil} itibarıyla öğrenci birim listesinden çıkarılır; sonraki aylarda görünmez.`,
+      confirmLabel: "İlişiği kes",
+      variant: "danger"
+    });
+    if (!ok) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.adminIliskiKes(basvuruId, yil, ay, periodId);
+      setMessage("Öğrenci ilişkisi kesildi. Birim listesinde görünmeyecek.");
+      const next = await api.adminTakip(yil, ay, birimParam, periodId);
+      setOzet(next);
+      setIliskiSecim((current) => current.filter((id) => id !== basvuruId));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "İlişik kesilemedi.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function terminateSelected() {
+    if (iliskiSecim.length === 0) {
+      setError("İlişik kesmek için en az bir öğrenci seçin.");
+      return;
+    }
+    const ok = await confirm({
+      title: "Seçilen öğrencilerin ilişiğini kes",
+      message: `${iliskiSecim.length} öğrenci ${MONTHS[ay - 1]} ${yil} itibarıyla birimlerden çıkarılacak.`,
+      confirmLabel: "Toplu kes",
+      variant: "danger"
+    });
+    if (!ok) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const count = await api.adminIliskiKesToplu(iliskiSecim, yil, ay, periodId);
+      setMessage(`${count} öğrencinin ilişkisi kesildi.`);
+      const next = await api.adminTakip(yil, ay, birimParam, periodId);
+      setOzet(next);
+      setIliskiSecim([]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Toplu ilişik kesilemedi.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function phaseLabel(status?: TakipStatus | null) {
     if (status === "APPROVED") return "Onaylandı";
     if (status === "SUBMITTED") return "Onay bekliyor";
@@ -311,9 +384,14 @@ export function AdminTakipPage() {
   }
 
   function downloadLeaveReportDocuments() {
+    const name = izinDurum === "IZINLI"
+      ? "izinli-ogrenciler-belgeler.zip"
+      : izinDurum === "RAPORLU"
+        ? "raporlu-ogrenciler-belgeler.zip"
+        : "izinli-raporlu-ogrenciler-belgeler.zip";
     void downloadAuthenticatedFile(
-      api.adminIzinRaporBelgeleriZipUrl(yil, ay, birimParam, periodId),
-      "izin-rapor-dilekceleri.zip"
+      api.adminIzinRaporBelgeleriZipUrl(yil, ay, birimParam, periodId, izinDurum || undefined),
+      name
     ).catch((err) => setError(err instanceof ApiError ? err.message : "Dosyalar indirilemedi."));
   }
 
@@ -436,14 +514,36 @@ export function AdminTakipPage() {
             >
               {hasBirim ? "Seçili birimlerde iade et" : "Tüm birimlerde iade et"}
             </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              disabled={loading || iliskiSecim.length === 0}
+              onClick={() => void terminateSelected()}
+            >
+              Seçilenlerin ilişiğini kes
+            </button>
             <span style={{ color: "var(--muted)", fontSize: 13 }}>
-              Birim seçilmezse tüm birimler; seçilirse yalnızca o birimler.
+              Birim seçilmezse tüm birimler; seçilirse yalnızca o birimler. İlişik kesilen öğrenci birimde görünmez.
             </span>
           </div>
         <div className="card" style={{ overflow: "auto" }}>
           <table>
             <thead>
               <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    checked={!!ozet.ogrenciler.some(aktifBuAy) && ozet.ogrenciler.filter(aktifBuAy).every((row) => iliskiSecim.includes(row.basvuruId))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setIliskiSecim(ozet.ogrenciler.filter(aktifBuAy).map((row) => row.basvuruId));
+                      } else {
+                        setIliskiSecim([]);
+                      }
+                    }}
+                    aria-label="Aktif öğrencileri seç"
+                  />
+                </th>
                 <th>Öğrenci</th>
                 <th>Birim</th>
                 <th>EK-6</th>
@@ -459,8 +559,21 @@ export function AdminTakipPage() {
               {ozet.ogrenciler.map((row) => (
                 <tr key={row.basvuruId}>
                   <td>
+                    {aktifBuAy(row) ? (
+                      <input
+                        type="checkbox"
+                        checked={iliskiSecim.includes(row.basvuruId)}
+                        onChange={() => toggleIliskiSecim(row.basvuruId)}
+                        aria-label={`${row.adSoyad} seç`}
+                      />
+                    ) : null}
+                  </td>
+                  <td>
                     <b>{row.adSoyad}</b>
                     <OgrenciKimlikMeta ogrenciNo={row.ogrenciNo} tcKimlikNo={row.tcKimlikNo} />
+                    {!aktifBuAy(row) && (
+                      <div style={{ color: "var(--muted)", fontSize: 12 }}>İlişik kesildi{row.iliskiBitisTarihi ? ` (${row.iliskiBitisTarihi.slice(0, 10)})` : ""}</div>
+                    )}
                   </td>
                   <td>{row.birimAdi || "—"}</td>
                   <td>{row.ekuant}</td>
@@ -486,12 +599,22 @@ export function AdminTakipPage() {
                         İade
                       </button>
                     )}
+                    {aktifBuAy(row) && (
+                      <button
+                        className="btn btn-danger btn-compact"
+                        style={{ marginLeft: 6 }}
+                        disabled={loading}
+                        onClick={() => void terminateStudent(row.basvuruId)}
+                      >
+                        İlişik kes
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
               {ozet.ogrenciler.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ color: "var(--muted)" }}>
+                  <td colSpan={10} style={{ color: "var(--muted)" }}>
                     Dağıtılmış kesin kayıtlı öğrenci yok.
                   </td>
                 </tr>
@@ -659,9 +782,17 @@ export function AdminTakipPage() {
             </button>
             {izinOpen && (
               <div className="collapsible-section-body">
-                <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                  <p style={{ color: "var(--muted)", margin: 0 }}>Seçili ay, dönem ve birim için izin/rapor günleri ile ekli belgeler.</p>
-                  <div className="row">
+                <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <p style={{ color: "var(--muted)", margin: 0 }}>Seçili ay, dönem ve birim için izin/rapor günleri ile ekli belgeler. Liste ve ZIP seçilen türe göre iner.</p>
+                  <div className="row" style={{ alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                    <label className="filter-label" style={{ margin: 0 }}>
+                      Tür
+                      <select value={izinDurum} onChange={(e) => setIzinDurum(e.target.value as "" | "IZINLI" | "RAPORLU")}>
+                        <option value="">Tümü</option>
+                        <option value="IZINLI">İzinli</option>
+                        <option value="RAPORLU">Raporlu</option>
+                      </select>
+                    </label>
                     <button className="btn btn-secondary" onClick={downloadLeaveReportList}>Liste (Excel)</button>
                     <button className="btn btn-secondary" onClick={downloadLeaveReportDocuments}>Belgeler (ZIP)</button>
                   </div>

@@ -196,7 +196,8 @@ public class TakipService {
                     status,
                     ekuantStatus,
                     puantajStatus,
-                    locked
+                    locked,
+                    basvuru.getIliskiBitisTarihi()
             ));
         }
         return new AdminTakipOzetResponse(yil, ay, blankToNull(birimKodu), reportBirimAdi(birimKodu, period), rows);
@@ -241,8 +242,14 @@ public class TakipService {
     }
 
     @Transactional(readOnly = true)
-    public List<IzinRaporOgrenciResponse> leaveAndReportStudents(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
-        return leaveAndReportRecords(basvuruDonemiId, birimKodu, yil, ay).stream()
+    public List<IzinRaporOgrenciResponse> leaveAndReportStudents(
+            Long basvuruDonemiId,
+            String birimKodu,
+            int yil,
+            int ay,
+            PuantajDurum durum
+    ) {
+        return leaveAndReportRecords(basvuruDonemiId, birimKodu, yil, ay, durum).stream()
                 .map(record -> new IzinRaporOgrenciResponse(
                         record.basvuru().getId(), record.basvuru().getStudent().getOgrenciNo(),
                         record.basvuru().getStudent().getTcKimlikNo(),
@@ -253,9 +260,9 @@ public class TakipService {
     }
 
     @Transactional(readOnly = true)
-    public byte[] leaveAndReportCsv(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
+    public byte[] leaveAndReportCsv(Long basvuruDonemiId, String birimKodu, int yil, int ay, PuantajDurum durum) {
         StringBuilder csv = new StringBuilder("\uFEFFÖğrenci No;T.C. Kimlik;Ad Soyad;Birim;Tarih;Durum;Belge\r\n");
-        leaveAndReportStudents(basvuruDonemiId, birimKodu, yil, ay).forEach(row -> csv
+        leaveAndReportStudents(basvuruDonemiId, birimKodu, yil, ay, durum).forEach(row -> csv
                 .append(csvValue(row.ogrenciNo())).append(';')
                 .append(csvValue(row.tcKimlikNo())).append(';')
                 .append(csvValue(row.adSoyad())).append(';')
@@ -267,9 +274,9 @@ public class TakipService {
     }
 
     @Transactional(readOnly = true)
-    public byte[] leaveAndReportDocumentsZip(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
+    public byte[] leaveAndReportDocumentsZip(Long basvuruDonemiId, String birimKodu, int yil, int ay, PuantajDurum durum) {
         try (ByteArrayOutputStream output = new ByteArrayOutputStream(); ZipOutputStream zip = new ZipOutputStream(output)) {
-            for (LeaveAndReportRecord record : leaveAndReportRecords(basvuruDonemiId, birimKodu, yil, ay)) {
+            for (LeaveAndReportRecord record : leaveAndReportRecords(basvuruDonemiId, birimKodu, yil, ay, durum)) {
                 TakipGun gun = record.gun();
                 if (gun.getBelgeYolu() == null || gun.getBelgeYolu().isBlank()) continue;
                 Path path = fileStorageService.resolve(gun.getBelgeYolu());
@@ -572,7 +579,13 @@ public class TakipService {
         return '"' + value.replace("\"", "\"\"") + '"';
     }
 
-    private List<LeaveAndReportRecord> leaveAndReportRecords(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
+    private List<LeaveAndReportRecord> leaveAndReportRecords(
+            Long basvuruDonemiId,
+            String birimKodu,
+            int yil,
+            int ay,
+            PuantajDurum durum
+    ) {
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
         YearMonth month = requireMonth(yil, ay);
         Map<Long, TakipDonem> donemler = loadDonemler(assignedKesin(blankToNull(birimKodu), period), yil, ay);
@@ -580,6 +593,7 @@ public class TakipService {
                 .flatMap(donem -> donem.getGunler().stream().map(gun -> new LeaveAndReportRecord(donem.getBasvuru(), gun)))
                 .filter(record -> YearMonth.from(record.gun().getTarih()).equals(month))
                 .filter(record -> record.gun().getDurum() == PuantajDurum.IZINLI || record.gun().getDurum() == PuantajDurum.RAPORLU)
+                .filter(record -> durum == null || record.gun().getDurum() == durum)
                 .sorted(Comparator.comparing((LeaveAndReportRecord record) -> record.gun().getTarih())
                         .thenComparing(record -> record.basvuru().getStudent().getAdSoyad()))
                 .toList();
@@ -1013,6 +1027,50 @@ public class TakipService {
         }
         takipDonemRepository.saveAll(donemler.values());
         return count;
+    }
+
+    @Transactional
+    public void adminTerminate(Long basvuruDonemiId, Long basvuruId, int yil, int ay) {
+        int count = adminTerminateMany(basvuruDonemiId, List.of(basvuruId), yil, ay);
+        if (count == 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "Öğrencinin ilişkisi bu ay için zaten kesilmiş.");
+        }
+    }
+
+    @Transactional
+    public int adminTerminateMany(Long basvuruDonemiId, List<Long> basvuruIds, int yil, int ay) {
+        YearMonth month = requireMonth(yil, ay);
+        BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
+        if (basvuruIds == null || basvuruIds.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "İlişik kesilecek öğrenci seçin.");
+        }
+        Set<Long> wanted = new HashSet<>(basvuruIds);
+        List<Basvuru> students = assignedKesin(null, period).stream()
+                .filter(basvuru -> wanted.contains(basvuru.getId()))
+                .toList();
+        int count = 0;
+        for (Basvuru basvuru : students) {
+            if (terminateForMonth(basvuru, month)) {
+                count++;
+            }
+        }
+        if (count == 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "İlişik kesilecek aktif öğrenci bulunamadı.");
+        }
+        return count;
+    }
+
+    private boolean terminateForMonth(Basvuru basvuru, YearMonth month) {
+        if (!basvuru.isAssigned()) {
+            return false;
+        }
+        LocalDate cut = month.atDay(1);
+        if (basvuru.getIliskiBitisTarihi() != null && !basvuru.getIliskiBitisTarihi().isAfter(cut)) {
+            return false;
+        }
+        basvuru.setIliskiBitisTarihi(cut);
+        basvuruRepository.save(basvuru);
+        return true;
     }
 
     private TakipDonem getOrCreateEntity(String birimKodu, Long basvuruId, int yil, int ay) {

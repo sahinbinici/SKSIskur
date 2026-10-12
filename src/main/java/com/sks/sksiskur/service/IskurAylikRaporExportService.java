@@ -5,6 +5,7 @@ import com.sks.sksiskur.exception.ApiException;
 import com.sks.sksiskur.takip.WorkScheduleRules;
 import com.sks.sksiskur.web.dto.BirimAylikRaporResponse;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -147,9 +148,36 @@ public class IskurAylikRaporExportService {
             setCell(row, 0, i + 1);
             setCell(row, 1, adSoyad(ogrenci));
             setCell(row, 2, nullToEmpty(ogrenci.tcKimlikNo()));
-            setCell(row, 3, nullToEmpty(ogrenci.iban()));
+            setCell(row, 3, compactIban(ogrenci.iban()));
         }
+        fitIbanColumn(sheet, 3, 1, rowIndex);
         return sheet;
+    }
+
+    private void fitIbanColumn(Sheet sheet, int col, int fromRow, int toRow) {
+        sheet.setColumnWidth(col, 38 * 256);
+        CellStyle style = null;
+        for (int i = fromRow; i < toRow; i++) {
+            Row row = sheet.getRow(i);
+            if (row == null) {
+                continue;
+            }
+            Cell cell = row.getCell(col);
+            if (cell == null) {
+                continue;
+            }
+            if (style == null) {
+                style = sheet.getWorkbook().createCellStyle();
+                style.cloneStyleFrom(cell.getCellStyle());
+                style.setShrinkToFit(true);
+                style.setWrapText(false);
+            }
+            cell.setCellStyle(style);
+        }
+    }
+
+    private static String compactIban(String iban) {
+        return nullToEmpty(iban).replace(" ", "").toUpperCase(Locale.ROOT);
     }
 
     private void fillDevamsizlikFormu(

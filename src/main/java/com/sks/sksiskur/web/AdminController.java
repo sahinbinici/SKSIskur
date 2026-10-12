@@ -4,6 +4,7 @@ import com.sks.sksiskur.domain.ApplicationStatus;
 import com.sks.sksiskur.domain.AgreementType;
 import com.sks.sksiskur.domain.DocumentType;
 import com.sks.sksiskur.domain.IslemTuru;
+import com.sks.sksiskur.domain.PuantajDurum;
 import com.sks.sksiskur.domain.Role;
 import com.sks.sksiskur.security.AuthPrincipal;
 import com.sks.sksiskur.service.AuditLogService;
@@ -57,6 +58,7 @@ import com.sks.sksiskur.web.dto.KesinListeUploadResponse;
 import com.sks.sksiskur.web.dto.SozlesmeImzaBekleyenResponse;
 import com.sks.sksiskur.web.dto.SozlesmeImzaPasifTopluRequest;
 import com.sks.sksiskur.web.dto.IzinRaporOgrenciResponse;
+import com.sks.sksiskur.web.dto.IliskiKesRequest;
 import com.sks.sksiskur.web.dto.IadeRequest;
 import com.sks.sksiskur.web.dto.ReviewRequest;
 import com.sks.sksiskur.web.dto.TakipDonemResponse;
@@ -733,10 +735,11 @@ public class AdminController {
             @RequestParam(required = false) Integer yil,
             @RequestParam(required = false) Integer ay,
             @RequestParam(required = false) String birimKodu,
-            @RequestParam(required = false) Long donemId
+            @RequestParam(required = false) Long donemId,
+            @RequestParam(required = false) PuantajDurum durum
     ) {
         YearMonth month = resolveMonth(yil, ay);
-        return takipService.leaveAndReportStudents(donemId, birimKodu, month.getYear(), month.getMonthValue());
+        return takipService.leaveAndReportStudents(donemId, birimKodu, month.getYear(), month.getMonthValue(), durum);
     }
 
     @GetMapping("/takip/izin-rapor.csv")
@@ -744,11 +747,12 @@ public class AdminController {
             @RequestParam(required = false) Integer yil,
             @RequestParam(required = false) Integer ay,
             @RequestParam(required = false) String birimKodu,
-            @RequestParam(required = false) Long donemId
+            @RequestParam(required = false) Long donemId,
+            @RequestParam(required = false) PuantajDurum durum
     ) {
         YearMonth month = resolveMonth(yil, ay);
-        return attachment(takipService.leaveAndReportCsv(donemId, birimKodu, month.getYear(), month.getMonthValue()),
-                "izinli-raporlu-ogrenciler.csv", "text/csv;charset=UTF-8");
+        return attachment(takipService.leaveAndReportCsv(donemId, birimKodu, month.getYear(), month.getMonthValue(), durum),
+                leaveReportFileName(durum, "csv"), "text/csv;charset=UTF-8");
     }
 
     @GetMapping("/takip/izin-rapor.xlsx")
@@ -756,12 +760,13 @@ public class AdminController {
             @RequestParam(required = false) Integer yil,
             @RequestParam(required = false) Integer ay,
             @RequestParam(required = false) String birimKodu,
-            @RequestParam(required = false) Long donemId
+            @RequestParam(required = false) Long donemId,
+            @RequestParam(required = false) PuantajDurum durum
     ) {
         YearMonth month = resolveMonth(yil, ay);
         return excelAttachment(
-                adminExportService.izinRaporExcel(donemId, birimKodu, month.getYear(), month.getMonthValue()),
-                "izinli-raporlu-ogrenciler.xlsx");
+                adminExportService.izinRaporExcel(donemId, birimKodu, month.getYear(), month.getMonthValue(), durum),
+                leaveReportFileName(durum, "xlsx"));
     }
 
     @GetMapping("/takip/izin-rapor-belgeleri.zip")
@@ -769,11 +774,22 @@ public class AdminController {
             @RequestParam(required = false) Integer yil,
             @RequestParam(required = false) Integer ay,
             @RequestParam(required = false) String birimKodu,
-            @RequestParam(required = false) Long donemId
+            @RequestParam(required = false) Long donemId,
+            @RequestParam(required = false) PuantajDurum durum
     ) {
         YearMonth month = resolveMonth(yil, ay);
-        return attachment(takipService.leaveAndReportDocumentsZip(donemId, birimKodu, month.getYear(), month.getMonthValue()),
-                "izin-rapor-dilekceleri.zip", "application/zip");
+        return attachment(
+                takipService.leaveAndReportDocumentsZip(donemId, birimKodu, month.getYear(), month.getMonthValue(), durum),
+                leaveReportFileName(durum, "zip"),
+                "application/zip");
+    }
+
+    private static String leaveReportFileName(PuantajDurum durum, String extension) {
+        String prefix = durum == PuantajDurum.IZINLI
+                ? "izinli-ogrenciler"
+                : durum == PuantajDurum.RAPORLU ? "raporlu-ogrenciler" : "izinli-raporlu-ogrenciler";
+        String suffix = "zip".equals(extension) ? "-belgeler" : "";
+        return prefix + suffix + "." + extension;
     }
 
     @GetMapping("/takip/iliskisi-kesilenler.csv")
@@ -853,6 +869,34 @@ public class AdminController {
         auditLogService.logAdmin(authentication, IslemTuru.TAKIP_IADE, "BIRIM", null,
                 "Toplu takip iadesi: " + (birimKodu == null || birimKodu.isBlank() ? "tüm birimler" : birimKodu)
                         + " " + yil + "-" + String.format("%02d", ay),
+                count + " öğrenci");
+        return count;
+    }
+
+    @PostMapping("/takip/ogrenciler/{basvuruId}/iliski-kes")
+    public void takipIliskiKes(
+            @PathVariable Long basvuruId,
+            @RequestParam int yil,
+            @RequestParam int ay,
+            @RequestParam(required = false) Long donemId,
+            Authentication authentication
+    ) {
+        takipService.adminTerminate(donemId, basvuruId, yil, ay);
+        auditLogService.logAdmin(authentication, IslemTuru.ILISKI_KES, "BASVURU", basvuruId,
+                "Öğrenci ilişkisi kesildi: " + yil + "-" + String.format("%02d", ay), null);
+    }
+
+    @PostMapping("/takip/iliski-kes")
+    public int takipIliskiKesToplu(
+            @RequestParam int yil,
+            @RequestParam int ay,
+            @RequestParam(required = false) Long donemId,
+            @Valid @RequestBody IliskiKesRequest request,
+            Authentication authentication
+    ) {
+        int count = takipService.adminTerminateMany(donemId, request.basvuruIds(), yil, ay);
+        auditLogService.logAdmin(authentication, IslemTuru.ILISKI_KES, "DONEM", donemId,
+                "Toplu ilişki kesme: " + yil + "-" + String.format("%02d", ay),
                 count + " öğrenci");
         return count;
     }

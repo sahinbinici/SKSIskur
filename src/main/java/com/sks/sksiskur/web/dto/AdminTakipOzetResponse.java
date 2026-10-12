@@ -26,7 +26,8 @@ public record AdminTakipOzetResponse(
             TakipStatus status,
             TakipStatus ekuantStatus,
             TakipStatus puantajStatus,
-            boolean locked
+            boolean locked,
+            java.time.LocalDate iliskiBitisTarihi
     ) {
     }
 }

@@ -33,6 +33,7 @@ const TUR_LABELS: Record<IslemTuru, string> = {
   TAKIP_GONDER: "Takip gönderimi",
   TAKIP_ONAY: "Takip onayı",
   TAKIP_IADE: "Takip iadesi",
+  ILISKI_KES: "İlişik kesme",
   ISKUR_PAKET_INDIR: "İŞKUR paketi indirme"
 };
 

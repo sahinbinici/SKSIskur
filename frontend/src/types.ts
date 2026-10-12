@@ -589,6 +589,7 @@ export type AdminTakipSatir = {
   ekuantStatus?: TakipStatus | null;
   puantajStatus?: TakipStatus | null;
   locked: boolean;
+  iliskiBitisTarihi?: string | null;
 };
 
 export type AdminTakipOzet = {
@@ -628,6 +629,7 @@ export type IslemTuru =
   | "TAKIP_GONDER"
   | "TAKIP_ONAY"
   | "TAKIP_IADE"
+  | "ILISKI_KES"
   | "ISKUR_PAKET_INDIR";
 
 export type IslemLog = {

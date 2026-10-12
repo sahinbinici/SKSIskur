@@ -318,8 +318,8 @@ public class AdminExportService {
     }
 
     @Transactional(readOnly = true)
-    public byte[] izinRaporExcel(Long donemId, String birimKodu, int yil, int ay) {
-        List<IzinRaporOgrenciResponse> rows = takipService.leaveAndReportStudents(donemId, birimKodu, yil, ay);
+    public byte[] izinRaporExcel(Long donemId, String birimKodu, int yil, int ay, PuantajDurum durum) {
+        List<IzinRaporOgrenciResponse> rows = takipService.leaveAndReportStudents(donemId, birimKodu, yil, ay, durum);
         List<String> headers = List.of("Öğrenci No", "T.C. Kimlik", "Ad Soyad", "Birim", "Tarih", "Durum", "Belge");
         List<List<Object>> data = rows.stream()
                 .map(row -> excelRow(

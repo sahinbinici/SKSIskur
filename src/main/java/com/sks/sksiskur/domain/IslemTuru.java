@@ -31,6 +31,7 @@ public enum IslemTuru {
     TAKIP_GONDER,
     TAKIP_ONAY,
     TAKIP_IADE,
+    ILISKI_KES,
     DALGA_AC,
     DALGA_TAMAMLA,
     ISKUR_PAKET_INDIR
