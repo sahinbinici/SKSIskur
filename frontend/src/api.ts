@@ -1,4 +1,4 @@
-import type { AdminOzet, AdminRole, AdminTakipOzet, AdminUser, AgreementDocument, AgreementType, ApplicationStatus, AuthResponse, Basvuru, BasvuruDagitim, BasvuruDalga, BasvuruDonemi, BelgeYuklemeFiltre, BirimAylikRapor, BirimDuyuru, BirimDuyuruInbox, BirimKullanici, BirimOgrenci, DagitimBirimi, DagitimSonuc, DemoInfo, DocumentType, ImzaBildirimiGonder, IskurListe, IskurListeUpload, IslemLogPage, IslemTuru, IzinRaporOgrenci, KayitListeFiltre, KayitListesi, KesinListeUpload, OgrenciCalismaOzet, PuantajDurum, Role, SozlesmeImzaBekleyen, StudentAgreement, StudentProfile, TakipDonem, TakipGirisPencere, WorkUnit, YoneticiPanosuDuyuru } from "./types";
+import type { AdminOzet, AdminRole, AdminTakipOzet, AdminUser, AgreementDocument, AgreementType, ApplicationStatus, AuthResponse, Basvuru, BasvuruDagitim, BasvuruDalga, BasvuruDonemi, BelgeYuklemeFiltre, BirimAylikRapor, BirimDuyuru, BirimDuyuruInbox, BirimKullanici, BirimOgrenci, DagitimBirimi, DagitimSonuc, DemoInfo, DocumentType, ImzaBildirimiGonder, IskurListe, IskurListeUpload, IslemLogPage, IslemTuru, IzinRaporOgrenci, KayitListeFiltre, KayitListesi, KesinListeUpload, OgrenciCalismaOzet, PuantajDurum, Role, SozlesmeImzaBekleyen, StudentAgreement, StudentProfile, TakipDonem, TakipGirisAyOzet, TakipGirisPencere, WorkUnit, YoneticiPanosuDuyuru } from "./types";
 
 const TOKEN_KEY = "sksiskur.token";
 
@@ -243,7 +243,7 @@ export const api = {
     }),
   adminDocumentUrl: (basvuruId: number, belgeId: number) =>
     `/api/admin/basvurular/${basvuruId}/belgeler/${belgeId}`,
-  dagitim: () => request<DagitimSonuc>("/api/admin/dagitim"),
+  dagitim: (donemId?: number) => request<DagitimSonuc>(`/api/admin/dagitim${donemId ? `?donemId=${donemId}` : ""}`),
   dagit: (yenidenDagit = false) =>
     request<DagitimSonuc>("/api/admin/dagitim", {
       method: "POST",
@@ -317,9 +317,14 @@ export const api = {
     }),
   deleteBirimKullanici: (id: number) =>
     request<void>(`/api/admin/birim-kullanicilar/${id}`, { method: "DELETE" }),
-  kayitListesi: (filtre?: KayitListeFiltre) =>
-    request<KayitListesi>(`/api/admin/kayit-listesi${filtre ? `?filtre=${filtre}` : ""}`),
-  kayitListesiExcelUrl: () => "/api/admin/kayit-listesi.xlsx",
+  kayitListesi: (filtre?: KayitListeFiltre, donemId?: number) => {
+    const params = new URLSearchParams();
+    if (filtre) params.set("filtre", filtre);
+    if (donemId) params.set("donemId", String(donemId));
+    const query = params.toString();
+    return request<KayitListesi>(`/api/admin/kayit-listesi${query ? `?${query}` : ""}`);
+  },
+  kayitListesiExcelUrl: (donemId?: number) => `/api/admin/kayit-listesi.xlsx${donemId ? `?donemId=${donemId}` : ""}`,
   uploadKesinListe: async (file: File) => {
     const body = new FormData();
     body.append("file", file);
@@ -358,6 +363,8 @@ export const api = {
     }),
   adminGirisPencere: (yil: number, ay: number, donemId?: number) =>
     request<TakipGirisPencere>(`/api/admin/takip/giris-pencere?yil=${yil}&ay=${ay}${donemId ? `&donemId=${donemId}` : ""}`),
+  adminGirisPencereleri: (donemId?: number) =>
+    request<TakipGirisAyOzet[]>(`/api/admin/takip/giris-pencereleri${donemId ? `?donemId=${donemId}` : ""}`),
   saveAdminGirisPencere: (
     yil: number,
     ay: number,

@@ -956,6 +956,20 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 .report-table col.col-iban { width: 160px; }
 .report-table col.col-day { width: 24px; }
 .report-table col.col-total { width: 52px; }
+.phase-badge {
+  display: inline-block;
+  margin: 0 4px 2px 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #eef2f7;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.phase-badge.wait { background: #fff1df; color: #8a4b08; }
+.phase-badge.ok { background: #e5f6ec; color: #146c43; }
+tr.row-wait td { background: #fffaf3; }
+.settings-block-title { margin: 10px 0 6px; font-size: 13px; }
 .report-sign {
   display: grid;
   grid-template-columns: 1fr 1fr;

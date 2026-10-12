@@ -401,6 +401,15 @@ export type BirimAylikRapor = {
   ogrenciler: BirimRaporOgrenci[];
 };
 
+export type TakipGirisAyOzet = {
+  yil: number;
+  ay: number;
+  ekuantBaslangic: string | null;
+  ekuantBitis: string | null;
+  puantajBaslangic: string | null;
+  puantajBitis: string | null;
+};
+
 export type TakipGirisPencere = {
   yil: number;
   ay: number;

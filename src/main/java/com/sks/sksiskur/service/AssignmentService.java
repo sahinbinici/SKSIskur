@@ -62,8 +62,8 @@ public class AssignmentService {
     }
 
     @Transactional
-    public DagitimSonucResponse current() {
-        BasvuruDonemi donem = basvuruDonemiService.requireActive();
+    public DagitimSonucResponse current(Long donemId) {
+        BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
         return toResponse(kesinOgrenciler(donem), Instant.now(), donem);
     }
 

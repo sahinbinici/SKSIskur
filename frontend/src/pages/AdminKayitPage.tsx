@@ -6,7 +6,7 @@ import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { AdminProcessNav } from "../components/AdminProcessNav";
 import { Shell, formatDate } from "../components/ui";import { KayitListSheets } from "./AdminListReports";
-import type { KayitListeFiltre, KayitListesi, SozlesmeImzaBekleyen } from "../types";
+import type { BasvuruDonemi, KayitListeFiltre, KayitListesi, SozlesmeImzaBekleyen } from "../types";
 
 function nihaiDurumLabel(kesinListede: boolean | null) {
   if (kesinListede === true) return "İmza davetine alındı";
@@ -20,6 +20,8 @@ export function AdminKayitPage() {
   const [imzaBekleyen, setImzaBekleyen] = useState<SozlesmeImzaBekleyen[]>([]);
   const [imzaSecili, setImzaSecili] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState<KayitListeFiltre>("TUMU");
+  const [periods, setPeriods] = useState<BasvuruDonemi[]>([]);
+  const [periodId, setPeriodId] = useState<number | undefined>();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,10 +29,10 @@ export function AdminKayitPage() {
   const navigate = useNavigate();
 
   async function load(nextFilter = filter) {
-    const kayit = await api.kayitListesi(nextFilter);
+    const kayit = await api.kayitListesi(nextFilter, periodId);
     setData(kayit);
     if (kayit.imzaBildirimiGonderildi) {
-      const bekleyen = await api.sozlesmeImzaBekleyen();
+      const bekleyen = await api.sozlesmeImzaBekleyen(periodId);
       setImzaBekleyen(bekleyen);
       setImzaSecili((prev) => {
         const ids = new Set(bekleyen.map((row) => row.basvuruId));
@@ -43,8 +45,18 @@ export function AdminKayitPage() {
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err instanceof ApiError ? err.message : "Liste alınamadı."));
+    api.basvuruDonemleri()
+      .then((data) => {
+        setPeriods(data);
+        setPeriodId((current) => current ?? data.find((period) => period.aktif)?.id);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Dönemler yüklenemedi."));
   }, []);
+
+  useEffect(() => {
+    if (!periodId) return;
+    load().catch((err) => setError(err instanceof ApiError ? err.message : "Liste alınamadı."));
+  }, [periodId, filter]);
 
   async function uploadKesinList(file: File) {
     const ok = await confirm({
@@ -156,6 +168,8 @@ export function AdminKayitPage() {
     });
   }
 
+  const donemAcik = periods.find((period) => period.id === periodId)?.aktif === true;
+
   return (
     <Shell home="/admin">
       <div className="no-print">
@@ -164,6 +178,15 @@ export function AdminKayitPage() {
         description="Onaylı listeyi İŞKUR’a gönderin, nihai listeyi yükleyin, imza daveti yollayın. İmza gelenler birim dağıtımına girer."
       />
       <AdminProcessNav />
+      <label className="filter-label" style={{ marginBottom: 12 }}>
+        Dönem
+        <select value={periodId ?? ""} onChange={(e) => setPeriodId(Number(e.target.value) || undefined)}>
+          {periods.map((period) => <option key={period.id} value={period.id}>{period.ad}{period.aktif ? " (açık)" : " (arşiv)"}</option>)}
+        </select>
+      </label>
+      {periods.find((period) => period.id === periodId)?.aktif === false && (
+        <div className="alert alert-wait">Arşiv dönem yalnızca incelenir. Yükleme, imza ve onay işlemleri açık dönemdedir.</div>
+      )}
       {data?.aktifDalga && (
         <p style={{ color: "var(--muted)", marginTop: -8 }}>
           Aktif başvuru turu: <b>{data.aktifDalga.ad}</b>
@@ -196,7 +219,7 @@ export function AdminKayitPage() {
         <button
           className="btn btn-gold"
           disabled={!data || data.onayliBasvuru === 0}
-          onClick={() => downloadAuthenticatedFile(api.kayitListesiExcelUrl(), "onayli-basvurular.xlsx")
+          onClick={() => downloadAuthenticatedFile(api.kayitListesiExcelUrl(periodId), "onayli-basvurular.xlsx")
             .catch((err) => setError(err instanceof ApiError ? err.message : "Excel indirilemedi."))}
         >
           Onaylı başvuruları Excel indir
@@ -212,7 +235,7 @@ export function AdminKayitPage() {
             ref={fileInputRef}
             type="file"
             accept=".xlsx,.xls"
-            disabled={busy || data?.imzaBildirimiGonderildi}
+            disabled={busy || !donemAcik || data?.imzaBildirimiGonderildi}
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void uploadKesinList(file);
@@ -224,7 +247,7 @@ export function AdminKayitPage() {
               {data.kesinListeYukleyenAdmin ? ` · ${data.kesinListeYukleyenAdmin}` : ""}
             </span>
           )}
-          <button className="btn btn-danger" disabled={busy || !data?.kesinListeYuklendi || data?.imzaBildirimiGonderildi} onClick={() => void geriAl()}>
+          <button className="btn btn-danger" disabled={busy || !donemAcik || !data?.kesinListeYuklendi || data?.imzaBildirimiGonderildi} onClick={() => void geriAl()}>
             Listeyi sıfırla
           </button>
         </div>
@@ -236,7 +259,7 @@ export function AdminKayitPage() {
         </p>
         <button
           className="btn btn-gold"
-          disabled={busy || !data?.kesinListeYuklendi || data?.imzaBildirimiGonderildi || (data?.kesinListede ?? 0) === 0}
+          disabled={busy || !donemAcik || !data?.kesinListeYuklendi || data?.imzaBildirimiGonderildi || (data?.kesinListede ?? 0) === 0}
           onClick={gonderImzaBildirimi}
         >
           Davet e-postası gönder
@@ -252,7 +275,7 @@ export function AdminKayitPage() {
             <button
               type="button"
               className="btn btn-danger"
-              disabled={busy || imzaSecili.size === 0}
+              disabled={busy || !donemAcik || imzaSecili.size === 0}
               onClick={() => void pasifToplu([...imzaSecili])}
             >
               Seçilenleri pasife al ({imzaSecili.size})
@@ -261,7 +284,7 @@ export function AdminKayitPage() {
               <button
                 type="button"
                 className="btn btn-secondary"
-                disabled={busy}
+                disabled={busy || !donemAcik}
                 onClick={() => setImzaSecili(new Set(imzaBekleyen.map((r) => r.basvuruId)))}
               >
                 Tümünü seç
@@ -289,7 +312,7 @@ export function AdminKayitPage() {
                       <input
                         type="checkbox"
                         checked={imzaSecili.has(row.basvuruId)}
-                        disabled={busy}
+                        disabled={busy || !donemAcik}
                         onChange={() => toggleImzaSecim(row.basvuruId)}
                         aria-label={`${row.adSoyad} seç`}
                       />
@@ -311,7 +334,7 @@ export function AdminKayitPage() {
                       <button
                         type="button"
                         className="btn btn-gold btn-compact"
-                        disabled={busy}
+                        disabled={busy || !donemAcik}
                         onClick={() => void imzalandi(row.basvuruId)}
                       >
                         İmza geldi

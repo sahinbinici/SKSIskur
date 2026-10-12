@@ -26,6 +26,7 @@ import com.sks.sksiskur.web.dto.PuantajKaydetRequest;
 import com.sks.sksiskur.web.dto.OgrenciCalismaOzetResponse;
 import com.sks.sksiskur.web.dto.TakipDonemResponse;
 import com.sks.sksiskur.web.dto.TakipAySecim;
+import com.sks.sksiskur.web.dto.TakipGirisAyOzet;
 import com.sks.sksiskur.web.dto.TakipGirisPencereKaydetRequest;
 import com.sks.sksiskur.web.dto.TakipGirisPencereResponse;
 import com.sks.sksiskur.web.dto.TakipKapaliGunKaydetRequest;
@@ -325,6 +326,21 @@ public class TakipService {
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
         requireMonth(yil, ay);
         return toGirisPencere(period.getId(), yil, ay, false);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<TakipGirisAyOzet> adminGirisPencereleri(Long basvuruDonemiId) {
+        BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
+        return takipGirisPencereRepository.findByBasvuruDonemiIdAndYilGreaterThanOrderByAyAsc(period.getId(), 0).stream()
+                .map(window -> new TakipGirisAyOzet(
+                        window.getYil(),
+                        window.getAy(),
+                        window.getEkuantBaslangic(),
+                        window.getEkuantBitis(),
+                        window.getPuantajBaslangic(),
+                        window.getPuantajBitis()
+                ))
+                .toList();
     }
 
     @Transactional

@@ -261,8 +261,8 @@ public class AdminApplicationService {
     }
 
     @Transactional(readOnly = true)
-    public KayitListesiResponse kayitListesi(KayitListeFiltre filtre) {
-        return toKayitResponse(basvuruDonemiService.requireActive(), filtre == null ? KayitListeFiltre.TUMU : filtre);
+    public KayitListesiResponse kayitListesi(Long donemId, KayitListeFiltre filtre) {
+        return toKayitResponse(basvuruDonemiService.resolveForAdmin(donemId), filtre == null ? KayitListeFiltre.TUMU : filtre);
     }
 
     @Transactional

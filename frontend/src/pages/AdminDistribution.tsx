@@ -5,7 +5,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
 import { AdminProcessNav } from "../components/AdminProcessNav";
 import { OgrenciKimlikMeta, Shell, formatDate } from "../components/ui";
-import type { DagitimBirim, DagitimBirimi, DagitimSonuc } from "../types";
+import type { BasvuruDonemi, DagitimBirim, DagitimBirimi, DagitimSonuc } from "../types";
 
 export function AdminDistribution() {
   const confirm = useConfirm();
@@ -15,10 +15,12 @@ export function AdminDistribution() {
   const [busy, setBusy] = useState(false);
   const [onlyFilled, setOnlyFilled] = useState(true);
   const [units, setUnits] = useState<DagitimBirimi[]>([]);
+  const [periods, setPeriods] = useState<BasvuruDonemi[]>([]);
+  const [periodId, setPeriodId] = useState<number | undefined>();
   const navigate = useNavigate();
 
-  function load() {
-    return Promise.all([api.dagitim(), api.dagitimBirimleri()]).then(([distribution, configuredUnits]) => {
+  function load(nextPeriodId = periodId) {
+    return Promise.all([api.dagitim(nextPeriodId), api.dagitimBirimleri()]).then(([distribution, configuredUnits]) => {
       setData(distribution); setUnits(configuredUnits);
     });
   }
@@ -35,8 +37,18 @@ export function AdminDistribution() {
   }
 
   useEffect(() => {
-    load().catch((err) => setError(err instanceof ApiError ? err.message : "Dağıtım bilgisi alınamadı."));
+    api.basvuruDonemleri()
+      .then((items) => {
+        setPeriods(items);
+        setPeriodId((current) => current ?? items.find((period) => period.aktif)?.id);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : "Dönemler yüklenemedi."));
   }, []);
+
+  useEffect(() => {
+    if (!periodId) return;
+    load(periodId).catch((err) => setError(err instanceof ApiError ? err.message : "Dağıtım bilgisi alınamadı."));
+  }, [periodId]);
 
   async function run(yeniden: boolean) {
     const confirmText = yeniden
@@ -67,6 +79,8 @@ export function AdminDistribution() {
     return onlyFilled ? list.filter((b) => b.dolu > 0) : list;
   }, [data, onlyFilled]);
 
+  const donemAcik = periods.find((period) => period.id === periodId)?.aktif === true;
+
   return (
     <Shell home="/admin">
       <PageHeader
@@ -74,6 +88,15 @@ export function AdminDistribution() {
         description="Sözleşme imzalayan öğrenciler önce kendi fakülte/MYO birimine yerleştirilir; kontenjan dolarsa kalanlar diğer açık birimlere atanır."
       />
       <AdminProcessNav />
+      <label className="filter-label" style={{ marginBottom: 12 }}>
+        Dönem
+        <select value={periodId ?? ""} onChange={(e) => setPeriodId(Number(e.target.value) || undefined)}>
+          {periods.map((period) => <option key={period.id} value={period.id}>{period.ad}{period.aktif ? " (açık)" : " (arşiv)"}</option>)}
+        </select>
+      </label>
+      {!donemAcik && periodId && (
+        <div className="alert alert-wait">Arşiv dönem yalnızca incelenir. Dağıtım ve birim değiştirme açık dönemdedir.</div>
+      )}
       {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
       {data && !data.kesinListeOnaylandi && (
@@ -99,8 +122,8 @@ export function AdminDistribution() {
         <Stat title="Atanamayan" value={data?.atanamayan} />
       </div>
       <div className="row" style={{ marginBottom: 16 }}>
-        <button className="btn btn-gold" disabled={busy || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(false)}>Listeyi dağıt</button>
-        <button className="btn btn-danger" disabled={busy || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(true)}>Yeniden dağıt</button>
+        <button className="btn btn-gold" disabled={busy || !donemAcik || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(false)}>Listeyi dağıt</button>
+        <button className="btn btn-danger" disabled={busy || !donemAcik || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(true)}>Yeniden dağıt</button>
         <label style={{ display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
           <input type="checkbox" checked={onlyFilled} onChange={(e) => setOnlyFilled(e.target.checked)} style={{ width: "auto", margin: 0 }} />
           Yalnız dolu birimler
@@ -139,7 +162,7 @@ export function AdminDistribution() {
       </div>
 
       {birimler.filter((b) => b.dolu > 0).map((birim) => (
-        <UnitStudents key={birim.kod} birim={birim} units={units.filter((unit) => unit.dagitimaAcik && unit.kontenjan > 0)} busy={busy} onMove={moveStudent} onOpen={(id) => navigate(`/admin/basvuru/${id}`)} />
+        <UnitStudents key={birim.kod} birim={birim} units={units.filter((unit) => unit.dagitimaAcik && unit.kontenjan > 0)} busy={busy || !donemAcik} onMove={moveStudent} onOpen={(id) => navigate(`/admin/basvuru/${id}`)} />
       ))}
 
       {(data?.atanamayanlar.length ?? 0) > 0 && (

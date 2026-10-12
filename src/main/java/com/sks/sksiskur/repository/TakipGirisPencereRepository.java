@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface TakipGirisPencereRepository extends JpaRepository<TakipGirisPencere, Long> {
 
     Optional<TakipGirisPencere> findByBasvuruDonemiIdAndYilAndAy(Long basvuruDonemiId, int yil, int ay);
+
+    java.util.List<TakipGirisPencere> findByBasvuruDonemiIdAndYilGreaterThanOrderByAyAsc(Long basvuruDonemiId, int yil);
 }

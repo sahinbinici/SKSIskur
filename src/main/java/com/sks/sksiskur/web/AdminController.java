@@ -62,6 +62,7 @@ import com.sks.sksiskur.web.dto.IliskiKesRequest;
 import com.sks.sksiskur.web.dto.IadeRequest;
 import com.sks.sksiskur.web.dto.ReviewRequest;
 import com.sks.sksiskur.web.dto.TakipDonemResponse;
+import com.sks.sksiskur.web.dto.TakipGirisAyOzet;
 import com.sks.sksiskur.web.dto.TakipGirisPencereKaydetRequest;
 import com.sks.sksiskur.web.dto.TakipGirisPencereResponse;
 import com.sks.sksiskur.web.dto.TakipKapaliGunKaydetRequest;
@@ -393,13 +394,16 @@ public class AdminController {
     }
 
     @GetMapping("/kayit-listesi")
-    public KayitListesiResponse kayitListesi(@RequestParam(required = false) KayitListeFiltre filtre) {
-        return adminApplicationService.kayitListesi(filtre);
+    public KayitListesiResponse kayitListesi(
+            @RequestParam(required = false) Long donemId,
+            @RequestParam(required = false) KayitListeFiltre filtre
+    ) {
+        return adminApplicationService.kayitListesi(donemId, filtre);
     }
 
     @GetMapping("/kayit-listesi.xlsx")
-    public ResponseEntity<byte[]> kayitListesiExcel() {
-        return excelAttachment(adminExportService.kayitListesiExcel(), "kayit-listesi.xlsx");
+    public ResponseEntity<byte[]> kayitListesiExcel(@RequestParam(required = false) Long donemId) {
+        return excelAttachment(adminExportService.kayitListesiExcel(donemId), "kayit-listesi.xlsx");
     }
 
     @PostMapping(value = "/kayit-listesi/kesin-liste", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -581,8 +585,8 @@ public class AdminController {
     }
 
     @GetMapping("/dagitim")
-    public DagitimSonucResponse dagitim() {
-        return assignmentService.current();
+    public DagitimSonucResponse dagitim(@RequestParam(required = false) Long donemId) {
+        return assignmentService.current(donemId);
     }
 
     @PostMapping("/dagitim")
@@ -640,6 +644,11 @@ public class AdminController {
             @RequestParam int ay
     ) {
         return takipService.adminGirisPencere(donemId, yil, ay);
+    }
+
+    @GetMapping("/takip/giris-pencereleri")
+    public java.util.List<TakipGirisAyOzet> girisPencereleri(@RequestParam(required = false) Long donemId) {
+        return takipService.adminGirisPencereleri(donemId);
     }
 
     @PutMapping("/takip/giris-pencere")

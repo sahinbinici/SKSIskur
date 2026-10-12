@@ -8,7 +8,7 @@ import { ActionCard, PageHeader } from "../components/PageHeader";
 import { AdminProcessNav } from "../components/AdminProcessNav";
 import { OgrenciKimlikMeta, Shell } from "../components/ui";
 import { EkuantSheet, MONTHS, PuantajSheet, calendarWeeks } from "./UnitReportPage";
-import type { AdminTakipOzet, BasvuruDonemi, BirimAylikRapor, IzinRaporOgrenci, TakipGirisPencere, TakipStatus, WorkUnit } from "../types";
+import type { AdminTakipOzet, BasvuruDonemi, BirimAylikRapor, IzinRaporOgrenci, TakipGirisAyOzet, TakipGirisPencere, TakipStatus, WorkUnit } from "../types";
 
 type PageTab = "paket" | "ozet" | "ayarlar" | "cetvel";
 type CetvelKind = "ekuant" | "puantaj";
@@ -35,6 +35,7 @@ export function AdminTakipPage() {
   const [pencereOpen, setPencereOpen] = useState(true);
   const [izinOpen, setIzinOpen] = useState(false);
   const [pencere, setPencere] = useState<TakipGirisPencere | null>(null);
+  const [pencereOzet, setPencereOzet] = useState<TakipGirisAyOzet[]>([]);
   const [ekuantBaslangic, setEkuantBaslangic] = useState("");
   const [ekuantBitis, setEkuantBitis] = useState("");
   const [puantajBaslangic, setPuantajBaslangic] = useState("");
@@ -84,6 +85,7 @@ export function AdminTakipPage() {
         applyPencere(next);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Giriş tarihleri yüklenemedi."));
+    api.adminGirisPencereleri(periodId).then(setPencereOzet).catch(() => setPencereOzet([]));
     setKapaliGunTarihi(`${yil}-${String(ay).padStart(2, "0")}-01`);
     setPencereAylar((current) => (current.includes(ay) ? current : [...current, ay].sort((a, b) => a - b)));
     setKapaliAylar((current) => (current.includes(ay) ? current : [...current, ay].sort((a, b) => a - b)));
@@ -162,6 +164,7 @@ export function AdminTakipPage() {
         puantajBitis: puantajBitis || null
       }, periodId);
       applyPencere(saved);
+      setPencereOzet(await api.adminGirisPencereleri(periodId));
       setMessage(`Giriş tarihleri ${pencereAylar.map((month) => MONTHS[month - 1]).join(", ")} ${yil} için kaydedildi.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Giriş tarihleri kaydedilemedi.");
@@ -255,9 +258,7 @@ export function AdminTakipPage() {
   async function returnSubmittedInUnit() {
     const ok = await confirm({
       title: hasBirim ? "Seçili birimlerdeki kayıtları iade et" : "Tüm birimlerdeki kayıtları iade et",
-      message: hasBirim
-        ? "Seçili birimlerde gönderilmiş ve onaylı tüm aylık kayıtlar taslağa alınır; birimler düzeltip yeniden gönderir."
-        : "Tüm birimlerde gönderilmiş ve onaylı tüm aylık kayıtlar taslağa alınır; birimler düzeltip yeniden gönderir.",
+      message: `${kapsamMetni()} Gönderilmiş ve onaylı kayıtlar taslağa alınır; birimler düzeltip yeniden gönderir.`,
       confirmLabel: "Toplu iade",
       variant: "danger"
     });
@@ -277,7 +278,21 @@ export function AdminTakipPage() {
     }
   }
 
+  function kapsamMetni() {
+    if (!hasBirim) {
+      return `Birim seçilmedi. ${MONTHS[ay - 1]} ${yil} için işlem tüm birimleri kapsar.`;
+    }
+    const adlar = birimKodlari.map((kod) => units.find((unit) => unit.kod === kod)?.ad ?? kod);
+    return `${MONTHS[ay - 1]} ${yil} kapsamı: ${adlar.join(", ")}.`;
+  }
+
   async function approveSubmittedInUnit() {
+    const ok = await confirm({
+      title: hasBirim ? "Seçili birimleri onayla" : "Tüm birimleri onayla",
+      message: `${kapsamMetni()} Gönderilmiş EK-6 ve puantaj kayıtları onaylanır.`,
+      confirmLabel: hasBirim ? "Seçilenleri onayla" : "Tümünü onayla"
+    });
+    if (!ok) return;
     setLoading(true);
     setError("");
     setMessage("");
@@ -304,30 +319,6 @@ export function AdminTakipPage() {
     );
   }
 
-  async function terminateStudent(basvuruId: number) {
-    const ok = await confirm({
-      title: "Öğrenci ilişiğini kes",
-      message: `${MONTHS[ay - 1]} ${yil} itibarıyla öğrenci birim listesinden çıkarılır; sonraki aylarda görünmez.`,
-      confirmLabel: "İlişiği kes",
-      variant: "danger"
-    });
-    if (!ok) return;
-    setLoading(true);
-    setError("");
-    setMessage("");
-    try {
-      await api.adminIliskiKes(basvuruId, yil, ay, periodId);
-      setMessage("Öğrenci ilişkisi kesildi. Birim listesinde görünmeyecek.");
-      const next = await api.adminTakip(yil, ay, birimParam, periodId);
-      setOzet(next);
-      setIliskiSecim((current) => current.filter((id) => id !== basvuruId));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "İlişik kesilemedi.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function terminateSelected() {
     if (iliskiSecim.length === 0) {
       setError("İlişik kesmek için en az bir öğrenci seçin.");
@@ -335,7 +326,7 @@ export function AdminTakipPage() {
     }
     const ok = await confirm({
       title: "Seçilen öğrencilerin ilişiğini kes",
-      message: `${iliskiSecim.length} öğrenci ${MONTHS[ay - 1]} ${yil} itibarıyla birimlerden çıkarılacak.`,
+      message: `${iliskiSecim.length} öğrenci seçildi. ${kapsamMetni()} Seçilenler bu ay birim listesinden çıkar.`,
       confirmLabel: "Toplu kes",
       variant: "danger"
     });
@@ -356,15 +347,10 @@ export function AdminTakipPage() {
     }
   }
 
-  function phaseLabel(status?: TakipStatus | null) {
-    if (status === "APPROVED") return "Onaylandı";
-    if (status === "SUBMITTED") return "Onay bekliyor";
-    if (status === "DRAFT") return "Taslak";
-    return "—";
-  }
-
-  function takipDurumLabel(row: AdminTakipOzet["ogrenciler"][number]) {
-    return `EK-6 ${phaseLabel(row.ekuantStatus ?? row.status)} · Puantaj ${phaseLabel(row.puantajStatus)}`;
+  function phaseBadge(label: string, status?: TakipStatus | null) {
+    const text = status === "APPROVED" ? "onaylı" : status === "SUBMITTED" ? "bekliyor" : status === "DRAFT" ? "taslak" : "yok";
+    const tone = status === "APPROVED" ? "ok" : status === "SUBMITTED" ? "wait" : "";
+    return <span className={`phase-badge ${tone}`}>{label}: {text}</span>;
   }
 
   function downloadIskurPaketi() {
@@ -431,7 +417,7 @@ export function AdminTakipPage() {
             multiple
             values={birimKodlari}
             onChange={setBirimKodlari}
-            placeholder="Birim ara — kutucuklarla birden fazla seçin"
+            placeholder={hasBirim ? "Birim ara" : "Birim seçilmedi — boş bırakılırsa tüm birimler"}
             emptyLabel="Eşleşen birim yok"
             options={units.map((unit) => ({ value: unit.kod, label: unit.ad, hint: `Kod ${unit.kod}` }))}
           />
@@ -448,7 +434,7 @@ export function AdminTakipPage() {
                 label: units.find((unit) => unit.kod === kod)?.ad ?? kod,
                 onClear: () => setBirimKodlari((current) => current.filter((item) => item !== kod))
               }))
-            : [{ label: "Tüm birimler" }])
+            : [{ label: "Kapsam: tüm birimler" }])
         ]}
       />
 
@@ -478,7 +464,7 @@ export function AdminTakipPage() {
           )}
         >
           <button
-            className="btn btn-gold btn-lg"
+            className="btn btn-primary btn-lg"
             disabled={!selectedPeriod || loading || approvedCount === 0}
             onClick={() => downloadIskurPaketi()}
           >
@@ -500,23 +486,24 @@ export function AdminTakipPage() {
             </button>
             <button
               type="button"
-              className="btn btn-gold"
+              className="btn btn-primary"
               disabled={loading || !ozet.ogrenciler.some(pendingApproval)}
               onClick={() => void approveSubmittedInUnit()}
             >
-              {hasBirim ? "Seçili birimlerde onayla" : "Tüm birimlerde onayla"}
+              {hasBirim ? "Seçili birimleri onayla" : "Tüm birimleri onayla"}
             </button>
             <button
               type="button"
-              className="btn btn-danger"
+              className="btn btn-secondary"
               disabled={loading || !ozet.ogrenciler.some(canReturn)}
               onClick={() => void returnSubmittedInUnit()}
             >
-              {hasBirim ? "Seçili birimlerde iade et" : "Tüm birimlerde iade et"}
+              {hasBirim ? "Seçili birimleri iade et" : "Tüm birimleri iade et"}
             </button>
             <button
               type="button"
               className="btn btn-danger"
+              style={{ marginLeft: 16 }}
               disabled={loading || iliskiSecim.length === 0}
               onClick={() => void terminateSelected()}
             >
@@ -556,8 +543,8 @@ export function AdminTakipPage() {
               </tr>
             </thead>
             <tbody>
-              {ozet.ogrenciler.map((row) => (
-                <tr key={row.basvuruId}>
+              {([...ozet.ogrenciler].sort((a, b) => Number(pendingApproval(b)) - Number(pendingApproval(a)))).map((row) => (
+                <tr key={row.basvuruId} className={pendingApproval(row) ? "row-wait" : undefined}>
                   <td>
                     {aktifBuAy(row) ? (
                       <input
@@ -581,32 +568,22 @@ export function AdminTakipPage() {
                   <td>{row.gelmedi}</td>
                   <td>{row.izinli}</td>
                   <td>{row.raporlu}</td>
-                  <td>{takipDurumLabel(row)}</td>
+                  <td>{phaseBadge("EK-6", row.ekuantStatus ?? row.status)}{phaseBadge("Puantaj", row.puantajStatus)}</td>
                   <td className="no-wrap">
                     <button className="btn btn-secondary btn-compact" onClick={() => navigate(`/admin/takip/${row.basvuruId}?yil=${yil}&ay=${ay}${periodId ? `&donemId=${periodId}` : ""}`)}>İncele</button>
                     {pendingApproval(row) && (
-                      <button className="btn btn-gold btn-compact" style={{ marginLeft: 6 }} disabled={loading} onClick={() => void approveStudent(row.basvuruId)}>
+                      <button className="btn btn-primary btn-compact" style={{ marginLeft: 6 }} disabled={loading} onClick={() => void approveStudent(row.basvuruId)}>
                         Onayla
                       </button>
                     )}
                     {canReturn(row) && (
                       <button
-                        className="btn btn-danger btn-compact"
+                        className="btn btn-secondary btn-compact"
                         style={{ marginLeft: 6 }}
                         disabled={loading}
                         onClick={() => void returnStudent(row.basvuruId, (row.puantajStatus ?? row.status) === "APPROVED")}
                       >
                         İade
-                      </button>
-                    )}
-                    {aktifBuAy(row) && (
-                      <button
-                        className="btn btn-danger btn-compact"
-                        style={{ marginLeft: 6 }}
-                        disabled={loading}
-                        onClick={() => void terminateStudent(row.basvuruId)}
-                      >
-                        İlişik kes
                       </button>
                     )}
                   </td>
@@ -639,6 +616,7 @@ export function AdminTakipPage() {
                 </p>
                 {selectedPeriod?.aktif ? (
                   <>
+                    <div className="settings-block-title">Hangi aylar</div>
                     <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
                       {MONTHS.map((name, index) => {
                         const month = index + 1;
@@ -672,7 +650,7 @@ export function AdminTakipPage() {
                         Puantaj bitiş
                         <input type="date" value={puantajBitis} onChange={(e) => setPuantajBitis(e.target.value)} disabled={loading} />
                       </label>
-                      <button type="button" className="btn btn-gold" disabled={loading || pencereAylar.length === 0} onClick={() => void saveGirisPencere()}>
+                      <button type="button" className="btn btn-primary" disabled={loading || pencereAylar.length === 0} onClick={() => void saveGirisPencere()}>
                         Seçilen aylara kaydet
                       </button>
                     </div>
@@ -683,6 +661,16 @@ export function AdminTakipPage() {
                         {" · "}Puantaj {pencere.puantajAcik ? "açık" : "kapalı"}
                         {pencere.puantajBaslangic && pencere.puantajBitis ? ` (${pencere.puantajBaslangic.slice(0, 10)} – ${pencere.puantajBitis.slice(0, 10)})` : " · tarih yok"}
                       </p>
+                    )}
+                    {pencereOzet.length > 0 && (
+                      <ul style={{ margin: "12px 0 0", paddingLeft: 18, color: "var(--muted)" }}>
+                        {pencereOzet.map((item) => (
+                          <li key={`${item.yil}-${item.ay}`}>
+                            {MONTHS[item.ay - 1]} {item.yil}: EK-6 {item.ekuantBaslangic && item.ekuantBitis ? `${item.ekuantBaslangic.slice(0, 10)} – ${item.ekuantBitis.slice(0, 10)}` : "yok"}
+                            {" · "}Puantaj {item.puantajBaslangic && item.puantajBitis ? `${item.puantajBaslangic.slice(0, 10)} – ${item.puantajBitis.slice(0, 10)}` : "yok"}
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </>
                 ) : (
@@ -703,6 +691,7 @@ export function AdminTakipPage() {
                 </p>
                 {selectedPeriod?.aktif ? (
                   <>
+                    <div className="settings-block-title">Hangi aylar</div>
                     <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
                       {MONTHS.map((name, index) => {
                         const month = index + 1;
@@ -719,6 +708,7 @@ export function AdminTakipPage() {
                         );
                       })}
                     </div>
+                    <div className="settings-block-title">Ayın hangi günleri</div>
                     <div className="row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
                       {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => (
                         <label key={day} className="filter-label" style={{ flexDirection: "row", alignItems: "center", gap: 4, textTransform: "none", minWidth: 42 }}>
@@ -756,18 +746,29 @@ export function AdminTakipPage() {
                   <p style={{ color: "var(--muted)" }}>Kapalı dönemlerde gün ayarları değiştirilemez.</p>
                 )}
                 {kapaliGunler.length > 0 ? (
-                  <div className="row" style={{ marginTop: 14, gap: 8 }}>
-                    {kapaliGunler.map((date) => (
-                      <button
-                        type="button"
-                        key={date}
-                        className="btn btn-ghost"
-                        disabled={loading || !selectedPeriod?.aktif}
-                        title={selectedPeriod?.aktif ? "Günü yeniden girişe aç" : undefined}
-                        onClick={() => void saveClosedDays(kapaliGunler.filter((item) => item !== date))}
-                      >
-                        {date} ×
-                      </button>
+                  <div style={{ marginTop: 14 }}>
+                    {Array.from(kapaliGunler.reduce((groups, date) => {
+                      const key = date.slice(0, 7);
+                      groups.set(key, [...(groups.get(key) ?? []), date]);
+                      return groups;
+                    }, new Map<string, string[]>())).map(([key, dates]) => (
+                      <div key={key} style={{ marginBottom: 8 }}>
+                        <div className="settings-block-title">{MONTHS[Number(key.slice(5, 7)) - 1]} {key.slice(0, 4)}</div>
+                        <div className="row" style={{ gap: 8 }}>
+                          {dates.map((date) => (
+                            <button
+                              type="button"
+                              key={date}
+                              className="btn btn-ghost"
+                              disabled={loading || !selectedPeriod?.aktif}
+                              title={selectedPeriod?.aktif ? "Günü yeniden girişe aç" : undefined}
+                              onClick={() => void saveClosedDays(kapaliGunler.filter((item) => item !== date))}
+                            >
+                              {date.slice(8)} ×
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 ) : <p style={{ color: "var(--muted)", marginBottom: 0 }}>Kapalı gün tanımlanmadı.</p>}

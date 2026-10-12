@@ -210,8 +210,8 @@ public class AdminExportService {
     }
 
     @Transactional(readOnly = true)
-    public byte[] kayitListesiExcel() {
-        KayitListesiResponse data = adminApplicationService.kayitListesi(KayitListeFiltre.TUMU);
+    public byte[] kayitListesiExcel(Long donemId) {
+        KayitListesiResponse data = adminApplicationService.kayitListesi(donemId, KayitListeFiltre.TUMU);
         List<KayitListesiResponse.Satir> onayli = data.ogrenciler();
         List<KayitListesiResponse.Satir> kesin = onayli.stream()
                 .filter(row -> Boolean.TRUE.equals(row.kesinListede())).toList();

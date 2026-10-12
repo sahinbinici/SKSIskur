@@ -92,7 +92,7 @@ export function SearchableSelect(props: Props) {
 
   function displayValue() {
     if (open) return query;
-    if (selectedOptions.length === 0) return multiple ? "Tüm birimler" : "";
+    if (selectedOptions.length === 0) return "";
     if (!multiple) return selectedOptions[0]?.label ?? "";
     return `${selectedOptions.length} birim seçildi`;
   }
