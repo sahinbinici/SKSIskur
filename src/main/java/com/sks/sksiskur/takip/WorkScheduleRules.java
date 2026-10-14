@@ -14,8 +14,16 @@ import java.util.stream.Collectors;
 
 public final class WorkScheduleRules {
 
+    private static final Locale TR = Locale.forLanguageTag("tr-TR");
     private static final DateTimeFormatter WEEK_LABEL =
-            DateTimeFormatter.ofPattern("d MMMM", Locale.forLanguageTag("tr-TR"));
+            DateTimeFormatter.ofPattern("d MMMM", TR);
+    private static final DateTimeFormatter MONTH_LABEL =
+            DateTimeFormatter.ofPattern("MMMM yyyy", TR);
+
+    public static String monthLabel(YearMonth month) {
+        String raw = month.format(MONTH_LABEL);
+        return raw.isEmpty() ? raw : raw.substring(0, 1).toUpperCase(TR) + raw.substring(1);
+    }
 
     private WorkScheduleRules() {
     }
@@ -47,14 +55,15 @@ public final class WorkScheduleRules {
             }
         }
         if (selected.size() > quota) {
-            errors.add(quotaMonth + " ayı için en fazla " + quota + " EK-6 günü seçilebilir (şu an " + selected.size() + ").");
+            errors.add(monthLabel(quotaMonth) + " için en fazla " + quota + " EK-6 günü seçilebilir (şu an "
+                    + selected.size() + "). Ayın 29–31. günleri bir sonraki ayın kotasına sayılır.");
             return errors;
         }
         if (quotaMonthOpen(quotaMonth, asOf)) {
             return errors;
         }
         if (selected.size() != quota) {
-            errors.add(quotaMonth + " ayı için 4 hafta × " + daysPerWeek + " gün, toplam " + quota
+            errors.add(monthLabel(quotaMonth) + " için 4 hafta × " + daysPerWeek + " gün, toplam " + quota
                     + " EK-6 günü seçilmelidir (şu an " + selected.size() + ").");
         }
         return errors;
@@ -149,8 +158,11 @@ public final class WorkScheduleRules {
     }
 
     static int[] weekMinima(YearMonth month, Map<LocalDate, List<LocalDate>> daysByWeek, int daysPerWeek, LocalDate asOf) {
-        int quota = monthlyQuota(daysPerWeek);
         int[] minima = new int[daysByWeek.size()];
+        if (asOf != null && YearMonth.from(asOf).isAfter(month)) {
+            return minima;
+        }
+        int quota = monthlyQuota(daysPerWeek);
         int index = 0;
         for (List<LocalDate> weekDays : daysByWeek.values()) {
             List<LocalDate> countable = weekDays.stream()

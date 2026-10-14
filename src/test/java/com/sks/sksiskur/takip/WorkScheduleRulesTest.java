@@ -106,6 +106,19 @@ class WorkScheduleRulesTest {
     }
 
     @Test
+    void pastMonthDoesNotRequireWeeklyMinima() {
+        YearMonth month = YearMonth.of(2026, 9);
+        LocalDate asOf = LocalDate.of(2026, 10, 14);
+        Set<LocalDate> days = Set.of(
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 2), LocalDate.of(2026, 9, 3),
+                LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 10), LocalDate.of(2026, 9, 11),
+                LocalDate.of(2026, 9, 17), LocalDate.of(2026, 9, 18), LocalDate.of(2026, 9, 19),
+                LocalDate.of(2026, 9, 24), LocalDate.of(2026, 9, 25),
+                LocalDate.of(2026, 9, 28), LocalDate.of(2026, 9, 29), LocalDate.of(2026, 9, 30));
+        assertTrue(WorkScheduleRules.validateEkuant(month, days, 3, asOf).isEmpty());
+    }
+
+    @Test
     void currentOctoberWeekOnlyNeedsPastDays() {
         YearMonth month = YearMonth.of(2026, 10);
         LocalDate asOf = LocalDate.of(2026, 10, 2);

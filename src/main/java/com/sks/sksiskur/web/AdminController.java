@@ -842,11 +842,13 @@ public class AdminController {
             @RequestParam int ay,
             @RequestParam(required = false) String birimKodu,
             @RequestParam(required = false) Long donemId,
+            @RequestParam(required = false, defaultValue = "false") boolean istisnaYok,
             Authentication authentication
     ) {
-        int count = takipService.adminApproveSubmitted(donemId, birimKodu, yil, ay);
+        int count = takipService.adminApproveSubmitted(donemId, birimKodu, yil, ay, istisnaYok);
         auditLogService.logAdmin(authentication, IslemTuru.TAKIP_ONAY, "BIRIM", null,
-                "Toplu takip onayı: " + (birimKodu == null || birimKodu.isBlank() ? "tüm birimler" : birimKodu)
+                (istisnaYok ? "İstisnasız takip onayı: " : "Toplu takip onayı: ")
+                        + (birimKodu == null || birimKodu.isBlank() ? "tüm birimler" : birimKodu)
                         + " " + yil + "-" + String.format("%02d", ay),
                 count + " öğrenci");
         return count;

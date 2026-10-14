@@ -984,6 +984,17 @@ public class TakipService {
 
     @Transactional
     public int adminApproveSubmitted(Long basvuruDonemiId, String birimKodu, int yil, int ay) {
+        return adminApproveSubmitted(basvuruDonemiId, birimKodu, yil, ay, false);
+    }
+
+    @Transactional
+    public int adminApproveSubmitted(
+            Long basvuruDonemiId,
+            String birimKodu,
+            int yil,
+            int ay,
+            boolean istisnaYok
+    ) {
         YearMonth month = requireMonth(yil, ay);
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
         List<Basvuru> students = assignedKesin(birimKodu, period).stream()
@@ -995,6 +1006,9 @@ public class TakipService {
         for (Basvuru basvuru : students) {
             TakipDonem donem = donemler.get(basvuru.getId());
             if (donem == null) {
+                continue;
+            }
+            if (istisnaYok && hasIzinRaporOrGelmedi(donem)) {
                 continue;
             }
             boolean approved = false;
@@ -1014,10 +1028,19 @@ public class TakipService {
             }
         }
         if (count == 0) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "Onaylanacak gönderilmiş kayıt bulunamadı.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, istisnaYok
+                    ? "İzin, rapor veya mazeretsiz gelmedi olmayan gönderilmiş kayıt bulunamadı."
+                    : "Onaylanacak gönderilmiş kayıt bulunamadı.");
         }
         takipDonemRepository.saveAll(donemler.values());
         return count;
+    }
+
+    private boolean hasIzinRaporOrGelmedi(TakipDonem donem) {
+        return donem.getGunler().stream().anyMatch(gun ->
+                gun.getDurum() == PuantajDurum.IZINLI
+                        || gun.getDurum() == PuantajDurum.RAPORLU
+                        || gun.getDurum() == PuantajDurum.GELMEDI);
     }
 
     @Transactional
@@ -1328,6 +1351,9 @@ public class TakipService {
         proposed.forEach(date -> affectedQuotaMonths.add(WorkScheduleRules.quotaMonth(date)));
 
         for (YearMonth quotaMonth : affectedQuotaMonths) {
+            if (!quotaMonth.equals(actualMonth)) {
+                continue;
+            }
             List<String> errors = WorkScheduleRules.validateMonthlyQuota(
                     quotaMonth,
                     quotaDaysAfterChanges(basvuru, actualMonth, proposed, quotaMonth),

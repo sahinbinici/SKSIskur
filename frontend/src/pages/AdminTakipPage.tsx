@@ -116,6 +116,8 @@ export function AdminTakipPage() {
     row.ekuantStatus === "SUBMITTED" || row.puantajStatus === "SUBMITTED" || row.status === "SUBMITTED";
   const canReturn = (row: AdminTakipOzet["ogrenciler"][number]) =>
     phaseSent(row.ekuantStatus) || phaseSent(row.puantajStatus) || phaseSent(row.status);
+  const istisnasizOnay = (row: AdminTakipOzet["ogrenciler"][number]) =>
+    pendingApproval(row) && row.gelmedi === 0 && row.izinli === 0 && row.raporlu === 0;
   const approvedCount = ozet?.ogrenciler.filter((row) => (row.puantajStatus ?? row.status) === "APPROVED").length ?? 0;
   const submittedCount = ozet?.ogrenciler.filter((row) => canReturn(row)).length ?? 0;
   const ogrenciSayisi = pageTab === "cetvel" ? rapor?.ogrenciler.length ?? 0 : ozet?.ogrenciler.length ?? 0;
@@ -255,29 +257,6 @@ export function AdminTakipPage() {
     }
   }
 
-  async function returnSubmittedInUnit() {
-    const ok = await confirm({
-      title: hasBirim ? "Seçili birimlerdeki kayıtları iade et" : "Tüm birimlerdeki kayıtları iade et",
-      message: `${kapsamMetni()} Gönderilmiş ve onaylı kayıtlar taslağa alınır; birimler düzeltip yeniden gönderir.`,
-      confirmLabel: "Toplu iade",
-      variant: "danger"
-    });
-    if (!ok) return;
-    setLoading(true);
-    setError("");
-    setMessage("");
-    try {
-      const count = await api.adminTakipIadeGonderilenler(yil, ay, birimParam, periodId);
-      setMessage(`${count} öğrencinin kaydı birime iade edildi.`);
-      const next = await api.adminTakip(yil, ay, birimParam, periodId);
-      setOzet(next);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Toplu iade yapılamadı.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   function kapsamMetni() {
     if (!hasBirim) {
       return `Birim seçilmedi. ${MONTHS[ay - 1]} ${yil} için işlem tüm birimleri kapsar.`;
@@ -303,6 +282,28 @@ export function AdminTakipPage() {
       setOzet(next);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Toplu onay verilemedi.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function approveCleanSubmitted() {
+    const ok = await confirm({
+      title: "İzin / rapor / gelmedi olmayanları onayla",
+      message: `${kapsamMetni()} Yalnızca izin, rapor ve mazeretsiz gelmedi günü olmayan gönderilmiş kayıtlar onaylanır. İstisnalı öğrenciler satırdan incelenir.`,
+      confirmLabel: "Onayla"
+    });
+    if (!ok) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const count = await api.adminTakipOnaylaGonderilenler(yil, ay, birimParam, periodId, true);
+      setMessage(`${count} öğrencinin istisnasız kaydı onaylandı.`);
+      const next = await api.adminTakip(yil, ay, birimParam, periodId);
+      setOzet(next);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "İstisnasız onay verilemedi.");
     } finally {
       setLoading(false);
     }
@@ -494,11 +495,11 @@ export function AdminTakipPage() {
             </button>
             <button
               type="button"
-              className="btn btn-secondary"
-              disabled={loading || !ozet.ogrenciler.some(canReturn)}
-              onClick={() => void returnSubmittedInUnit()}
+              className="btn btn-primary"
+              disabled={loading || !ozet.ogrenciler.some(istisnasizOnay)}
+              onClick={() => void approveCleanSubmitted()}
             >
-              {hasBirim ? "Seçili birimleri iade et" : "Tüm birimleri iade et"}
+              İzin / rapor / gelmedi olmayanları onayla
             </button>
             <button
               type="button"
@@ -510,7 +511,7 @@ export function AdminTakipPage() {
               Seçilenlerin ilişiğini kes
             </button>
             <span style={{ color: "var(--muted)", fontSize: 13 }}>
-              Birim seçilmezse tüm birimler; seçilirse yalnızca o birimler. İlişik kesilen öğrenci birimde görünmez.
+              Birim seçilmezse tüm birimler; seçilirse yalnızca o birimler. Toplu iade yoktur; iade satırdan yapılır. İlişik kesilen öğrenci birimde görünmez.
             </span>
           </div>
         <div className="card" style={{ overflow: "auto" }}>

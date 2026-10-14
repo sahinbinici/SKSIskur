@@ -131,6 +131,7 @@ export function UnitTrackingPage() {
     const monthOpen = viewing >= nowMonth;
     const entries = [...byWeek.entries()];
     const minima = entries.map(([, dates]) => {
+      if (!monthOpen) return 0;
       const countable = dates.filter((date) => {
         const day = Number(date.slice(8, 10));
         const quotaYm = day >= 29 ? nextYearMonth(date.slice(0, 7)) : date.slice(0, 7);
@@ -304,6 +305,9 @@ export function UnitTrackingPage() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+      {!error && (donem?.ekuantUyarilari ?? []).map((item) => (
+        <div key={item} className="alert alert-error">{item}</div>
+      ))}
       {message && <div className="alert alert-ok">{message}</div>}
 
       <section className="card help-tip" style={{ padding: 16, marginBottom: 18 }}>

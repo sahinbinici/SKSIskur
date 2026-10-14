@@ -451,10 +451,11 @@ export const api = {
     request<TakipDonem>(`/api/admin/takip/ogrenciler/${basvuruId}/onayla?yil=${yil}&ay=${ay}${donemId ? `&donemId=${donemId}` : ""}`, {
       method: "POST"
     }),
-  adminTakipOnaylaGonderilenler: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
+  adminTakipOnaylaGonderilenler: (yil: number, ay: number, birimKodu?: string, donemId?: number, istisnaYok?: boolean) => {
     const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
     if (birimKodu) params.set("birimKodu", birimKodu);
     if (donemId) params.set("donemId", String(donemId));
+    if (istisnaYok) params.set("istisnaYok", "true");
     return request<number>(`/api/admin/takip/onayla-gonderilenler?${params}`, { method: "POST" });
   },
   adminTakipIade: (basvuruId: number, yil: number, ay: number, donemId?: number) =>
