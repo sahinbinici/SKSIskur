@@ -26,6 +26,8 @@ import com.sks.sksiskur.service.IskurListeService;
 import com.sks.sksiskur.service.ImzaBildirimiService;
 import com.sks.sksiskur.service.KesinListeService;
 import com.sks.sksiskur.web.dto.ImzaBildirimiGonderResponse;
+import com.sks.sksiskur.web.dto.ImzaBildirimiGonderRequest;
+
 import com.sks.sksiskur.web.dto.IslemLogPageResponse;
 import com.sks.sksiskur.web.dto.AdminOzetResponse;
 import com.sks.sksiskur.web.dto.AdminUserCreateRequest;
@@ -428,10 +430,17 @@ public class AdminController {
         return adminApplicationService.geriAlKesinListe(username(authentication));
     }
 
+
     @PostMapping("/kayit-listesi/imza-bildirimi-gonder")
-    public ImzaBildirimiGonderResponse gonderImzaBildirimi(Authentication authentication) {
-        return imzaBildirimiService.gonder(username(authentication));
+    public ImzaBildirimiGonderResponse gonderImzaBildirimi(
+            @RequestBody(required = false) ImzaBildirimiGonderRequest request,
+            Authentication authentication
+    ) {
+        String konu = request != null ? request.emailKonu() : null;
+        String sablon = request != null ? request.emailSablon() : null;
+        return imzaBildirimiService.gonder(username(authentication), konu, sablon);
     }
+
 
     @GetMapping("/kayit-listesi/sozlesme-imza-bekleyen")
     public List<SozlesmeImzaBekleyenResponse> sozlesmeImzaBekleyen(@RequestParam(required = false) Long donemId) {

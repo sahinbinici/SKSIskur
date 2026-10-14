@@ -63,8 +63,7 @@ public class CetvelExcelExportService {
         int row = 0;
         mergeTitle(sheet, row++, lastCol, "EK-6: İŞKUR Gençlik Programı Katılımcı Gün Çizelgesi", styles.title);
         mergeTitle(sheet, row++, lastCol, "T.C. GAZİANTEP ÜNİVERSİTESİ", styles.title);
-        mergeTitle(sheet, row++, lastCol,
-                upper(blank(rapor.birimAdi()) + " İŞKUR GENÇLİK KATILIMCI GÜN ÇİZELGESİ"), styles.subtitle);
+        mergeTitle(sheet, row++, lastCol, ekuantBirimBasligi(rapor.birimAdi()), styles.subtitle);
         mergeTitle(sheet, row++, lastCol,
                 "KATILIMCILAR İÇİN HAFTADA EN FAZLA 3 DEVAM GÜNÜ SEÇİNİZ  ·  "
                         + MONTHS[month.getMonthValue() - 1] + " (" + month.getYear() + ")",
@@ -167,12 +166,10 @@ public class CetvelExcelExportService {
 
         BigDecimal gunluk = rapor.gunlukSaat() == null ? new BigDecimal("7.5") : rapor.gunlukSaat();
         for (BirimAylikRaporResponse.RaporOgrenci ogrenci : rapor.ogrenciler()) {
-            Set<Integer> geldi = new HashSet<>();
-            if (ogrenci.geldiGunler() != null) {
-                for (LocalDate date : ogrenci.geldiGunler()) {
-                    geldi.add(date.getDayOfMonth());
-                }
-            }
+            Set<Integer> geldi = dayNumbers(ogrenci.geldiGunler());
+            Set<Integer> gelmedi = dayNumbers(ogrenci.gelmediGunler());
+            Set<Integer> izinli = dayNumbers(ogrenci.izinliGunler());
+            Set<Integer> raporlu = dayNumbers(ogrenci.raporluGunler());
             Row data = sheet.createRow(row++);
             setStyled(data, 0, ogrenci.siraNo(), styles.center);
             setStyled(data, 1, blank(ogrenci.tcKimlikNo()), styles.center);
@@ -180,8 +177,17 @@ public class CetvelExcelExportService {
             setStyled(data, 3, upper(blank(ogrenci.soyad())), styles.name);
             setStyled(data, 4, blank(ogrenci.iban()), styles.iban);
             for (int d = 1; d <= daysInMonth; d++) {
-                boolean mark = geldi.contains(d);
-                setStyled(data, 4 + d, mark ? gunluk : "", mark ? styles.hours : styles.center);
+                if (geldi.contains(d)) {
+                    setStyled(data, 4 + d, gunluk, styles.hours);
+                } else if (izinli.contains(d)) {
+                    setStyled(data, 4 + d, "i", styles.mark);
+                } else if (raporlu.contains(d)) {
+                    setStyled(data, 4 + d, "r", styles.mark);
+                } else if (gelmedi.contains(d)) {
+                    setStyled(data, 4 + d, "g", styles.mark);
+                } else {
+                    setStyled(data, 4 + d, "", styles.center);
+                }
             }
             setStyled(data, dayEnd + 1, ogrenci.toplamGun() > 0 ? ogrenci.toplamSaat() : "", styles.hours);
             setStyled(data, dayEnd + 2, ogrenci.toplamGun() > 0 ? ogrenci.toplamGun() : "", styles.center);
@@ -253,6 +259,26 @@ public class CetvelExcelExportService {
 
     private static String blank(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private static String ekuantBirimBasligi(String birimAdi) {
+        String name = blank(birimAdi);
+        String lower = name.toLowerCase(TR);
+        if (name.isEmpty() || lower.equals("tüm birimler") || lower.matches("\\d+ birim")) {
+            return upper(name.isEmpty() ? "Tüm birimler" : name);
+        }
+        return upper(name) + " İŞKUR GENÇLİK KATILIMCI GÜN ÇİZELGESİ";
+    }
+
+    private static Set<Integer> dayNumbers(List<LocalDate> dates) {
+        Set<Integer> days = new HashSet<>();
+        if (dates == null) {
+            return days;
+        }
+        for (LocalDate date : dates) {
+            days.add(date.getDayOfMonth());
+        }
+        return days;
     }
 
     private static final class Styles {

@@ -25,6 +25,10 @@ function ymd(value: string) {
   return value.slice(0, 10);
 }
 
+function daySet(values?: string[]) {
+  return new Set((values ?? []).map((value) => Number(ymd(value).slice(8, 10))));
+}
+
 export function calendarWeeks(yil: number, ay: number): (string | null)[][] {
   const first = new Date(yil, ay - 1, 1);
   const last = new Date(yil, ay, 0);
@@ -45,6 +49,15 @@ export function calendarWeeks(yil: number, ay: number): (string | null)[][] {
 
 function upper(value?: string | null) {
   return (value || "").toLocaleUpperCase("tr-TR");
+}
+
+function ekuantBirimBasligi(birimAdi?: string | null) {
+  const name = (birimAdi || "").trim();
+  const lower = name.toLocaleLowerCase("tr-TR");
+  if (!name || lower === "tüm birimler" || /^\d+\s+birim$/.test(lower)) {
+    return upper(name || "Tüm birimler");
+  }
+  return `${upper(name)} İŞKUR GENÇLİK KATILIMCI GÜN ÇİZELGESİ`;
 }
 
 function formatSaat(value: number) {
@@ -321,7 +334,7 @@ export function EkuantSheet({
       <header className="report-head">
         <p>EK-6: İŞKUR Gençlik Programı Katılımcı Gün Çizelgesi</p>
         <h1>T.C. GAZİANTEP ÜNİVERSİTESİ</h1>
-        <h2>{upper(birimAdi)} İŞKUR GENÇLİK KATILIMCI GÜN ÇİZELGESİ</h2>
+        <h2>{ekuantBirimBasligi(birimAdi)}</h2>
         <p className="report-note">KATILIMCILAR İÇİN HAFTADA EN FAZLA 3 DEVAM GÜNÜ SEÇİNİZ</p>
         <p className="report-month">{upper(MONTHS[ay - 1])} ({yil})</p>
       </header>
@@ -447,7 +460,10 @@ export function PuantajSheet({
         </thead>
         <tbody>
           {ogrenciler.map((row) => {
-            const geldi = new Set(row.geldiGunler.map((value) => Number(ymd(value).slice(8, 10))));
+            const geldi = daySet(row.geldiGunler);
+            const gelmedi = daySet(row.gelmediGunler);
+            const izinli = daySet(row.izinliGunler);
+            const raporlu = daySet(row.raporluGunler);
             return (
               <tr key={row.basvuruId}>
                 <td>{row.siraNo}</td>
@@ -455,11 +471,20 @@ export function PuantajSheet({
                 <td className="name">{upper(row.ad)}</td>
                 <td className="name">{upper(row.soyad)}</td>
                 <td className="iban">{row.iban || ""}</td>
-                {days.map((day) => (
-                  <td key={day} className={geldi.has(day) ? "mark" : ""}>
-                    {geldi.has(day) ? saatLabel : ""}
-                  </td>
-                ))}
+                {days.map((day) => {
+                  const mark = geldi.has(day)
+                    ? { text: saatLabel, cls: "mark GELDI" }
+                    : izinli.has(day)
+                      ? { text: "i", cls: "mark IZINLI" }
+                      : raporlu.has(day)
+                        ? { text: "r", cls: "mark RAPORLU" }
+                        : gelmedi.has(day)
+                          ? { text: "g", cls: "mark GELMEDI" }
+                          : { text: "", cls: "" };
+                  return (
+                    <td key={day} className={mark.cls}>{mark.text}</td>
+                  );
+                })}
                 <td>{row.toplamGun > 0 ? formatSaat(row.toplamSaat) : ""}</td>
                 <td>{row.toplamGun > 0 ? row.toplamGun : ""}</td>
               </tr>
@@ -472,6 +497,7 @@ export function PuantajSheet({
           )}
         </tbody>
       </table>
+      <p className="report-note" style={{ marginTop: 10 }}>i: izinli · r: raporlu · g: gelmedi · saat yazısı: geldi</p>
     </article>
   );
 }

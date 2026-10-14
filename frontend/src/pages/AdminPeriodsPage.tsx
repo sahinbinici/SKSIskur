@@ -331,11 +331,11 @@ export function AdminPeriodsPage() {
             style={{ margin: 0, maxWidth: 360 }}
           />
           <label style={{ margin: 0 }}>
-            Başlangıç
+            Başvuru Başlangıç
             <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} disabled={busy || Boolean(active)} style={{ margin: "4px 0 0" }} />
           </label>
           <label style={{ margin: 0 }}>
-            Bitiş
+            Başvuru Bitiş
             <input type="date" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} disabled={busy || Boolean(active)} style={{ margin: "4px 0 0" }} />
           </label>
           <label style={{ margin: 0 }}>

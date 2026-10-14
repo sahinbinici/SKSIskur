@@ -988,6 +988,9 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 .report-table .iban { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .report-table .iban { font-size: 9px; }
 .report-table .mark { font-weight: 700; }
+.report-table .mark.IZINLI { color: var(--wait); }
+.report-table .mark.RAPORLU { color: #654091; }
+.report-table .mark.GELMEDI { color: var(--danger); }
 .report-table col.col-sira { width: 40px; }
 .report-table col.col-tc { width: 100px; }
 .report-table col.col-name { width: 120px; }

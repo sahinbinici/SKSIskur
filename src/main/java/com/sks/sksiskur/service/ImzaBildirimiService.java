@@ -53,6 +53,11 @@ public class ImzaBildirimiService {
 
     @Transactional
     public ImzaBildirimiGonderResponse gonder(String adminUsername) {
+        return gonder(adminUsername, null, null);
+    }
+
+    @Transactional
+    public ImzaBildirimiGonderResponse gonder(String adminUsername, String emailKonu, String emailSablon) {
         BasvuruDonemi donem = basvuruDonemiService.requireActive();
         BasvuruDalga dalga = basvuruDalgaService.requireAktifDalga(donem);
         if (!dalga.isKesinOnaylandi()) {
@@ -81,10 +86,15 @@ public class ImzaBildirimiService {
         int epostaGonderilen = 0;
         int epostaAtlanan = 0;
         int epostaBasarisiz = 0;
-        String emailSubject = kampusResolver.buildEmailSubject();
+
+        // Özel konu girilmemişse varsayılan kullan
+        String resolvedKonu = (emailKonu != null && !emailKonu.isBlank())
+                ? emailKonu
+                : kampusResolver.buildEmailSubject();
 
         for (Basvuru basvuru : hedefler) {
-            String sayfaMesaji = kampusResolver.buildImzaMesaji(basvuru.getStudent());
+            // Özel şablon varsa yer tutucularla doldur, yoksa varsayılan mesaj
+            String sayfaMesaji = kampusResolver.buildImzaMesaji(basvuru.getStudent(), emailSablon);
             basvuru.setImzaBildirimiMesaji(sayfaMesaji);
             basvuru.setImzaBildirimiGonderildi(true);
             basvuru.setImzaBildirimiGonderimTarihi(now);
@@ -101,7 +111,7 @@ public class ImzaBildirimiService {
                 epostaAtlanan++;
                 continue;
             }
-            boolean sent = emailNotificationService.sendPlainText(eposta, emailSubject, sayfaMesaji);
+            boolean sent = emailNotificationService.sendPlainText(eposta, resolvedKonu, sayfaMesaji);
             basvuru.setImzaBildirimiEpostaGonderildi(sent);
             if (sent) {
                 epostaGonderilen++;

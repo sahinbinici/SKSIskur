@@ -532,7 +532,7 @@ function HouseholdSgkDocuments({
             <div className="file-name" key={document.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <strong>{document.haneUyesiAdi}</strong>
               <span>{document.orijinalAd}</span>
-              <button type="button" className="btn btn-ghost" onClick={() => void openDocument(api.studentDocumentUrl(document.id))}>Görüntüle</button>
+              <button type="button" className="btn btn-secondary btn-compact" onClick={() => void openDocument(api.studentDocumentUrl(document.id))}>Görüntüle</button>
               {!locked && <button type="button" className="btn btn-danger" disabled={busy} onClick={() => onDelete(document.id)}>Sil</button>}
             </div>
           ))}

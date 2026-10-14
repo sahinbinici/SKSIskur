@@ -335,8 +335,11 @@ export const api = {
   markImzaBildirimiOkundu: () =>
     request<Basvuru>("/api/student/basvuru/imza-bildirimi/okundu", { method: "POST" }),
   onaylaKesinListe: () => request<KayitListesi>("/api/admin/kayit-listesi/onayla", { method: "POST" }),
-  gonderImzaBildirimi: () =>
-    request<ImzaBildirimiGonder>("/api/admin/kayit-listesi/imza-bildirimi-gonder", { method: "POST" }),
+  gonderImzaBildirimi: (emailKonu?: string, emailSablon?: string) =>
+    request<ImzaBildirimiGonder>("/api/admin/kayit-listesi/imza-bildirimi-gonder", {
+      method: "POST",
+      body: JSON.stringify({ emailKonu: emailKonu ?? null, emailSablon: emailSablon ?? null })
+    }),
   sozlesmeImzaBekleyen: (donemId?: number) =>
     request<SozlesmeImzaBekleyen[]>(
       `/api/admin/kayit-listesi/sozlesme-imza-bekleyen${donemId ? `?donemId=${donemId}` : ""}`

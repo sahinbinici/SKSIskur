@@ -55,11 +55,31 @@ public class KampusResolver {
     }
 
     public String buildImzaMesaji(Student student) {
+        return buildImzaMesaji(student, null);
+    }
+
+    /**
+     * Verilen şablonu kullanarak öğrenciye ait imza mesajını oluşturur.
+     *
+     * <p>Desteklenen yer tutucular: {@code {AD_SOYAD}}, {@code {BIRIM}}.
+     * {@code emailSablon} boş veya {@code null} ise sistem varsayılan metni döner.
+     */
+    public String buildImzaMesaji(Student student, String emailSablon) {
+        String birimAdi = resolve(student) == KampusTuru.MERKEZ
+                ? "SKS Daire Başkanlığı"
+                : resolveTasraBirimAdi(student);
+
+        if (emailSablon != null && !emailSablon.isBlank()) {
+            return emailSablon
+                    .replace("{AD_SOYAD}", student.getAdSoyad())
+                    .replace("{BIRIM}", birimAdi);
+        }
+
+        // Varsayılan mesaj
         if (resolve(student) == KampusTuru.MERKEZ) {
             return "Sayın " + student.getAdSoyad()
                     + ", İŞKUR nihai listesine alındınız. Birim ataması için SKS Daire Başkanlığı'na gelerek sözleşme imzalamanız gerekmektedir.";
         }
-        String birimAdi = resolveTasraBirimAdi(student);
         return "Sayın " + student.getAdSoyad()
                 + ", İŞKUR nihai listesine alındınız. Birim ataması için bulunduğunuz "
                 + birimAdi + " birimine gelerek sözleşme imzalamanız gerekmektedir.";
