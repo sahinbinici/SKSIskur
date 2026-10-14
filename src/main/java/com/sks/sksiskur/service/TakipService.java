@@ -80,6 +80,7 @@ public class TakipService {
     private final BigDecimal gunlukSaat;
     private final BasvuruDonemiService basvuruDonemiService;
     private final String relaxedBirimKodlari;
+    private final boolean relaxedGiris;
 
     public TakipService(
             BasvuruRepository basvuruRepository,
@@ -90,7 +91,8 @@ public class TakipService {
             @Value("${app.takip.haftalik-gun:3}") int daysPerWeek,
             @Value("${app.takip.gunluk-saat:7.5}") BigDecimal gunlukSaat,
             BasvuruDonemiService basvuruDonemiService,
-            @Value("${app.takip.relaxed-birim-kodlari:}") String relaxedBirimKodlari
+            @Value("${app.takip.relaxed-birim-kodlari:}") String relaxedBirimKodlari,
+            @Value("${app.takip.relaxed-giris:false}") boolean relaxedGiris
     ) {
         this.basvuruRepository = basvuruRepository;
         this.takipDonemRepository = takipDonemRepository;
@@ -101,9 +103,13 @@ public class TakipService {
         this.gunlukSaat = gunlukSaat;
         this.basvuruDonemiService = basvuruDonemiService;
         this.relaxedBirimKodlari = relaxedBirimKodlari;
+        this.relaxedGiris = relaxedGiris;
     }
 
-    private boolean isRelaxedBirim(String birimKodu) {
+    private boolean isRelaxedTakip(String birimKodu) {
+        if (relaxedGiris) {
+            return true;
+        }
         if (birimKodu == null || relaxedBirimKodlari == null || relaxedBirimKodlari.isBlank()) {
             return false;
         }
@@ -120,7 +126,7 @@ public class TakipService {
                         birimKodu, ApplicationStatus.APPROVED, donem.getId())
                 .stream()
                 .filter(basvuru -> basvuru.isAssigned()
-                        && (isRelaxedBirim(birimKodu) || basvuru.canWorkIn(YearMonth.now(ZONE))))
+                        && (isRelaxedTakip(birimKodu) || basvuru.canWorkIn(YearMonth.now(ZONE))))
                 .map(this::toOgrenci)
                 .toList();
     }
@@ -129,7 +135,7 @@ public class TakipService {
     public BirimAylikRaporResponse monthlyReport(String birimKodu, int yil, int ay) {
         YearMonth month = requireMonth(yil, ay);
         List<Basvuru> basvurular = assignedKesin(birimKodu, basvuruDonemiService.requireActive()).stream()
-                .filter(basvuru -> isRelaxedBirim(birimKodu) || basvuru.canWorkIn(month))
+                .filter(basvuru -> isRelaxedTakip(birimKodu) || basvuru.canWorkIn(month))
                 .toList();
         String birimAdi = basvurular.stream()
                 .map(Basvuru::getAtananBirimAdi)
@@ -454,7 +460,7 @@ public class TakipService {
         }
         Long periodId = basvurular.isEmpty() || basvurular.getFirst().getBasvuruDonemi() == null
                 ? null : basvurular.getFirst().getBasvuruDonemi().getId();
-        boolean relaxed = isRelaxedBirim(birimKodu);
+        boolean relaxed = isRelaxedTakip(birimKodu);
         TakipGirisPencereResponse window = periodId == null
                 ? emptyGirisPencere(yil, ay, relaxed)
                 : toGirisPencere(periodId, yil, ay, relaxed);
@@ -633,7 +639,7 @@ public class TakipService {
     @Transactional
     public TakipDonemResponse saveEkuant(String birimKodu, Long basvuruId, EkuantKaydetRequest request) {
         YearMonth month = requireMonth(request.yil(), request.ay());
-        boolean relaxed = isRelaxedBirim(birimKodu);
+        boolean relaxed = isRelaxedTakip(birimKodu);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, request.yil(), request.ay());
         assertEkuantEditable(donem);
         Set<LocalDate> days = request.gunler() == null ? Set.of() : new HashSet<>(request.gunler());
@@ -669,7 +675,7 @@ public class TakipService {
     @Transactional
     public TakipDonemResponse savePuantaj(String birimKodu, Long basvuruId, PuantajKaydetRequest request) {
         YearMonth month = requireMonth(request.yil(), request.ay());
-        boolean relaxed = isRelaxedBirim(birimKodu);
+        boolean relaxed = isRelaxedTakip(birimKodu);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, request.yil(), request.ay());
         assertPuantajEditable(donem, relaxed);
         Map<LocalDate, TakipGun> byDate = donem.getGunler().stream()
@@ -717,7 +723,7 @@ public class TakipService {
             MultipartFile file
     ) {
         YearMonth month = requireMonth(yil, ay);
-        boolean relaxed = isRelaxedBirim(birimKodu);
+        boolean relaxed = isRelaxedTakip(birimKodu);
         TakipDonem donem = getOrCreateEntity(birimKodu, basvuruId, yil, ay);
         assertPuantajEditable(donem, relaxed);
         if (!relaxed) {
@@ -788,7 +794,7 @@ public class TakipService {
         }
         YearMonth month = requireMonth(yil, ay);
         List<Basvuru> basvurular = assignedKesin(birimKodu, basvuruDonemiService.requireActive()).stream()
-                .filter(basvuru -> isRelaxedBirim(birimKodu) || basvuru.canWorkIn(month))
+                .filter(basvuru -> isRelaxedTakip(birimKodu) || basvuru.canWorkIn(month))
                 .toList();
         if (basvurular.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Bu ay için gönderilecek öğrenci yok.");
@@ -861,7 +867,7 @@ public class TakipService {
     }
 
     private void assertReadyToSubmitEkuant(TakipDonem donem, YearMonth month, String birimKodu) {
-        boolean relaxed = isRelaxedBirim(birimKodu);
+        boolean relaxed = isRelaxedTakip(birimKodu);
         LocalDate today = LocalDate.now(ZONE);
         if (donem == null || donem.getGunler().isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Göndermeden önce EK-6 günleri seçilmelidir.");
@@ -888,7 +894,7 @@ public class TakipService {
     }
 
     private void assertReadyToSubmitPuantaj(TakipDonem donem, YearMonth month, String birimKodu) {
-        boolean relaxed = isRelaxedBirim(birimKodu);
+        boolean relaxed = isRelaxedTakip(birimKodu);
         LocalDate today = LocalDate.now(ZONE);
         if (donem == null || donem.getGunler().isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Göndermeden önce EK-6 günleri seçilmelidir.");
@@ -1107,7 +1113,7 @@ public class TakipService {
     private Basvuru requireAssigned(String birimKodu, Long basvuruId, YearMonth month) {
         return basvuruRepository.findDetailedByIdAndAtananBirimKoduAndBasvuruDonemiAktifTrue(basvuruId, birimKodu)
                 .filter(basvuru -> basvuru.isAssigned()
-                        && (isRelaxedBirim(birimKodu) || basvuru.canWorkIn(month)))
+                        && (isRelaxedTakip(birimKodu) || basvuru.canWorkIn(month)))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Bu birime atanmış öğrenci bulunamadı."));
     }
 
@@ -1115,7 +1121,7 @@ public class TakipService {
         if (donem.isEkuantLocked()) {
             throw new ApiException(HttpStatus.CONFLICT, "Gönderilen EK-6 değiştirilemez.");
         }
-        if (!isRelaxedBirim(donem.getBasvuru().getAtananBirimKodu())) {
+        if (!isRelaxedTakip(donem.getBasvuru().getAtananBirimKodu())) {
             assertEkuantWindowOpen(donem.getBasvuru(), YearMonth.of(donem.getYil(), donem.getAy()));
         }
     }
@@ -1219,7 +1225,7 @@ public class TakipService {
 
     private TakipDonemResponse emptyDraft(Basvuru basvuru, YearMonth month) {
         String birimKodu = basvuru.getAtananBirimKodu();
-        boolean relaxed = isRelaxedBirim(birimKodu);
+        boolean relaxed = isRelaxedTakip(birimKodu);
         TakipGirisPencereResponse window = toGirisPencere(
                 basvuru.getBasvuruDonemi().getId(), month.getYear(), month.getMonthValue(), relaxed);
         return new TakipDonemResponse(
@@ -1270,7 +1276,7 @@ public class TakipService {
                 .toList();
         Set<LocalDate> quotaDays = quotaDays(donem.getBasvuru(), month);
         String birimKodu = donem.getBasvuru().getAtananBirimKodu();
-        boolean relaxed = isRelaxedBirim(birimKodu);
+        boolean relaxed = isRelaxedTakip(birimKodu);
         List<String> warnings = relaxed ? List.of() : ekuantWarnings(donem.getBasvuru(), month);
         TakipGirisPencereResponse window = toGirisPencere(
                 donem.getBasvuru().getBasvuruDonemi().getId(), month.getYear(), month.getMonthValue(), relaxed);
