@@ -307,7 +307,7 @@ export function UnitTrackingPage() {
       {message && <div className="alert alert-ok">{message}</div>}
 
       <section className="card help-tip" style={{ padding: 16, marginBottom: 18 }}>
-        <b>{testMode ? "Geliştirme takip modu" : "Bu ay nasıl doldurulur?"}</b>
+        <b>{testMode ? "Test takip modu (Eğitim Fakültesi)" : "Bu ay nasıl doldurulur?"}</b>
         <p style={{ margin: "6px 0 0", color: "var(--muted)", lineHeight: 1.55 }}>
           {testMode
             ? "Geçmiş ve gelecek aylar için EK-6 ve puantaj girebilir, haftalık/aylık kota ve belge zorunluluğu uygulanmaz. Tüm EK-6 günlerine puantaj işaretleyip istediğiniz zaman gönderebilirsiniz."
