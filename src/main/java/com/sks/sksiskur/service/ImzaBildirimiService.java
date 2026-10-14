@@ -58,7 +58,12 @@ public class ImzaBildirimiService {
 
     @Transactional
     public ImzaBildirimiGonderResponse gonder(String adminUsername, String emailKonu, String emailSablon) {
-        BasvuruDonemi donem = basvuruDonemiService.requireActive();
+        return gonder(null, adminUsername, emailKonu, emailSablon);
+    }
+
+    @Transactional
+    public ImzaBildirimiGonderResponse gonder(Long donemId, String adminUsername, String emailKonu, String emailSablon) {
+        BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
         BasvuruDalga dalga = basvuruDalgaService.requireAktifDalga(donem);
         if (!dalga.isKesinOnaylandi()) {
             throw new ApiException(HttpStatus.CONFLICT, "İmza bildirimi göndermeden önce İŞKUR nihai listesi yüklenmelidir.");
@@ -206,9 +211,8 @@ public class ImzaBildirimiService {
     private Basvuru requireImzaBekleyen(Long basvuruId) {
         Basvuru basvuru = basvuruRepository.findDetailedById(basvuruId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Başvuru bulunamadı."));
-        BasvuruDonemi donem = basvuruDonemiService.requireActive();
-        if (basvuru.getBasvuruDonemi() == null || !basvuru.getBasvuruDonemi().getId().equals(donem.getId())) {
-            throw new ApiException(HttpStatus.CONFLICT, "Yalnızca aktif dönemdeki kayıtlar işlenebilir.");
+        if (basvuru.getBasvuruDonemi() == null) {
+            throw new ApiException(HttpStatus.CONFLICT, "Başvurunun dönemi bulunamadı.");
         }
         if (basvuru.getStatus() != ApplicationStatus.APPROVED || basvuru.getKayitTuru() != KayitTuru.KESIN) {
             throw new ApiException(HttpStatus.CONFLICT, "Yalnızca kesin kayıtlı onaylı başvurular işlenebilir.");

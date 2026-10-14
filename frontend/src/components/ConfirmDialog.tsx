@@ -6,6 +6,7 @@ export type ConfirmOptions = {
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: "primary" | "danger";
+  mode?: "confirm" | "info";
 };
 
 type PendingConfirm = ConfirmOptions & { resolve: (value: boolean) => void };
@@ -45,16 +46,18 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             <h4 id="confirm-title" style={{ marginTop: 0 }}>{pending.title}</h4>
             <p style={{ color: "var(--muted)", lineHeight: 1.55 }}>{pending.message}</p>
             <div className="confirm-dialog-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => close(false)}>
-                {pending.cancelLabel ?? "Vazgeç"}
-              </button>
+              {pending.mode !== "info" && (
+                <button type="button" className="btn btn-secondary" onClick={() => close(false)}>
+                  {pending.cancelLabel ?? "Vazgeç"}
+                </button>
+              )}
               <button
                 ref={confirmButtonRef}
                 type="button"
                 className={pending.variant === "danger" ? "btn btn-danger" : "btn btn-primary"}
                 onClick={() => close(true)}
               >
-                {pending.confirmLabel ?? "Onayla"}
+                {pending.confirmLabel ?? (pending.mode === "info" ? "Tamam" : "Onayla")}
               </button>
             </div>
           </div>

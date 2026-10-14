@@ -196,6 +196,27 @@ public class AdminController {
         return closed;
     }
 
+    @PutMapping("/basvuru-donemleri/{id}")
+    public BasvuruDonemiResponse updateBasvuruDonemi(
+            @PathVariable Long id,
+            @Valid @RequestBody BasvuruDonemiCreateRequest request,
+            Authentication authentication
+    ) {
+        BasvuruDonemiResponse updated = basvuruDonemiService.update(id, request);
+        auditLogService.logAdmin(authentication, IslemTuru.DONEM_GUNCELLE, "DONEM", updated.id(),
+                "Başvuru dönemi güncellendi: " + updated.ad(), null);
+        return updated;
+    }
+
+    @DeleteMapping("/basvuru-donemleri/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteBasvuruDonemi(@PathVariable Long id, Authentication authentication) {
+        BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(id);
+        basvuruDonemiService.delete(id);
+        auditLogService.logAdmin(authentication, IslemTuru.DONEM_SIL, "DONEM", id,
+                "Başvuru dönemi silindi: " + donem.getAd(), null);
+    }
+
     @PutMapping("/basvuru-donemleri/{id}/gelir-limiti")
     public BasvuruDonemiResponse updateIncomeLimit(@PathVariable Long id, @RequestParam BigDecimal limit) {
         return basvuruDonemiService.updateIncomeLimit(id, limit);
@@ -411,34 +432,42 @@ public class AdminController {
     @PostMapping(value = "/kayit-listesi/kesin-liste", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public KesinListeUploadResponse uploadKesinListe(
             @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) Long donemId,
             Authentication authentication
     ) {
         return kesinListeService.upload(
-                basvuruDonemiService.requireActive().getId(),
+                donemId != null ? donemId : basvuruDonemiService.requireActive().getId(),
                 file,
                 username(authentication)
         );
     }
 
     @PostMapping("/kayit-listesi/onayla")
-    public KayitListesiResponse onaylaKesinListe(Authentication authentication) {
-        return adminApplicationService.onaylaKesinListe(username(authentication));
+    public KayitListesiResponse onaylaKesinListe(
+            @RequestParam(required = false) Long donemId,
+            Authentication authentication
+    ) {
+        return adminApplicationService.onaylaKesinListe(donemId, username(authentication));
     }
 
     @PostMapping("/kayit-listesi/geri-al")
-    public KayitListesiResponse geriAlKesinListe(Authentication authentication) {
-        return adminApplicationService.geriAlKesinListe(username(authentication));
+    public KayitListesiResponse geriAlKesinListe(
+            @RequestParam(required = false) Long donemId,
+            Authentication authentication
+    ) {
+        return adminApplicationService.geriAlKesinListe(donemId, username(authentication));
     }
 
 
     @PostMapping("/kayit-listesi/imza-bildirimi-gonder")
     public ImzaBildirimiGonderResponse gonderImzaBildirimi(
+            @RequestParam(required = false) Long donemId,
             @RequestBody(required = false) ImzaBildirimiGonderRequest request,
             Authentication authentication
     ) {
         String konu = request != null ? request.emailKonu() : null;
         String sablon = request != null ? request.emailSablon() : null;
-        return imzaBildirimiService.gonder(username(authentication), konu, sablon);
+        return imzaBildirimiService.gonder(donemId, username(authentication), konu, sablon);
     }
 
 
@@ -604,8 +633,9 @@ public class AdminController {
             Authentication authentication
     ) {
         boolean yeniden = request != null && request.yenidenDagit();
-        DagitimSonucResponse result = assignmentService.distribute(yeniden);
-        auditLogService.logAdmin(authentication, IslemTuru.BIRIM_DAGITIM, "DONEM", null,
+        Long donemId = request != null ? request.donemId() : null;
+        DagitimSonucResponse result = assignmentService.distribute(donemId, yeniden);
+        auditLogService.logAdmin(authentication, IslemTuru.BIRIM_DAGITIM, "DONEM", donemId,
                 yeniden ? "Birim dağıtımı yeniden yapıldı" : "Birim dağıtımı yapıldı",
                 result.atanan() + " atandı, " + result.atanamayan() + " atanamadı");
         return result;

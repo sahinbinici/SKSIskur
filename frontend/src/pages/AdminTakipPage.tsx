@@ -265,33 +265,11 @@ export function AdminTakipPage() {
     return `${MONTHS[ay - 1]} ${yil} kapsamı: ${adlar.join(", ")}.`;
   }
 
-  async function approveSubmittedInUnit() {
-    const ok = await confirm({
-      title: hasBirim ? "Seçili birimleri onayla" : "Tüm birimleri onayla",
-      message: `${kapsamMetni()} Gönderilmiş EK-6 ve puantaj kayıtları onaylanır.`,
-      confirmLabel: hasBirim ? "Seçilenleri onayla" : "Tümünü onayla"
-    });
-    if (!ok) return;
-    setLoading(true);
-    setError("");
-    setMessage("");
-    try {
-      const count = await api.adminTakipOnaylaGonderilenler(yil, ay, birimParam, periodId);
-      setMessage(`${count} öğrencinin kaydı onaylandı.`);
-      const next = await api.adminTakip(yil, ay, birimParam, periodId);
-      setOzet(next);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Toplu onay verilemedi.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function approveCleanSubmitted() {
     const ok = await confirm({
-      title: "İzin / rapor / gelmedi olmayanları onayla",
+      title: "%100 Onayla",
       message: `${kapsamMetni()} Yalnızca izin, rapor ve mazeretsiz gelmedi günü olmayan gönderilmiş kayıtlar onaylanır. İstisnalı öğrenciler satırdan incelenir.`,
-      confirmLabel: "Onayla"
+      confirmLabel: "%100 Onayla"
     });
     if (!ok) return;
     setLoading(true);
@@ -440,7 +418,7 @@ export function AdminTakipPage() {
       />
 
       <div className="page-tabs page-tabs-4 no-print">
-        <button type="button" className={pageTab === "ozet" ? "active" : ""} onClick={() => setPageTab("ozet")}>Puantaj onayı</button>
+        <button type="button" className={pageTab === "ozet" ? "active" : ""} onClick={() => setPageTab("ozet")}>EK-6 ve puantaj</button>
         <button type="button" className={pageTab === "paket" ? "active" : ""} onClick={() => setPageTab("paket")}>Ödeme dosyası</button>
         <button type="button" className={pageTab === "cetvel" ? "active" : ""} onClick={() => setPageTab("cetvel")}>Cetveller</button>
         <button type="button" className={pageTab === "ayarlar" ? "active" : ""} onClick={() => setPageTab("ayarlar")}>Ayarlar</button>
@@ -488,18 +466,10 @@ export function AdminTakipPage() {
             <button
               type="button"
               className="btn btn-primary"
-              disabled={loading || !ozet.ogrenciler.some(pendingApproval)}
-              onClick={() => void approveSubmittedInUnit()}
-            >
-              {hasBirim ? "Seçili birimleri onayla" : "Tüm birimleri onayla"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
               disabled={loading || !ozet.ogrenciler.some(istisnasizOnay)}
               onClick={() => void approveCleanSubmitted()}
             >
-              İzin / rapor / gelmedi olmayanları onayla
+              %100 Onayla
             </button>
             <button
               type="button"

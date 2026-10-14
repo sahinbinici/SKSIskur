@@ -15,6 +15,8 @@ const TUR_LABELS: Record<IslemTuru, string> = {
   YONETICI_GUNCELLE: "Yönetici güncelleme",
   DONEM_AC: "Dönem açma",
   DONEM_KAPAT: "Dönem kapatma",
+  DONEM_GUNCELLE: "Dönem güncelleme",
+  DONEM_SIL: "Dönem silme",
   ISKUR_LISTE_YUKLE: "İŞKUR listesi yükleme",
   KESIN_LISTE_YUKLE: "Kesin liste yükleme",
   KESIN_LISTE_ONAY: "Kesin liste onayı",

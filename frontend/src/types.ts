@@ -620,6 +620,8 @@ export type IslemTuru =
   | "YONETICI_GUNCELLE"
   | "DONEM_AC"
   | "DONEM_KAPAT"
+  | "DONEM_GUNCELLE"
+  | "DONEM_SIL"
   | "ISKUR_LISTE_YUKLE"
   | "KESIN_LISTE_YUKLE"
   | "KESIN_LISTE_ONAY"

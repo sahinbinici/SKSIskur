@@ -38,6 +38,14 @@ class BasvuruDonemiServiceTest {
         assertTrue(next.aktif());
         assertTrue(next.ogrenciGirisiAcik());
         assertEquals("2026–2027 Bahar Dönemi", service.requireActive().getAd());
+
+        LocalDate start = closed.ogrenciBaslangicTarihi() != null ? closed.ogrenciBaslangicTarihi() : LocalDate.now();
+        LocalDate end = closed.ogrenciBitisTarihi() != null ? closed.ogrenciBitisTarihi() : LocalDate.now();
+        var updated = service.update(closed.id(), new BasvuruDonemiCreateRequest(
+                "2025–2026 Güz (düzeltme)", start, end, new java.math.BigDecimal("12000")));
+        assertEquals("2025–2026 Güz (düzeltme)", updated.ad());
+        service.delete(closed.id());
+        assertTrue(service.list().stream().noneMatch(period -> period.id().equals(closed.id())));
     }
 
     @Test

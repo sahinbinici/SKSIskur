@@ -5,11 +5,11 @@ import { useAdminPeriodOps } from "../hooks/useAdminPeriodOps";
 type StepState = "done" | "current" | "pending";
 
 const STEPS = [
-  { n: 1, title: "Dönem aç & İŞKUR listesi", link: "/admin/donemler", detail: "Öğrenci girişi ve başvuru kapısı" },
+  { n: 1, title: "Dönem aç", link: "/admin/donemler", detail: "Başvuru tarihi ve İŞKUR listesi" },
   { n: 2, title: "Başvuruları incele", link: "/admin", detail: "Onay, red, iade" },
   { n: 3, title: "Nihai liste & sözleşme", link: "/admin/kayit", detail: "İŞKUR’a gönder, dönen liste, imza" },
   { n: 4, title: "Birim dağıtımı", link: "/admin/dagitim", detail: "İmza gelenleri kontenjana yerleştir" },
-  { n: 5, title: "Aylık devam ve ödeme", link: "/admin/takip", detail: "Puantaj onayı ve resmi Excel" }
+  { n: 5, title: "Aylık devam ve ödeme", link: "/admin/takip", detail: "EK-6 ve puantaj onayı, ödeme dosyası" }
 ] as const;
 
 export function AdminWorkflowGuide() {

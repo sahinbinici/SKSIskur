@@ -15,4 +15,6 @@ public interface BasvuruDalgaRepository extends JpaRepository<BasvuruDalga, Long
     Optional<BasvuruDalga> findTopByBasvuruDonemiIdOrderByTurNoDesc(Long basvuruDonemiId);
 
     int countByBasvuruDonemiId(Long basvuruDonemiId);
+
+    void deleteByBasvuruDonemiId(Long basvuruDonemiId);
 }

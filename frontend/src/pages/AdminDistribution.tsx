@@ -64,7 +64,7 @@ export function AdminDistribution() {
     setError("");
     setMessage("");
     try {
-      const result = await api.dagit(yeniden);
+      const result = await api.dagit(yeniden, periodId);
       setData(result);
       setMessage(`${result.atanan} öğrenci dağıtıldı. Fakülte öncelikli: ${result.fakulteOncelikli}, rastgele: ${result.rastgele}.`);
     } catch (err) {
@@ -79,7 +79,7 @@ export function AdminDistribution() {
     return onlyFilled ? list.filter((b) => b.dolu > 0) : list;
   }, [data, onlyFilled]);
 
-  const donemAcik = periods.find((period) => period.id === periodId)?.aktif === true;
+  const selectedPeriod = periods.find((period) => period.id === periodId);
 
   return (
     <Shell home="/admin">
@@ -94,8 +94,8 @@ export function AdminDistribution() {
           {periods.map((period) => <option key={period.id} value={period.id}>{period.ad}{period.aktif ? " (açık)" : " (arşiv)"}</option>)}
         </select>
       </label>
-      {!donemAcik && periodId && (
-        <div className="alert alert-wait">Arşiv dönem yalnızca incelenir. Dağıtım ve birim değiştirme açık dönemdedir.</div>
+      {selectedPeriod?.aktif === false && (
+        <div className="alert alert-wait">Kapalı dönem. Öğrenci ve birim erişimi kapalıdır; yönetici dağıtımı düzenleyebilir.</div>
       )}
       {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
@@ -122,8 +122,8 @@ export function AdminDistribution() {
         <Stat title="Atanamayan" value={data?.atanamayan} />
       </div>
       <div className="row" style={{ marginBottom: 16 }}>
-        <button className="btn btn-gold" disabled={busy || !donemAcik || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(false)}>Listeyi dağıt</button>
-        <button className="btn btn-danger" disabled={busy || !donemAcik || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(true)}>Yeniden dağıt</button>
+        <button className="btn btn-gold" disabled={busy || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(false)}>Listeyi dağıt</button>
+        <button className="btn btn-danger" disabled={busy || !data?.kesinListeOnaylandi || !data?.imzaBildirimiGonderildi} onClick={() => run(true)}>Yeniden dağıt</button>
         <label style={{ display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
           <input type="checkbox" checked={onlyFilled} onChange={(e) => setOnlyFilled(e.target.checked)} style={{ width: "auto", margin: 0 }} />
           Yalnız dolu birimler
@@ -162,7 +162,7 @@ export function AdminDistribution() {
       </div>
 
       {birimler.filter((b) => b.dolu > 0).map((birim) => (
-        <UnitStudents key={birim.kod} birim={birim} units={units.filter((unit) => unit.dagitimaAcik && unit.kontenjan > 0)} busy={busy || !donemAcik} onMove={moveStudent} onOpen={(id) => navigate(`/admin/basvuru/${id}`)} />
+        <UnitStudents key={birim.kod} birim={birim} units={units.filter((unit) => unit.dagitimaAcik && unit.kontenjan > 0)} busy={busy} onMove={moveStudent} onOpen={(id) => navigate(`/admin/basvuru/${id}`)} />
       ))}
 
       {(data?.atanamayanlar.length ?? 0) > 0 && (

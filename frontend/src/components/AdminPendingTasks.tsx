@@ -14,6 +14,21 @@ export function AdminPendingTasks() {
 
   const items = useMemo(() => {
     const pending: PendingItem[] = [];
+    if (!period?.aktif) {
+      pending.push({
+        title: "Başvuru dönemi aç",
+        detail: "Öğrenci girişi için önce dönem açın",
+        count: 1,
+        link: "/admin/donemler"
+      });
+    } else if (!period.iskurListeYuklendi) {
+      pending.push({
+        title: "İŞKUR listesi",
+        detail: "Dönem açık; öğrenci girişi için liste yükleyin",
+        count: 1,
+        link: "/admin/donemler"
+      });
+    }
     const review = ozet?.gonderildi ?? 0;
     if (review > 0) {
       pending.push({
@@ -70,8 +85,8 @@ export function AdminPendingTasks() {
     const puantajOnay = takip?.ogrenciler.filter((row) => row.status === "SUBMITTED").length ?? 0;
     if (puantajOnay > 0) {
       pending.push({
-        title: "Puantaj onayı",
-        detail: "Birimin gönderdiği EK-6 / puantaj bekliyor",
+        title: "EK-6 / puantaj onayı",
+        detail: "Birimin gönderdiği EK-6 veya puantaj bekliyor",
         count: puantajOnay,
         link: "/admin/takip"
       });

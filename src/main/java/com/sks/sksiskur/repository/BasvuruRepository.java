@@ -16,6 +16,9 @@ public interface BasvuruRepository extends JpaRepository<Basvuru, Long> {
     @EntityGraph(attributePaths = {"student", "belgeler"})
     Optional<Basvuru> findByStudentAndBasvuruDonemiId(Student student, Long basvuruDonemiId);
 
+    @EntityGraph(attributePaths = {"belgeler"})
+    List<Basvuru> findByBasvuruDonemiId(Long basvuruDonemiId);
+
     @EntityGraph(attributePaths = {"student", "belgeler"})
     Optional<Basvuru> findByStudentOgrenciNoAndBasvuruDonemiAktifTrue(String ogrenciNo);
 

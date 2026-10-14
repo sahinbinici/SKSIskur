@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, downloadAuthenticatedFile } from "../api";
 import { useConfirm } from "../components/ConfirmDialog";
+import { AdminProcessNav } from "../components/AdminProcessNav";
 import { PageHeader } from "../components/PageHeader";
 import { Shell, formatDate } from "../components/ui";
 import type { BasvuruDalga, BasvuruDonemi, IskurListe } from "../types";
@@ -17,22 +18,35 @@ export function AdminPeriodsPage() {
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
   const [incomeLimit, setIncomeLimit] = useState("");
-  const [activeIncomeLimit, setActiveIncomeLimit] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editStart, setEditStart] = useState(today);
+  const [editEnd, setEditEnd] = useState(today);
+  const [editLimit, setEditLimit] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | undefined>();
   const [iskurQuery, setIskurQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const iskurSearchTimer = useRef<number | undefined>(undefined);
   const skipIskurSearch = useRef(true);
 
-  async function load() {
+  async function load(preferredId?: number) {
     const nextPeriods = await api.basvuruDonemleri();
     setPeriods(nextPeriods);
-    const activePeriod = nextPeriods.find((period) => period.aktif);
-    if (activePeriod) {
-      setIskurList(await api.iskurListesi(activePeriod.id, iskurQuery.trim() || undefined));
-      setDalgalar(await api.basvuruDalgalar(activePeriod.id));
+    const nextId = preferredId
+      ?? selectedId
+      ?? nextPeriods.find((period) => period.aktif)?.id
+      ?? nextPeriods[0]?.id;
+    setSelectedId(nextId);
+    const selected = nextPeriods.find((period) => period.id === nextId);
+    if (selected) {
+      setEditName(selected.ad);
+      setEditStart(selected.ogrenciBaslangicTarihi ?? today);
+      setEditEnd(selected.ogrenciBitisTarihi ?? today);
+      setEditLimit(String(selected.aylikGelirLimiti ?? ""));
+      setIskurList(await api.iskurListesi(selected.id, iskurQuery.trim() || undefined));
+      setDalgalar(await api.basvuruDalgalar(selected.id));
     } else {
       setIskurList(null);
       setDalgalar([]);
@@ -48,16 +62,15 @@ export function AdminPeriodsPage() {
       skipIskurSearch.current = false;
       return;
     }
-    const activePeriod = periods.find((period) => period.aktif);
-    if (!activePeriod) return;
+    if (!selectedId) return;
     window.clearTimeout(iskurSearchTimer.current);
     iskurSearchTimer.current = window.setTimeout(() => {
-      api.iskurListesi(activePeriod.id, iskurQuery.trim() || undefined)
+      api.iskurListesi(selectedId, iskurQuery.trim() || undefined)
         .then(setIskurList)
         .catch((err) => setError(err instanceof ApiError ? err.message : "Liste aranamadı."));
     }, 300);
     return () => window.clearTimeout(iskurSearchTimer.current);
-  }, [iskurQuery]);
+  }, [iskurQuery, selectedId]);
 
   async function create() {
     if (!name.trim() || !startDate || !endDate || !incomeLimit || Number(incomeLimit) < 0) return;
@@ -69,10 +82,9 @@ export function AdminPeriodsPage() {
     setError("");
     setMessage("");
     try {
-      await api.createBasvuruDonemi(name.trim(), startDate, endDate, Number(incomeLimit));
-      setName("");
+      const created = await api.createBasvuruDonemi(name.trim(), startDate, endDate, Number(incomeLimit));
       setIncomeLimit("");
-      await load();
+      await load(created.id);
       setMessage("Başvuru dönemi açıldı. Öğrenci girişi için İŞKUR listesini yükleyin.");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Dönem açılamadı.");
@@ -102,18 +114,51 @@ export function AdminPeriodsPage() {
     }
   }
 
-  async function saveActiveIncomeLimit() {
-    if (!active || !activeIncomeLimit || Number(activeIncomeLimit) < 0) return;
-    setBusy(true); setError("");
+  async function saveSelected() {
+    if (!selected || !editName.trim() || !editStart || !editEnd || !editLimit || Number(editLimit) < 0) return;
+    if (editEnd < editStart) {
+      setError("Bitiş tarihi başlangıç tarihinden önce olamaz.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setMessage("");
     try {
-      await api.updateBasvuruDonemiGelirLimiti(active.id, Number(activeIncomeLimit));
-      await load(); setMessage("Aylık gelir limiti güncellendi.");
-    } catch (err) { setError(err instanceof ApiError ? err.message : "Gelir limiti güncellenemedi.");
-    } finally { setBusy(false); }
+      await api.updateBasvuruDonemi(selected.id, editName.trim(), editStart, editEnd, Number(editLimit));
+      await load(selected.id);
+      setMessage("Dönem bilgileri kaydedildi.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Dönem güncellenemedi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(period: BasvuruDonemi) {
+    if (period.aktif) return;
+    if (!await confirm({
+      title: "Dönemi sil",
+      message: `${period.ad} dönemi ve bu döneme ait başvurular, listeler ve puantaj kayıtları kalıcı olarak silinecek.`,
+      confirmLabel: "Sil",
+      variant: "danger"
+    })) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.deleteBasvuruDonemi(period.id);
+      setSelectedId(undefined);
+      await load();
+      setMessage("Başvuru dönemi silindi.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Dönem silinemedi.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function uploadIskurList(file: File) {
-    if (!active) return;
+    if (!selected) return;
     if (!await confirm({
       title: "İŞKUR listesini yükle",
       message: "Yeni dosya yalnızca aktif başvuru turunun İŞKUR listesini değiştirir. Dönem boyunca listede yer alan öğrenciler başvuruya uygun kalır.",
@@ -123,8 +168,8 @@ export function AdminPeriodsPage() {
     setError("");
     setMessage("");
     try {
-      const result = await api.uploadIskurListesi(active.id, file);
-      await load();
+      const result = await api.uploadIskurListesi(selected.id, file);
+      await load(selected.id);
       setMessage(`${result.kayitSayisi} öğrenci kaydı yüklendi${result.atlananTekrar ? ` (${result.atlananTekrar} tekrar atlandı)` : ""}.`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "İŞKUR listesi yüklenemedi.");
@@ -135,7 +180,7 @@ export function AdminPeriodsPage() {
   }
 
   async function startNewWave() {
-    if (!active) return;
+    if (!selected) return;
     if (waveEnd < waveStart) {
       setError("Tur bitiş tarihi başlangıçtan önce olamaz.");
       return;
@@ -149,8 +194,8 @@ export function AdminPeriodsPage() {
     setError("");
     setMessage("");
     try {
-      await api.yeniBasvuruTuru(active.id, waveStart, waveEnd);
-      await load();
+      await api.yeniBasvuruTuru(selected.id, waveStart, waveEnd);
+      await load(selected.id);
       setMessage("Yeni başvuru turu açıldı. Bu tur için İŞKUR listesini yükleyin.");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Yeni tur açılamadı.");
@@ -160,21 +205,38 @@ export function AdminPeriodsPage() {
   }
 
   const active = periods.find((period) => period.aktif);
+  const selected = periods.find((period) => period.id === selectedId) ?? null;
   const aktifDalga = dalgalar.find((dalga) => dalga.aktif);
 
   return (
     <Shell home="/admin">
       <PageHeader
-        title="Başvuru dönemleri"
-        description="Aktif dönemi açın, İŞKUR listesini yükleyin ve öğrenci başvuru penceresini yönetin."
+        title="Başvuru dönemi aç"
+        description="Dönem açın, geçmiş dönemleri düzenleyin veya kapalı dönemleri silin. Öğrenci girişi yalnızca açık dönemde çalışır."
       />
+      <AdminProcessNav />
       <p style={{ color: "var(--muted)", maxWidth: 760, lineHeight: 1.55 }}>
         Aynı anda yalnızca bir dönem açık olabilir. Dönem açıldıktan sonra İŞKUR&apos;dan gelen Excel listesini yükleyin; yalnızca listede adı ve soyadı bulunan öğrenciler giriş yapıp başvuru oluşturabilir. Öğrenci giriş tarih aralığı dışında oturum açılamaz.
       </p>
       {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
-      {active && aktifDalga && <section className="card" style={{ padding: 18, marginBottom: 18 }}>
-        <h4 style={{ marginTop: 0 }}>Başvuru turları — {active.ad}</h4>
+      {periods.length > 0 && (
+        <label className="filter-label" style={{ marginBottom: 16 }}>
+          Düzenlenecek dönem
+          <select
+            value={selectedId ?? ""}
+            onChange={(event) => void load(Number(event.target.value) || undefined)}
+          >
+            {periods.map((period) => (
+              <option key={period.id} value={period.id}>
+                {period.ad}{period.aktif ? " (açık)" : " (kapalı)"}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {selected && aktifDalga && <section className="card" style={{ padding: 18, marginBottom: 18 }}>
+        <h4 style={{ marginTop: 0 }}>Başvuru turları — {selected.ad}</h4>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
           Aktif tur: <b>{aktifDalga.ad}</b>
           {aktifDalga.kesinOnaylandi && aktifDalga.imzaBildirimiGonderildi
@@ -219,8 +281,8 @@ export function AdminPeriodsPage() {
           </div>
         )}
       </section>}
-      {active && <section className="card" style={{ padding: 18, marginBottom: 18 }}>
-        <h4 style={{ marginTop: 0 }}>İŞKUR başvuru listesi — {aktifDalga ? aktifDalga.ad : active.ad}</h4>
+      {selected && <section className="card" style={{ padding: 18, marginBottom: 18 }}>
+        <h4 style={{ marginTop: 0 }}>İŞKUR başvuru listesi — {aktifDalga ? aktifDalga.ad : selected.ad}</h4>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
           Excel dosyasında en az <b>Ad</b> ve <b>Soyad</b> sütunları olmalıdır. Varsa T.C. Kimlik No ve Öğrenci No eşleştirmeyi güçlendirir.
         </p>
@@ -235,23 +297,23 @@ export function AdminPeriodsPage() {
               if (file) uploadIskurList(file);
             }}
           />
-          <span className={`badge ${active.iskurListeYuklendi ? "APPROVED" : "RETURNED"}`}>
-            {active.iskurListeYuklendi ? `${active.iskurListeKayitSayisi} kayıt yüklü` : "Liste yüklenmedi"}
+          <span className={`badge ${selected.iskurListeYuklendi ? "APPROVED" : "RETURNED"}`}>
+            {selected.iskurListeYuklendi ? `${selected.iskurListeKayitSayisi} kayıt yüklü` : "Liste yüklenmedi"}
           </span>
-          {active.iskurListeYuklendi && (
+          {selected.iskurListeYuklendi && (
             <button
               className="btn btn-secondary"
               disabled={busy}
-              onClick={() => downloadAuthenticatedFile(api.iskurListesiExcelUrl(active.id), "iskur-basvuru-listesi.xlsx")
+              onClick={() => downloadAuthenticatedFile(api.iskurListesiExcelUrl(selected.id), "iskur-basvuru-listesi.xlsx")
                 .catch((err) => setError(err instanceof ApiError ? err.message : "Excel indirilemedi."))}
             >
               Excel indir
             </button>
           )}
         </div>
-        {active.iskurListeYuklemeTarihi && (
+        {selected.iskurListeYuklemeTarihi && (
           <p style={{ color: "var(--muted)", margin: "0 0 12px" }}>
-            Son yükleme: {formatDate(active.iskurListeYuklemeTarihi)}
+            Son yükleme: {formatDate(selected.iskurListeYuklemeTarihi)}
           </p>
         )}
         <div className="filter-panel" style={{ marginBottom: 14 }}>
@@ -314,10 +376,25 @@ export function AdminPeriodsPage() {
           </div>
         )}
       </section>}
-      {active && <section className="card" style={{ padding: 18, marginBottom: 18 }}>
-        <h4 style={{ marginTop: 0 }}>Aktif dönem aylık gelir limiti</h4>
-        <div className="row"><input type="number" min="0" step="0.01" placeholder={String(active.aylikGelirLimiti ?? 0)} value={activeIncomeLimit} onChange={(e) => setActiveIncomeLimit(e.target.value)} disabled={busy} />
-          <button className="btn btn-primary" disabled={busy || !activeIncomeLimit} onClick={saveActiveIncomeLimit}>Limiti kaydet</button></div>
+      {selected && <section className="card" style={{ padding: 18, marginBottom: 18 }}>
+        <h4 style={{ marginTop: 0 }}>Dönemi düzenle — {selected.ad}</h4>
+        {!selected.aktif && <p style={{ color: "var(--muted)", marginTop: 0 }}>Kapalı dönem. Öğrenci girişi kapalıdır; buradan tarih, ad ve liste bilgilerini güncelleyebilirsiniz.</p>}
+        <div className="row" style={{ alignItems: "end" }}>
+          <input value={editName} onChange={(event) => setEditName(event.target.value)} maxLength={120} disabled={busy} style={{ margin: 0, maxWidth: 360 }} />
+          <label style={{ margin: 0 }}>
+            Başvuru Başlangıç
+            <input type="date" value={editStart} onChange={(event) => setEditStart(event.target.value)} disabled={busy} style={{ margin: "4px 0 0" }} />
+          </label>
+          <label style={{ margin: 0 }}>
+            Başvuru Bitiş
+            <input type="date" value={editEnd} min={editStart} onChange={(event) => setEditEnd(event.target.value)} disabled={busy} style={{ margin: "4px 0 0" }} />
+          </label>
+          <label style={{ margin: 0 }}>
+            Aylık gelir limiti (TL)
+            <input type="number" min="0" step="0.01" value={editLimit} onChange={(event) => setEditLimit(event.target.value)} disabled={busy} style={{ margin: "4px 0 0" }} />
+          </label>
+          <button className="btn btn-primary" disabled={busy || !editName.trim() || !editStart || !editEnd || !editLimit} onClick={() => void saveSelected()}>Kaydet</button>
+        </div>
       </section>}
       <section className="card" style={{ padding: 18, marginBottom: 18 }}>
         <h4 style={{ marginTop: 0 }}>Yeni dönem aç</h4>
@@ -361,7 +438,12 @@ export function AdminPeriodsPage() {
                 <td><span className={`badge ${period.ogrenciGirisiAcik ? "APPROVED" : "DRAFT"}`}>{period.ogrenciGirisiAcik ? "Öğrenci girişi açık" : period.aktif ? "Giriş kapalı" : "Dönem kapalı"}</span></td>
                 <td>{formatDate(period.olusturmaTarihi)}</td>
                 <td>{formatDate(period.kapanisTarihi)}</td>
-                <td>{period.aktif && <button className="btn btn-danger" disabled={busy} onClick={() => close(period)}>Dönemi kapat</button>}</td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <button className="btn btn-secondary btn-compact" disabled={busy} onClick={() => void load(period.id)}>Düzenle</button>
+                  {period.aktif
+                    ? <button className="btn btn-danger btn-compact" disabled={busy} onClick={() => void close(period)}>Kapat</button>
+                    : <button className="btn btn-danger btn-compact" disabled={busy} onClick={() => void remove(period)}>Sil</button>}
+                </td>
               </tr>
             ))}
             {periods.length === 0 && <tr><td colSpan={8} style={{ color: "var(--muted)" }}>Henüz başvuru dönemi yok.</td></tr>}

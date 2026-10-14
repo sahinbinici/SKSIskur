@@ -150,7 +150,7 @@ export function AdminDetail() {
       {error && <div className="alert alert-error">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
       {basvuru && !basvuru.basvuruDonemiAktif && (
-        <div className="alert alert-wait">{basvuru.basvuruDonemiAdi || "Bu"} başvuru dönemi kapalıdır. Arşiv kaydı yalnız görüntülenebilir.</div>
+        <div className="alert alert-wait">{basvuru.basvuruDonemiAdi || "Bu"} başvuru dönemi kapalıdır. Yönetici düzenleme yapabilir; öğrenci ve birim erişimi kapalıdır.</div>
       )}
 
       <div className="grid-2">
@@ -238,7 +238,7 @@ export function AdminDetail() {
         </section>
       </div>
 
-      {basvuru?.status === "SUBMITTED" && basvuru.basvuruDonemiAktif && (
+      {basvuru?.status === "SUBMITTED" && (
         <section className="card" style={{ padding: 22, marginTop: 18 }}>
           <h3 className="section">İnceleme</h3>
           <p style={{ color: "var(--muted)", marginTop: -8 }}>Bu başvuru {basvuru.atananAdmin || "henüz atanmış olmayan"} yöneticinin iş listesinde.</p>

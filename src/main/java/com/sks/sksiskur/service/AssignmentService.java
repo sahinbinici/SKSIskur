@@ -69,7 +69,12 @@ public class AssignmentService {
 
     @Transactional
     public DagitimSonucResponse distribute(boolean yenidenDagit) {
-        BasvuruDonemi donem = basvuruDonemiService.requireActive();
+        return distribute(null, yenidenDagit);
+    }
+
+    @Transactional
+    public DagitimSonucResponse distribute(Long donemId, boolean yenidenDagit) {
+        BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
         if (!kesinListeOnayli(donem)) {
             throw new ApiException(HttpStatus.CONFLICT,
                     "Birim dağıtımı ancak İŞKUR nihai listesi yüklendikten ve sözleşme imzaları işlendikten sonra yapılabilir.");
@@ -132,15 +137,15 @@ public class AssignmentService {
 
     @Transactional
     public DagitimSonucResponse moveManually(Long basvuruId, String birimKodu) {
-        BasvuruDonemi donem = basvuruDonemiService.requireActive();
-        if (!kesinListeOnayli(donem)) {
-            throw new ApiException(HttpStatus.CONFLICT, "Manuel taşıma için kesin liste önce onaylanmalıdır.");
-        }
         Basvuru basvuru = basvuruRepository.findDetailedById(basvuruId)
                 .filter(item -> item.getStatus() == ApplicationStatus.APPROVED
                         && item.getKayitTuru() == KayitTuru.KESIN
-                        && item.getBasvuruDonemi().getId().equals(donem.getId()))
+                        && item.getBasvuruDonemi() != null)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Kesin kayıtlı öğrenci bulunamadı."));
+        BasvuruDonemi donem = basvuru.getBasvuruDonemi();
+        if (!kesinListeOnayli(donem)) {
+            throw new ApiException(HttpStatus.CONFLICT, "Manuel taşıma için kesin liste önce onaylanmalıdır.");
+        }
         DagitimBirimiService.ConfiguredUnit target = dagitimBirimiService.activeUnits().stream()
                 .filter(unit -> unit.unit().kod().equals(birimKodu.trim()))
                 .findFirst()

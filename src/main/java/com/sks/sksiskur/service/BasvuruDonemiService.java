@@ -1,9 +1,20 @@
 package com.sks.sksiskur.service;
 
+import com.sks.sksiskur.domain.Basvuru;
+import com.sks.sksiskur.domain.BasvuruBelgesi;
 import com.sks.sksiskur.domain.BasvuruDonemi;
+import com.sks.sksiskur.domain.TakipDonem;
+import com.sks.sksiskur.domain.TakipGun;
 import com.sks.sksiskur.exception.ApiException;
+import com.sks.sksiskur.repository.BasvuruDalgaRepository;
 import com.sks.sksiskur.repository.BasvuruDonemiRepository;
+import com.sks.sksiskur.repository.BasvuruRepository;
 import com.sks.sksiskur.repository.IskurBasvuruKaydiRepository;
+import com.sks.sksiskur.repository.KayitListesiRepository;
+import com.sks.sksiskur.repository.KesinKayitKaydiRepository;
+import com.sks.sksiskur.repository.TakipDonemRepository;
+import com.sks.sksiskur.repository.TakipGirisPencereRepository;
+import com.sks.sksiskur.repository.TakipKapaliGunRepository;
 import com.sks.sksiskur.web.dto.BasvuruDonemiCreateRequest;
 import com.sks.sksiskur.web.dto.BasvuruDonemiResponse;
 import org.springframework.http.HttpStatus;
@@ -20,15 +31,39 @@ public class BasvuruDonemiService {
     private final BasvuruDonemiRepository repository;
     private final IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository;
     private final BasvuruDalgaService basvuruDalgaService;
+    private final BasvuruRepository basvuruRepository;
+    private final TakipDonemRepository takipDonemRepository;
+    private final KesinKayitKaydiRepository kesinKayitKaydiRepository;
+    private final KayitListesiRepository kayitListesiRepository;
+    private final TakipKapaliGunRepository takipKapaliGunRepository;
+    private final TakipGirisPencereRepository takipGirisPencereRepository;
+    private final BasvuruDalgaRepository basvuruDalgaRepository;
+    private final FileStorageService fileStorageService;
 
     public BasvuruDonemiService(
             BasvuruDonemiRepository repository,
             IskurBasvuruKaydiRepository iskurBasvuruKaydiRepository,
-            BasvuruDalgaService basvuruDalgaService
+            BasvuruDalgaService basvuruDalgaService,
+            BasvuruRepository basvuruRepository,
+            TakipDonemRepository takipDonemRepository,
+            KesinKayitKaydiRepository kesinKayitKaydiRepository,
+            KayitListesiRepository kayitListesiRepository,
+            TakipKapaliGunRepository takipKapaliGunRepository,
+            TakipGirisPencereRepository takipGirisPencereRepository,
+            BasvuruDalgaRepository basvuruDalgaRepository,
+            FileStorageService fileStorageService
     ) {
         this.repository = repository;
         this.iskurBasvuruKaydiRepository = iskurBasvuruKaydiRepository;
         this.basvuruDalgaService = basvuruDalgaService;
+        this.basvuruRepository = basvuruRepository;
+        this.takipDonemRepository = takipDonemRepository;
+        this.kesinKayitKaydiRepository = kesinKayitKaydiRepository;
+        this.kayitListesiRepository = kayitListesiRepository;
+        this.takipKapaliGunRepository = takipKapaliGunRepository;
+        this.takipGirisPencereRepository = takipGirisPencereRepository;
+        this.basvuruDalgaRepository = basvuruDalgaRepository;
+        this.fileStorageService = fileStorageService;
     }
 
     @Transactional(readOnly = true)
@@ -80,6 +115,56 @@ public class BasvuruDonemiService {
         donem.setAktif(false);
         donem.setKapanisTarihi(Instant.now());
         return toResponse(repository.save(donem));
+    }
+
+    @Transactional
+    public BasvuruDonemiResponse update(Long id, BasvuruDonemiCreateRequest request) {
+        if (request.ogrenciBitisTarihi().isBefore(request.ogrenciBaslangicTarihi())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Başvuru bitiş tarihi başlangıç tarihinden önce olamaz.");
+        }
+        BasvuruDonemi donem = repository.findById(id)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Başvuru dönemi bulunamadı."));
+        donem.setAd(request.ad().trim());
+        donem.setOgrenciBaslangicTarihi(request.ogrenciBaslangicTarihi());
+        donem.setOgrenciBitisTarihi(request.ogrenciBitisTarihi());
+        donem.setAylikGelirLimiti(request.aylikGelirLimiti().setScale(2));
+        var dalga = basvuruDalgaRepository.findByBasvuruDonemiIdAndAktifTrue(donem.getId()).orElse(null);
+        if (dalga != null) {
+            dalga.setOgrenciBaslangicTarihi(request.ogrenciBaslangicTarihi());
+            dalga.setOgrenciBitisTarihi(request.ogrenciBitisTarihi());
+            basvuruDalgaRepository.save(dalga);
+        }
+        return toResponse(repository.save(donem));
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        BasvuruDonemi donem = repository.findById(id)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Başvuru dönemi bulunamadı."));
+        if (donem.isAktif()) {
+            throw new ApiException(HttpStatus.CONFLICT, "Açık dönem silinemez. Önce dönemi kapatın.");
+        }
+        List<Basvuru> basvurular = basvuruRepository.findByBasvuruDonemiId(id);
+        for (Basvuru basvuru : basvurular) {
+            List<TakipDonem> takiplar = takipDonemRepository.findByBasvuruId(basvuru.getId());
+            for (TakipDonem takip : takiplar) {
+                for (TakipGun gun : takip.getGunler()) {
+                    fileStorageService.deleteQuietly(gun.getBelgeYolu());
+                }
+            }
+            takipDonemRepository.deleteAll(takiplar);
+            for (BasvuruBelgesi belge : basvuru.getBelgeler()) {
+                fileStorageService.deleteQuietly(belge.getSaklamaYolu());
+            }
+        }
+        basvuruRepository.deleteAll(basvurular);
+        iskurBasvuruKaydiRepository.deleteByBasvuruDonemiId(id);
+        kesinKayitKaydiRepository.deleteByBasvuruDonemiId(id);
+        kayitListesiRepository.deleteByBasvuruDonemiId(id);
+        takipKapaliGunRepository.deleteByBasvuruDonemiId(id);
+        takipGirisPencereRepository.deleteByBasvuruDonemiId(id);
+        basvuruDalgaRepository.deleteByBasvuruDonemiId(id);
+        repository.delete(donem);
     }
 
     @Transactional

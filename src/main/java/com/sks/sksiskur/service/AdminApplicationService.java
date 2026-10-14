@@ -194,7 +194,6 @@ public class AdminApplicationService {
     @Transactional
     public BasvuruResponse approve(Long id, String adminUsername) {
         Basvuru basvuru = require(id);
-        assertActivePeriod(basvuru);
         if (basvuru.getStatus() != ApplicationStatus.SUBMITTED) {
             throw new ApiException(HttpStatus.CONFLICT, "Yalnızca incelemedeki başvurular onaylanabilir.");
         }
@@ -229,7 +228,6 @@ public class AdminApplicationService {
     @Transactional
     public BasvuruResponse reject(Long id, String adminUsername, ReviewRequest request) {
         Basvuru basvuru = require(id);
-        assertActivePeriod(basvuru);
         if (basvuru.getStatus() != ApplicationStatus.SUBMITTED) {
             throw new ApiException(HttpStatus.CONFLICT, "Yalnızca incelemedeki başvurular reddedilebilir.");
         }
@@ -246,7 +244,6 @@ public class AdminApplicationService {
     @Transactional
     public BasvuruResponse returnToStudent(Long id, String adminUsername, String note) {
         Basvuru basvuru = require(id);
-        assertActivePeriod(basvuru);
         if (basvuru.getStatus() != ApplicationStatus.SUBMITTED) {
             throw new ApiException(HttpStatus.CONFLICT, "Yalnızca incelemedeki başvurular öğrenciye iade edilebilir.");
         }
@@ -266,8 +263,8 @@ public class AdminApplicationService {
     }
 
     @Transactional
-    public KayitListesiResponse onaylaKesinListe(String adminUsername) {
-        BasvuruDonemi donem = basvuruDonemiService.requireActive();
+    public KayitListesiResponse onaylaKesinListe(Long donemId, String adminUsername) {
+        BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
         var dalga = basvuruDalgaService.requireAktifDalga(donem);
         if (dalga.isKesinOnaylandi()) {
             return toKayitResponse(donem, KayitListeFiltre.TUMU);
@@ -290,8 +287,8 @@ public class AdminApplicationService {
     }
 
     @Transactional
-    public KayitListesiResponse geriAlKesinListe(String adminUsername) {
-        BasvuruDonemi donem = basvuruDonemiService.requireActive();
+    public KayitListesiResponse geriAlKesinListe(Long donemId, String adminUsername) {
+        BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
         var dalga = basvuruDalgaService.requireAktifDalga(donem);
         if (!dalga.isKesinOnaylandi()) {
             kesinListeService.resetComparison(donem);
@@ -404,11 +401,5 @@ public class AdminApplicationService {
     private Basvuru require(Long id) {
         return basvuruRepository.findDetailedById(id)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Başvuru bulunamadı."));
-    }
-
-    private void assertActivePeriod(Basvuru basvuru) {
-        if (basvuru.getBasvuruDonemi() == null || !basvuru.getBasvuruDonemi().isAktif()) {
-            throw new ApiException(HttpStatus.CONFLICT, "Kapalı başvuru dönemindeki kayıt değiştirilemez.");
-        }
     }
 }

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError, authenticatedBlobUrl } from "../api";
+import { useConfirm } from "../components/ConfirmDialog";
 import { Shell, StatusBadge } from "../components/ui";
 import { DOCUMENT_TYPES, canAccessApplication, type Basvuru, type DocumentType, type StudentAgreement, type StudentProfile } from "../types";
 
@@ -64,6 +65,7 @@ function focusIletisim() {
 }
 
 export function ApplicationPage() {
+  const confirm = useConfirm();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [basvuru, setBasvuru] = useState<Basvuru | null>(null);
   const [iban, setIban] = useState("");
@@ -191,7 +193,17 @@ export function ApplicationPage() {
       };
       const data = submit ? await api.submit(payload) : await api.saveDraft(payload);
       setBasvuru(data);
-      setMessage(submit ? "Başvurunuz inceleme için gönderildi." : "Taslak kaydedildi.");
+      if (submit) {
+        setMessage("Başvurunuz inceleme için gönderildi.");
+        await confirm({
+          mode: "info",
+          title: "Başvurunuz gönderildi",
+          message: "Başvurunuz SKS incelemesine iletildi. Sonuç, bu sayfadaki başvuru durumunda görünecektir. Eksik belge veya düzeltme istenirse size iade edilecektir.",
+          confirmLabel: "Tamam"
+        });
+      } else {
+        setMessage("Taslak kaydedildi.");
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Kayıt tamamlanamadı.");
     } finally {

@@ -70,7 +70,6 @@ export function Shell({ children, home, wide, full }: { children: ReactNode; hom
 
   const yonetimLinks = (
     <>
-      <NavLink to="/admin/donemler">Dönemler</NavLink>
       <NavLink to="/admin/birimler">Birimler ve kontenjanlar</NavLink>
       <NavLink to="/admin/sozlesmeler">Sözleşmeler</NavLink>
       {superAdmin && <NavLink to="/admin/yoneticiler">Yöneticiler</NavLink>}
@@ -92,6 +91,7 @@ export function Shell({ children, home, wide, full }: { children: ReactNode; hom
         <div className="topbar-actions">
           {session?.role === "ADMIN" && (
             <>
+              <NavLink to="/admin/donemler" className="nav-link">Dönem</NavLink>
               <AdminBasvuruNavLink />
               <NavLink to="/admin/kayit" className="nav-link">Kesin kayıt</NavLink>
               <NavLink to="/admin/dagitim" className="nav-link">Dağıtım</NavLink>

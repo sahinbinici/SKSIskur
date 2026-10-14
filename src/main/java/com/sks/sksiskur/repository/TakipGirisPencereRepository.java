@@ -10,4 +10,6 @@ public interface TakipGirisPencereRepository extends JpaRepository<TakipGirisPen
     Optional<TakipGirisPencere> findByBasvuruDonemiIdAndYilAndAy(Long basvuruDonemiId, int yil, int ay);
 
     java.util.List<TakipGirisPencere> findByBasvuruDonemiIdAndYilGreaterThanOrderByAyAsc(Long basvuruDonemiId, int yil);
+
+    void deleteByBasvuruDonemiId(Long basvuruDonemiId);
 }

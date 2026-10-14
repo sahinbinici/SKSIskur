@@ -318,9 +318,6 @@ public class TakipService {
     @Transactional
     public List<LocalDate> saveAdminKapaliGunler(Long basvuruDonemiId, TakipKapaliGunKaydetRequest request) {
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
-        if (!period.isAktif()) {
-            throw new ApiException(HttpStatus.CONFLICT, "Kapalı dönemlerde giriş günleri değiştirilemez.");
-        }
         Set<LocalDate> days = request.gunler() == null ? Set.of() : new HashSet<>(request.gunler());
         takipKapaliGunRepository.deleteByBasvuruDonemiId(period.getId());
         List<TakipKapaliGun> closed = days.stream().sorted().map(date -> {
@@ -363,9 +360,6 @@ public class TakipService {
             TakipGirisPencereKaydetRequest request
     ) {
         BasvuruDonemi period = basvuruDonemiService.resolveForAdmin(basvuruDonemiId);
-        if (!period.isAktif()) {
-            throw new ApiException(HttpStatus.CONFLICT, "Kapalı dönemlerde giriş tarihleri değiştirilemez.");
-        }
         requireMonth(yil, ay);
         LocalDate ekuantStart = request.ekuantBaslangic();
         LocalDate ekuantEnd = request.ekuantBitis();

@@ -7,4 +7,6 @@ import java.util.Optional;
 
 public interface KayitListesiRepository extends JpaRepository<KayitListesi, Long> {
     Optional<KayitListesi> findByBasvuruDonemiId(Long basvuruDonemiId);
+
+    void deleteByBasvuruDonemiId(Long basvuruDonemiId);
 }

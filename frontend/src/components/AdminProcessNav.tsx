@@ -2,7 +2,7 @@ import { NavLink } from "react-router-dom";
 import { useAdminPeriodOps } from "../hooks/useAdminPeriodOps";
 
 const STEPS = [
-  { to: "/admin/donemler", label: "1. Dönem" },
+  { to: "/admin/donemler", label: "1. Dönem aç" },
   { to: "/admin", label: "2. Başvuru" },
   { to: "/admin/kayit", label: "3. Kesin kayıt" },
   { to: "/admin/dagitim", label: "4. Dağıtım" },

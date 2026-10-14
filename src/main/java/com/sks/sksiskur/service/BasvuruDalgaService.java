@@ -99,9 +99,6 @@ public class BasvuruDalgaService {
     @Transactional
     public BasvuruDalgaResponse createNext(Long donemId, BasvuruDalgaCreateRequest request, String adminUsername) {
         BasvuruDonemi donem = requireDonem(donemId);
-        if (!donem.isAktif()) {
-            throw new ApiException(HttpStatus.CONFLICT, "Yalnızca aktif döneme yeni tur açılabilir.");
-        }
         if (request.ogrenciBitisTarihi().isBefore(request.ogrenciBaslangicTarihi())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Bitiş tarihi başlangıç tarihinden önce olamaz.");
         }

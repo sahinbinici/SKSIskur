@@ -143,6 +143,12 @@ export const api = {
     method: "POST", body: JSON.stringify({ ad, ogrenciBaslangicTarihi, ogrenciBitisTarihi, aylikGelirLimiti })
   }),
   closeBasvuruDonemi: (id: number) => request<BasvuruDonemi>(`/api/admin/basvuru-donemleri/${id}/kapat`, { method: "POST" }),
+  updateBasvuruDonemi: (id: number, ad: string, ogrenciBaslangicTarihi: string, ogrenciBitisTarihi: string, aylikGelirLimiti: number) =>
+    request<BasvuruDonemi>(`/api/admin/basvuru-donemleri/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ ad, ogrenciBaslangicTarihi, ogrenciBitisTarihi, aylikGelirLimiti })
+    }),
+  deleteBasvuruDonemi: (id: number) => request<void>(`/api/admin/basvuru-donemleri/${id}`, { method: "DELETE" }),
   basvuruDalgalar: (donemId: number) => request<BasvuruDalga[]>(`/api/admin/basvuru-donemleri/${donemId}/dalgalar`),
   yeniBasvuruTuru: (donemId: number, ogrenciBaslangicTarihi: string, ogrenciBitisTarihi: string) =>
     request<BasvuruDalga>(`/api/admin/basvuru-donemleri/${donemId}/dalgalar/yeni-tur`, {
@@ -244,10 +250,10 @@ export const api = {
   adminDocumentUrl: (basvuruId: number, belgeId: number) =>
     `/api/admin/basvurular/${basvuruId}/belgeler/${belgeId}`,
   dagitim: (donemId?: number) => request<DagitimSonuc>(`/api/admin/dagitim${donemId ? `?donemId=${donemId}` : ""}`),
-  dagit: (yenidenDagit = false) =>
+  dagit: (yenidenDagit = false, donemId?: number) =>
     request<DagitimSonuc>("/api/admin/dagitim", {
       method: "POST",
-      body: JSON.stringify({ yenidenDagit })
+      body: JSON.stringify({ yenidenDagit, donemId: donemId ?? null })
     }),
   moveStudentUnit: (basvuruId: number, birimKodu: string) =>
     request<DagitimSonuc>(`/api/admin/dagitim/ogrenciler/${basvuruId}/birim`, {
@@ -325,21 +331,28 @@ export const api = {
     return request<KayitListesi>(`/api/admin/kayit-listesi${query ? `?${query}` : ""}`);
   },
   kayitListesiExcelUrl: (donemId?: number) => `/api/admin/kayit-listesi.xlsx${donemId ? `?donemId=${donemId}` : ""}`,
-  uploadKesinListe: async (file: File) => {
+  uploadKesinListe: async (file: File, donemId?: number) => {
     const body = new FormData();
     body.append("file", file);
-    return request<KesinListeUpload>("/api/admin/kayit-listesi/kesin-liste", { method: "POST", body });
+    return request<KesinListeUpload>(
+      `/api/admin/kayit-listesi/kesin-liste${donemId ? `?donemId=${donemId}` : ""}`,
+      { method: "POST", body }
+    );
   },
   markAtamaBildirimiOkundu: () =>
     request<Basvuru>("/api/student/basvuru/atama-bildirimi/okundu", { method: "POST" }),
   markImzaBildirimiOkundu: () =>
     request<Basvuru>("/api/student/basvuru/imza-bildirimi/okundu", { method: "POST" }),
-  onaylaKesinListe: () => request<KayitListesi>("/api/admin/kayit-listesi/onayla", { method: "POST" }),
-  gonderImzaBildirimi: (emailKonu?: string, emailSablon?: string) =>
-    request<ImzaBildirimiGonder>("/api/admin/kayit-listesi/imza-bildirimi-gonder", {
-      method: "POST",
-      body: JSON.stringify({ emailKonu: emailKonu ?? null, emailSablon: emailSablon ?? null })
-    }),
+  onaylaKesinListe: (donemId?: number) =>
+    request<KayitListesi>(`/api/admin/kayit-listesi/onayla${donemId ? `?donemId=${donemId}` : ""}`, { method: "POST" }),
+  gonderImzaBildirimi: (emailKonu?: string, emailSablon?: string, donemId?: number) =>
+    request<ImzaBildirimiGonder>(
+      `/api/admin/kayit-listesi/imza-bildirimi-gonder${donemId ? `?donemId=${donemId}` : ""}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ emailKonu: emailKonu ?? null, emailSablon: emailSablon ?? null })
+      }
+    ),
   sozlesmeImzaBekleyen: (donemId?: number) =>
     request<SozlesmeImzaBekleyen[]>(
       `/api/admin/kayit-listesi/sozlesme-imza-bekleyen${donemId ? `?donemId=${donemId}` : ""}`
@@ -351,7 +364,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ basvuruIds })
     }),
-  geriAlKesinListe: () => request<KayitListesi>("/api/admin/kayit-listesi/geri-al", { method: "POST" }),
+  geriAlKesinListe: (donemId?: number) =>
+    request<KayitListesi>(`/api/admin/kayit-listesi/geri-al${donemId ? `?donemId=${donemId}` : ""}`, { method: "POST" }),
   adminTakip: (yil: number, ay: number, birimKodu?: string, donemId?: number) => {
     const params = new URLSearchParams({ yil: String(yil), ay: String(ay) });
     if (birimKodu) params.set("birimKodu", birimKodu);

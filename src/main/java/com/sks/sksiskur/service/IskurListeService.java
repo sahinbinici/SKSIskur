@@ -88,9 +88,6 @@ public class IskurListeService {
     @Transactional
     public IskurListeUploadResponse upload(Long donemId, MultipartFile file, String adminUsername) {
         BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
-        if (!donem.isAktif()) {
-            throw new ApiException(HttpStatus.CONFLICT, "Yalnızca aktif döneme İŞKUR listesi yüklenebilir.");
-        }
 
         List<IskurExcelParser.ParsedRow> parsed = excelParser.parse(file);
         var dalga = basvuruDalgaService.requireAktifDalga(donem);

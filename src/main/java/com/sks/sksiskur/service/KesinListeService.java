@@ -53,9 +53,6 @@ public class KesinListeService {
     @Transactional
     public KesinListeUploadResponse upload(Long donemId, MultipartFile file, String adminUsername) {
         BasvuruDonemi donem = basvuruDonemiService.resolveForAdmin(donemId);
-        if (!donem.isAktif()) {
-            throw new ApiException(HttpStatus.CONFLICT, "Yalnızca aktif döneme kesin liste yüklenebilir.");
-        }
         BasvuruDalga dalga = basvuruDalgaService.requireAktifDalga(donem);
         if (dalga.isImzaBildirimiGonderildi()) {
             throw new ApiException(HttpStatus.CONFLICT, "İmza bildirimi gönderildikten sonra İŞKUR nihai listesi değiştirilemez.");
