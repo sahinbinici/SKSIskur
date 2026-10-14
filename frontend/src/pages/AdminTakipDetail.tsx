@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError, authenticatedBlobUrl } from "../api";
+import { useConfirm } from "../components/ConfirmDialog";
 import { Shell } from "../components/ui";
-import { PUANTAJ_LABEL, type PuantajDurum, type PuantajGun, type TakipDonem } from "../types";
+import { PUANTAJ_LABEL, type PuantajDurum, type PuantajGun, type TakipDonem, type TakipStatus } from "../types";
 
 const WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 const MONTHS = [
@@ -45,7 +46,21 @@ function belgeBaslik(durum: PuantajDurum | null | undefined) {
   return "Belge";
 }
 
+function phaseLabel(status?: TakipStatus | null) {
+  if (status === "APPROVED") return "onaylı";
+  if (status === "SUBMITTED") return "onay bekliyor";
+  if (status === "DRAFT") return "taslak";
+  return "yok";
+}
+
+function phaseTone(status?: TakipStatus | null) {
+  if (status === "APPROVED") return "ok";
+  if (status === "SUBMITTED") return "wait";
+  return "";
+}
+
 export function AdminTakipDetail() {
+  const confirm = useConfirm();
   const { basvuruId } = useParams();
   const [params, setParams] = useSearchParams();
   const id = Number(basvuruId);
@@ -56,7 +71,9 @@ export function AdminTakipDetail() {
   const [donem, setDonem] = useState<TakipDonem | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [opening, setOpening] = useState(false);
+  const [busy, setBusy] = useState(false);
   const cells = useMemo(() => buildMonth(yil, ay), [yil, ay]);
 
   useEffect(() => {
@@ -83,6 +100,12 @@ export function AdminTakipDetail() {
     return map;
   }, [donem]);
   const selectedGun = selected ? puantaj.get(selected) : undefined;
+  const ekuantStatus = donem?.ekuantStatus ?? donem?.status;
+  const puantajStatus = donem?.puantajStatus ?? null;
+  const ekuantPending = ekuantStatus === "SUBMITTED";
+  const puantajPending = puantajStatus === "SUBMITTED";
+  const canApprove = ekuantPending || puantajPending;
+  const canReturn = Boolean(donem?.ekuantLocked || donem?.puantajLocked || donem?.locked);
 
   async function openBelge(tarih: string) {
     if (!donem) return;
@@ -95,6 +118,57 @@ export function AdminTakipDetail() {
       setError(err instanceof ApiError ? err.message : "Belge açılamadı.");
     } finally {
       setOpening(false);
+    }
+  }
+
+  async function reload() {
+    const next = await api.adminTakipOgrenci(id, yil, ay, periodId);
+    setDonem(next);
+  }
+
+  async function approve() {
+    const label = puantajPending ? "Puantaj" : "EK-6";
+    const ok = await confirm({
+      title: `${label} onayla`,
+      message: `${donem?.ogrenci.adSoyad ?? "Öğrenci"} için ${MONTHS[ay - 1]} ${yil} ${label} kaydı onaylanır.`,
+      confirmLabel: "Onayla"
+    });
+    if (!ok) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.adminTakipOnayla(id, yil, ay, periodId);
+      setMessage(`${label} onaylandı.`);
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Onay verilemedi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function returnToUnit() {
+    const puantajLocked = Boolean(donem?.puantajLocked) || puantajStatus === "APPROVED" || puantajPending;
+    const label = puantajLocked ? "Puantaj" : "EK-6";
+    const ok = await confirm({
+      title: `${label} iade et`,
+      message: `${label} birime iade edilir; birim düzeltip yeniden gönderir.`,
+      confirmLabel: "İade et",
+      variant: "danger"
+    });
+    if (!ok) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.adminTakipIade(id, yil, ay, periodId);
+      setMessage(`${label} birime iade edildi.`);
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "İade edilemedi.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -121,15 +195,30 @@ export function AdminTakipDetail() {
         </div>
       </div>
       {error && <div className="alert alert-error">{error}</div>}
+      {message && <div className="alert alert-ok">{message}</div>}
       <p style={{ color: "var(--muted)" }}>
         {donem?.ogrenci.ogrenciNo}
         {donem?.ogrenci.tcKimlikNo ? ` · T.C. ${donem.ogrenci.tcKimlikNo}` : ""}
-        {" · "}Bu ekran yalnız görüntülemedir; puantajı birim kullanıcısı doldurur.
+        {" · "}Takvimi inceleyip EK-6 veya puantajı bu sayfadan onaylayın ya da birime iade edin.
         İzinli veya raporlu güne tıklayınca yüklenen dilekçe / raporu açabilirsiniz.
       </p>
+      <div className="secondary-actions" style={{ marginBottom: 16 }}>
+        <button type="button" className="btn btn-primary" disabled={busy || !canApprove} onClick={() => void approve()}>
+          {puantajPending ? "Puantajı onayla" : ekuantPending ? "EK-6’yı onayla" : "Onayla"}
+        </button>
+        <button type="button" className="btn btn-secondary" disabled={busy || !canReturn} onClick={() => void returnToUnit()}>
+          {donem?.puantajLocked || puantajStatus === "APPROVED" || puantajPending ? "Puantajı iade et" : canReturn ? "EK-6’yı iade et" : "İade et"}
+        </button>
+      </div>
       <div className="cal-pair">
         <section className="card cal">
-          <div className="cal-head"><div><h4>EK-6</h4><p>Planlanan iş günleri.</p></div></div>
+          <div className="cal-head">
+            <div>
+              <h4>EK-6</h4>
+              <p>Planlanan iş günleri.</p>
+            </div>
+            <span className={`phase-badge ${phaseTone(ekuantStatus)}`}>EK-6: {phaseLabel(ekuantStatus)}</span>
+          </div>
           <div className="cal-grid">
             {WEEKDAYS.map((d) => <div key={d} className="cal-dow">{d}</div>)}
             {cells.map((cell, index) => (
@@ -140,7 +229,13 @@ export function AdminTakipDetail() {
           </div>
         </section>
         <section className="card cal">
-          <div className="cal-head"><div><h4>Puantaj</h4><p>İzinli / raporlu güne tıklayın, belgeyi görün.</p></div></div>
+          <div className="cal-head">
+            <div>
+              <h4>Puantaj</h4>
+              <p>İzinli / raporlu güne tıklayın, belgeyi görün.</p>
+            </div>
+            <span className={`phase-badge ${phaseTone(puantajStatus)}`}>Puantaj: {phaseLabel(puantajStatus)}</span>
+          </div>
           <div className="cal-grid">
             {WEEKDAYS.map((d) => <div key={d} className="cal-dow">{d}</div>)}
             {cells.map((cell, index) => {

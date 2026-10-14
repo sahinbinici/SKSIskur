@@ -808,12 +808,14 @@ public class TakipService {
         for (Basvuru basvuru : basvurular) {
             TakipDonem donem = donemler.get(basvuru.getId());
             if (cetvel == TakipCetvelTuru.EKUANT && donem != null && donem.isEkuantLocked()) {
-                throw new ApiException(HttpStatus.CONFLICT,
-                        "Bu ayın EK-6 kaydı gönderilmiş veya onaylı. Yeniden göndermek için SKS yöneticisinin iade etmesi gerekir.");
+                throw new ApiException(HttpStatus.CONFLICT, donem.resolveEkuantStatus() == TakipStatus.APPROVED
+                        ? "SKS bu ayın EK-6 kaydını onayladı. Aynı ay için yeniden gönderilemez."
+                        : "Bu ayın EK-6 kaydı gönderilmiş. Yeniden göndermek için SKS yöneticisinin iade etmesi gerekir.");
             }
             if (cetvel == TakipCetvelTuru.PUANTAJ && donem != null && donem.isPuantajLocked()) {
-                throw new ApiException(HttpStatus.CONFLICT,
-                        "Bu ayın puantajı gönderilmiş veya onaylı. Yeniden göndermek için SKS yöneticisinin iade etmesi gerekir.");
+                throw new ApiException(HttpStatus.CONFLICT, donem.resolvePuantajStatus() == TakipStatus.APPROVED
+                        ? "SKS bu ayın puantajını onayladı. Aynı ay için yeniden gönderilemez."
+                        : "Bu ayın puantajı gönderilmiş. Yeniden göndermek için SKS yöneticisinin iade etmesi gerekir.");
             }
         }
         List<String> sorunlar = new ArrayList<>();
@@ -1148,6 +1150,9 @@ public class TakipService {
     }
 
     private void assertEkuantEditable(TakipDonem donem) {
+        if (donem.resolveEkuantStatus() == TakipStatus.APPROVED) {
+            throw new ApiException(HttpStatus.CONFLICT, "SKS bu ayın EK-6 kaydını onayladı. Aynı ay için yeniden giriş yapılamaz.");
+        }
         if (donem.isEkuantLocked()) {
             throw new ApiException(HttpStatus.CONFLICT, "Gönderilen EK-6 değiştirilemez.");
         }
@@ -1157,6 +1162,9 @@ public class TakipService {
     }
 
     private void assertPuantajEditable(TakipDonem donem, boolean relaxed) {
+        if (donem.resolvePuantajStatus() == TakipStatus.APPROVED) {
+            throw new ApiException(HttpStatus.CONFLICT, "SKS bu ayın puantajını onayladı. Aynı ay için yeniden giriş yapılamaz.");
+        }
         if (donem.isPuantajLocked()) {
             throw new ApiException(HttpStatus.CONFLICT, "Gönderilen puantaj değiştirilemez.");
         }

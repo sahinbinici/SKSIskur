@@ -63,11 +63,6 @@ function buildMonth(yil: number, ay: number): CalCell[] {
   return cells;
 }
 
-function formatLong(dateStr: string) {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return `${d} ${MONTHS[m - 1]} ${y}`;
-}
-
 function needsDocument(durum: PuantajDurum | null | undefined) {
   return durum === "IZINLI" || durum === "RAPORLU";
 }
@@ -190,7 +185,10 @@ export function UnitTrackingPage() {
     && futureWorkDays.length === 0
     && workDays.size > 0;
   const studentReady = ekuantReady || puantajReady;
-  const draftHint = puantajReady
+  const puantajApproved = donem?.puantajStatus === "APPROVED";
+  const draftHint = puantajApproved
+    ? "SKS puantajı onayladı. Bu ay için giriş ve gönderim kapalı."
+    : puantajReady
     ? "Puantaj tamam. Tüm öğrenciler hazır olduğunda Aylık rapor ekranından puantajı gönderin."
     : ekuantReady && !ekuantApproved
       ? "EK-6 tamam. Tüm öğrenciler hazır olduğunda Aylık rapor ekranından EK-6’yı gönderin; onay sonrası puantaj açılır."
@@ -318,14 +316,14 @@ export function UnitTrackingPage() {
             : "Ay başında haftada 3 gün EK-6 seçip gönderin. SKS onayından sonra ay ilerledikçe puantaj doldurulur ve ay sonunda gönderilir. Mazeretsiz gelmedi işaretlenirse o günden sonraki puantaj kapanır; öğrenci sonraki ay listede görünmez."}
         </p>
       </section>
-      {!testMode && !ekuantWindowOpen && (
+      {!testMode && !ekuantWindowOpen && !ekuantLocked && (
         <div className="alert alert-wait">
           {donem?.ekuantGirisBaslangic && donem?.ekuantGirisBitis
             ? `EK-6 girişi yalnızca ${donem.ekuantGirisBaslangic.slice(0, 10)} – ${donem.ekuantGirisBitis.slice(0, 10)} arasında açıktır.`
             : "SKS henüz bu ay için EK-6 giriş tarihlerini belirlemedi."}
         </div>
       )}
-      {!testMode && ekuantApproved && !puantajWindowOpen && (
+      {!testMode && ekuantApproved && !puantajLocked && !puantajWindowOpen && (
         <div className="alert alert-wait">
           {donem?.puantajGirisBaslangic && donem?.puantajGirisBitis
             ? `Puantaj girişi yalnızca ${donem.puantajGirisBaslangic.slice(0, 10)} – ${donem.puantajGirisBitis.slice(0, 10)} arasında açıktır.`
@@ -335,9 +333,9 @@ export function UnitTrackingPage() {
       {(ekuantLocked || puantajLocked) && (
         <div className={`alert ${donem?.puantajStatus === "APPROVED" ? "alert-ok" : "alert-wait"}`}>
           {donem?.puantajStatus === "APPROVED"
-            ? `Bu ayın puantajı SKS tarafından onaylandı. Aylık rapor ekranından cetvelleri indirebilirsiniz.`
+            ? `SKS bu ayın puantajını onayladı. Aynı ay için puantaj girişi veya gönderimi yapılamaz.`
             : donem?.ekuantStatus === "APPROVED" && !puantajLocked
-              ? "EK-6 onaylandı. Ay sonuna doğru EK-6 günlerine puantaj doldurup gönderin."
+              ? "SKS bu ayın EK-6 kaydını onayladı. EK-6 değiştirilemez ve yeniden gönderilemez. Puantajı onaylı günlere doldurup gönderin."
               : donem?.ekuantStatus === "SUBMITTED"
                 ? `EK-6 ${formatDate(donem?.gonderimTarihi)} tarihinde gönderildi; onay bekleniyor. Onaydan sonra puantaj açılır.`
                 : `Puantaj ${formatDate(donem?.gonderimTarihi)} tarihinde gönderildi; yönetici onayı bekleniyor.`}
@@ -401,7 +399,7 @@ export function UnitTrackingPage() {
           <div className="cal-head">
             <div>
               <h4>Puantaj</h4>
-              <p>Yoklama, onaylı EK-6 günlerine girilir; gelecek günler ay ilerledikçe açılır. Mazeretsiz gelmedi sonrası günler kilitlenir.</p>
+              <p>Güne tıklayınca geldi, gelmedi, izinli veya raporlu seçin. Gelecek günler ay ilerledikçe açılır.</p>
             </div>
           </div>
           <CalendarGrid
@@ -419,10 +417,21 @@ export function UnitTrackingPage() {
               if (!workDays.has(cell.date)) return;
               setError("");
               setMessage("");
-              setSelected(cell.date);
+              setSelected((current) => current === cell.date ? null : cell.date);
               if (!testMode && cell.date > todayYmd) {
                 setError("Gelecek günler için puantaj girilemez.");
               }
+            }}
+            puantajMenu={{
+              editable: puantajEditable,
+              busy,
+              izinLimitiDolu,
+              selectedDurum: selectedGun?.durum ?? null,
+              belgeVar: Boolean(selectedGun?.belgeVar),
+              belgeAdi: selectedGun?.belgeAdi ?? null,
+              onSelect: (durum) => void setDurum(durum),
+              onUpload: (file) => void onUpload(file),
+              onOpenBelge: () => void openBelge()
             }}
           />
           <div className="cal-legend">
@@ -433,70 +442,13 @@ export function UnitTrackingPage() {
         </section>
       </div>
 
-      {selected && workDays.has(selected) && (
-        <section className="card puantaj-panel">
-          <div>
-            <h4>{formatLong(selected)}</h4>
-            <p>{
-              afterGelmedi(selected)
-                ? "Mazeretsiz gelmediği girildiği için bu günden sonraki puantaj kapalıdır."
-                : !puantajWindowOpen
-                  ? "Puantaj girişi SKS’nin belirlediği tarihler dışında kapalıdır."
-                : !testMode && !ekuantApproved
-                  ? "Puantaj, EK-6 onaylandıktan sonra doldurulur."
-                  : !testMode && closedDays.has(selected)
-                    ? "Bu gün için EK-6 ve puantaj girişi yönetici tarafından kapatıldı."
-                    : !testMode && selected > todayYmd
-                      ? "Bu gün henüz gelmedi; puantaj ay ilerledikçe girilebilir."
-                      : puantajEditable
-                        ? (testMode ? "Test modu: yoklama durumunu seçin." : izinLimitiDolu ? `İzin kotası doldu; yeni “İzinli” seçilemez. Rapor veya geldi/gelmedi işaretleyebilirsiniz.` : `Bu gün için yoklama durumunu seçin. Kalan izin: ${kalanIzin}/${izinLimiti} gün.`)
-                        : "Bu ayın puantajı gönderildiği için değiştirilemez."
-            }</p>
-          </div>
-          <div className="status-row">
-            {STATUSES.map((status) => (
-              <button
-                key={status}
-                type="button"
-                className={`status-chip ${status} ${selectedGun?.durum === status ? "active" : ""}`}
-                disabled={!puantajEditable || busy || (!testMode && closedDays.has(selected)) || (!testMode && status === "IZINLI" && selectedGun?.durum !== "IZINLI" && izinLimitiDolu)}
-                onClick={() => setDurum(status)}
-              >
-                {PUANTAJ_LABEL[status]}
-              </button>
-            ))}
-          </div>
-          {needsDocument(selectedGun?.durum) && (
-            <div className="doc-upload">
-              <label>{selectedGun?.durum === "RAPORLU" ? "Rapor belgesi" : "İzin dilekçesi"}</label>
-              <input
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                disabled={!puantajEditable || busy || closedDays.has(selected)}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  if (file) onUpload(file);
-                }}
-              />
-              {selectedGun?.belgeVar && (
-                <div className="file-name" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <span>{selectedGun.belgeAdi || "Belge yüklendi"}</span>
-                  <button type="button" className="btn btn-primary" onClick={openBelge}>Görüntüle</button>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      )}
-
       <section className={`submit-bar card ${studentReady ? "ready" : ""}`} aria-live="polite">
         <div>
           <b>{puantajReady ? "Puantaj tamam" : ekuantReady ? "EK-6 tamam" : "Bu öğrenci için kalanlar"}</b>
           <span>{draftHint}</span>
         </div>
         <Link className="btn btn-gold" to={`/birim/rapor?yil=${yil}&ay=${ay}`}>
-          Aylık rapor / gönder
+          {puantajApproved || ekuantApproved ? "Aylık rapor" : "Aylık rapor / gönder"}
         </Link>
       </section>
     </Shell>
@@ -515,7 +467,8 @@ function CalendarGrid({
   todayYmd,
   testMode = false,
   gelmediKesim,
-  onDay
+  onDay,
+  puantajMenu
 }: {
   cells: CalCell[];
   mode: "ekuant" | "puantaj";
@@ -529,6 +482,17 @@ function CalendarGrid({
   testMode?: boolean;
   gelmediKesim?: string | null;
   onDay: (cell: CalCell) => void;
+  puantajMenu?: {
+    editable: boolean;
+    busy: boolean;
+    izinLimitiDolu: boolean;
+    selectedDurum: PuantajDurum | null;
+    belgeVar: boolean;
+    belgeAdi: string | null;
+    onSelect: (durum: PuantajDurum) => void;
+    onUpload: (file: File) => void;
+    onOpenBelge: () => void;
+  };
 }) {
   return (
     <div className="cal-grid">
@@ -570,20 +534,65 @@ function CalendarGrid({
             : futurePuantajDay
             ? "Gelecek günler için puantaj girilemez"
             : undefined;
+        const col = index % 7;
+        const showMenu = mode === "puantaj" && selected === cell.date && Boolean(puantajMenu) && clickable;
         return (
-          <button
-            key={cell.date}
-            type="button"
-            className={classes.join(" ")}
-            disabled={!clickable}
-            title={title}
-            onClick={() => onDay(cell)}
-          >
-            <span>{cell.day}</span>
-            {mode === "puantaj" && gun?.durum && (
-              <small>{PUANTAJ_LABEL[gun.durum]}</small>
+          <div key={cell.date} className="cal-day-wrap">
+            <button
+              type="button"
+              className={classes.join(" ")}
+              disabled={!clickable}
+              title={title}
+              onClick={() => onDay(cell)}
+            >
+              <span>{cell.day}</span>
+              {mode === "puantaj" && gun?.durum && (
+                <small>{PUANTAJ_LABEL[gun.durum]}</small>
+              )}
+            </button>
+            {showMenu && puantajMenu && (
+              <div
+                className={`cal-pop ${cell.day >= 22 ? "up" : "down"} ${col >= 5 ? "left" : col <= 1 ? "right" : ""}`}
+                onClick={(event) => event.stopPropagation()}
+              >
+                {STATUSES.map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    className={`cal-pop-chip ${status} ${puantajMenu.selectedDurum === status ? "active" : ""}`}
+                    disabled={
+                      !puantajMenu.editable
+                      || puantajMenu.busy
+                      || (!testMode && status === "IZINLI" && puantajMenu.selectedDurum !== "IZINLI" && puantajMenu.izinLimitiDolu)
+                    }
+                    onClick={() => puantajMenu.onSelect(status)}
+                  >
+                    {PUANTAJ_LABEL[status]}
+                  </button>
+                ))}
+                {needsDocument(puantajMenu.selectedDurum) && (
+                  <div className="cal-pop-doc">
+                    <label>{puantajMenu.selectedDurum === "RAPORLU" ? "Rapor belgesi" : "İzin dilekçesi"}</label>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                      disabled={!puantajMenu.editable || puantajMenu.busy}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) puantajMenu.onUpload(file);
+                      }}
+                    />
+                    {puantajMenu.belgeVar && (
+                      <button type="button" className="btn btn-primary btn-compact" onClick={puantajMenu.onOpenBelge}>
+                        {puantajMenu.belgeAdi || "Belgeyi görüntüle"}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
-          </button>
+          </div>
         );
       })}
     </div>

@@ -101,9 +101,12 @@ export function UnitReportPage() {
   const ogrenciler = data?.ogrenciler ?? [];
   const weeks = useMemo(() => calendarWeeks(yil, ay), [yil, ay]);
   const daysInMonth = new Date(yil, ay, 0).getDate();
+  const ekuantOnayli = ogrenciler.length > 0 && ogrenciler.every((row) => (row.ekuantStatus ?? row.status) === "APPROVED");
+  const puantajOnayli = ogrenciler.length > 0 && ogrenciler.every((row) => (row.puantajStatus ?? row.status) === "APPROVED");
+  const canPrint = Boolean(data?.yazdirilabilir || (kind === "ekuant" && ekuantOnayli));
 
   function printReport() {
-    if (!data?.yazdirilabilir) return;
+    if (!canPrint) return;
     const title = kind === "ekuant" ? "EK-6" : "Puantaj";
     const previous = document.title;
     document.title = `${title} ${MONTHS[ay - 1]} ${yil} - ${birimAdi}`;
@@ -174,33 +177,58 @@ export function UnitReportPage() {
           <button type="button" className="btn btn-secondary" onClick={downloadExcel} disabled={loading || !data?.yazdirilabilir}>
             Excel indir
           </button>
-          <button type="button" className="btn btn-gold" onClick={printReport} disabled={loading || !data?.yazdirilabilir}>
+          <button type="button" className="btn btn-gold" onClick={printReport} disabled={loading || !canPrint}>
             Yazdır / PDF
           </button>
-          <button type="button" className="btn btn-gold" onClick={() => void submitMonth("EKUANT")} disabled={loading || !data?.ekuantGonderilebilir}>
+          <button
+            type="button"
+            className="btn btn-gold"
+            title={ekuantOnayli ? "SKS EK-6’yı onayladı; bu ay yeniden gönderilemez." : undefined}
+            onClick={() => void submitMonth("EKUANT")}
+            disabled={loading || !data?.ekuantGonderilebilir}
+          >
             EK-6 gönder
           </button>
-          <button type="button" className="btn btn-gold" onClick={() => void submitMonth("PUANTAJ")} disabled={loading || !data?.puantajGonderilebilir}>
+          <button
+            type="button"
+            className="btn btn-gold"
+            title={puantajOnayli ? "SKS puantajı onayladı; bu ay yeniden gönderilemez." : undefined}
+            onClick={() => void submitMonth("PUANTAJ")}
+            disabled={loading || !data?.puantajGonderilebilir}
+          >
             Puantaj gönder
           </button>
         </div>
       </div>
       {message && <div className="alert alert-ok no-print">{message}</div>}
-      {data && data.ekuantGirisAcik === false && (
+      {data && data.ekuantGirisAcik === false && !ekuantOnayli && (
         <div className="alert alert-wait no-print">
           {data.ekuantGirisBaslangic && data.ekuantGirisBitis
             ? `EK-6 girişi / gönderimi yalnızca ${data.ekuantGirisBaslangic.slice(0, 10)} – ${data.ekuantGirisBitis.slice(0, 10)} arasında açıktır.`
             : "SKS henüz bu ay için EK-6 giriş tarihlerini belirlemedi."}
         </div>
       )}
-      {data && data.puantajGirisAcik === false && (
+      {data && data.puantajGirisAcik === false && ekuantOnayli && !puantajOnayli && (
         <div className="alert alert-wait no-print">
           {data.puantajGirisBaslangic && data.puantajGirisBitis
             ? `Puantaj girişi / gönderimi yalnızca ${data.puantajGirisBaslangic.slice(0, 10)} – ${data.puantajGirisBitis.slice(0, 10)} arasında açıktır.`
             : "SKS henüz bu ay için puantaj giriş tarihlerini belirlemedi."}
         </div>
       )}
-      {data && !data.yazdirilabilir && (
+      {puantajOnayli && (
+        <div className="alert alert-ok no-print">
+          {MONTHS[ay - 1]} {yil} puantajı SKS tarafından onaylandı. Bu ay için yeniden giriş veya gönderim yapılamaz. Cetveli yazdırabilirsiniz.
+        </div>
+      )}
+      {ekuantOnayli && !puantajOnayli && (
+        <div className="alert alert-ok no-print">
+          {MONTHS[ay - 1]} {yil} EK-6 kaydı SKS tarafından onaylandı. EK-6 bu ay yeniden gönderilemez veya değiştirilemez.
+          {data?.puantajGonderilebilir
+            ? " Puantaj hazır; «Puantaj gönder» ile iletin."
+            : " Puantajı öğrenci satırından doldurup gönderin."}
+        </div>
+      )}
+      {data && !data.yazdirilabilir && !ekuantOnayli && (
         <div className="alert alert-wait no-print">
           {data.onayBekleyenOgrenci > 0
             ? `${data.onayBekleyenOgrenci} öğrencinin kaydı yönetici onayı bekliyor.`
@@ -216,11 +244,6 @@ export function UnitReportPage() {
           {data.tamamlanmamisOgrenci > 0 && (
             <span> <Link to="/birim">Öğrenci listesi</Link> üzerinden eksikleri tamamlayın.</span>
           )}
-        </div>
-      )}
-      {data?.yazdirilabilir && (
-        <div className="alert alert-ok no-print">
-          {MONTHS[ay - 1]} {yil} cetvelleri onaylandı. Yazdırıp birim imzası için hazırlayabilirsiniz.
         </div>
       )}
       {error && <div className="alert alert-error no-print">{error}</div>}
