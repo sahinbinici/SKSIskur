@@ -65,11 +65,12 @@ function formatSaat(value: number) {
 }
 
 function statusLabel(status?: TakipStatus | null) {
-  if (status === "APPROVED") return "Onaylandı";
-  if (status === "SUBMITTED") return "Onay bekliyor";
+  if (status === "APPROVED") return "Onaylandı ✓";
+  if (status === "SUBMITTED") return "Gönderildi – Onay bekleniyor";
   if (status === "DRAFT") return "Taslak";
   return "Eksik";
 }
+
 
 function phaseLabel(ekuant?: TakipStatus | null, puantaj?: TakipStatus | null) {
   return `EK-6: ${statusLabel(ekuant)} · Puantaj: ${statusLabel(puantaj)}`;
@@ -241,6 +242,12 @@ export function UnitReportPage() {
             : " Puantajı öğrenci satırından doldurup gönderin."}
         </div>
       )}
+      {ekuantOnayli && !puantajOnayli && ogrenciler.some((o) => (o.puantajStatus ?? o.status) === "SUBMITTED") && (
+        <div className="alert alert-ok no-print">
+          🕐 Puantaj SKS'ye gönderildi, onay bekleniyor. Onaylandığında burada bildirilecek.
+        </div>
+      )}
+
       {data && !data.yazdirilabilir && !ekuantOnayli && (
         <div className="alert alert-wait no-print">
           {data.onayBekleyenOgrenci > 0
