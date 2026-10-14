@@ -1,6 +1,7 @@
 package com.sks.sksiskur.web;
 
 import com.sks.sksiskur.domain.ApplicationStatus;
+import com.sks.sksiskur.domain.BasvuruDonemi;
 import com.sks.sksiskur.domain.AgreementType;
 import com.sks.sksiskur.domain.DocumentType;
 import com.sks.sksiskur.domain.IslemTuru;
