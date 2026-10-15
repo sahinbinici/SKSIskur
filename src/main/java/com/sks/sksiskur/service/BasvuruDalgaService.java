@@ -99,6 +99,15 @@ public class BasvuruDalgaService {
     @Transactional
     public BasvuruDalgaResponse createNext(Long donemId, BasvuruDalgaCreateRequest request, String adminUsername) {
         BasvuruDonemi donem = requireDonem(donemId);
+        if (donem.isAktif()) {
+            throw new ApiException(HttpStatus.CONFLICT, "Yeni tur açmadan önce bu başvuru dönemini kapatın.");
+        }
+        donemRepository.findFirstByAktifTrueOrderByOlusturmaTarihiDesc()
+                .filter(active -> !active.getId().equals(donem.getId()))
+                .ifPresent(active -> {
+                    throw new ApiException(HttpStatus.CONFLICT,
+                            "Başka bir başvuru dönemi hâlâ açık. Yeni tur için önce onu kapatın.");
+                });
         if (request.ogrenciBitisTarihi().isBefore(request.ogrenciBaslangicTarihi())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Bitiş tarihi başlangıç tarihinden önce olamaz.");
         }
@@ -120,8 +129,11 @@ public class BasvuruDalgaService {
                 request.ogrenciBitisTarihi(),
                 true
         );
+        donem.setAktif(true);
+        donem.setKapanisTarihi(null);
         donem.setOgrenciBaslangicTarihi(request.ogrenciBaslangicTarihi());
         donem.setOgrenciBitisTarihi(request.ogrenciBitisTarihi());
+        donemRepository.save(donem);
         auditLogService.log(Role.ADMIN, adminUsername, adminUsername, IslemTuru.DALGA_AC, "DONEM", donem.getId(),
                 "Yeni başvuru turu açıldı: " + created.getAd(), created.getAd());
         return toResponse(created);

@@ -187,7 +187,7 @@ export function AdminPeriodsPage() {
     }
     if (!await confirm({
       title: "Yeni başvuru turu",
-      message: "Mevcut turda kesin liste onayı ve imza bildirimi tamamlanmış olmalıdır. Yeni tur açıldığında öğrenci başvuru tarihleri güncellenir.",
+      message: "Seçili kapalı dönem için yeni tur açılacak; dönem yeniden öğrenci girişine açılır ve başvuru tarihleri güncellenir. Bu tur için İŞKUR listesini yeniden yüklemeniz gerekir.",
       confirmLabel: "Tur aç"
     })) return;
     setBusy(true);
@@ -207,6 +207,10 @@ export function AdminPeriodsPage() {
   const active = periods.find((period) => period.aktif);
   const selected = periods.find((period) => period.id === selectedId) ?? null;
   const aktifDalga = dalgalar.find((dalga) => dalga.aktif);
+  const turHazir = Boolean(
+    aktifDalga?.kesinOnaylandi && aktifDalga?.imzaBildirimiGonderildi
+  );
+  const yeniTurAcilabilir = Boolean(selected && !selected.aktif && turHazir);
 
   return (
     <Shell home="/admin">
@@ -239,9 +243,11 @@ export function AdminPeriodsPage() {
         <h4 style={{ marginTop: 0 }}>Başvuru turları — {selected.ad}</h4>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
           Aktif tur: <b>{aktifDalga.ad}</b>
-          {aktifDalga.kesinOnaylandi && aktifDalga.imzaBildirimiGonderildi
-            ? " · Dağıtım sonrası boş kontenjan için yeni tur açabilirsiniz."
-            : " · Kesin liste ve imza tamamlanmadan yeni tur açılamaz."}
+          {turHazir && selected.aktif
+            ? " · Yeni tur için önce bu dönemi «Kapat» ile kapatın; ardından kapalı dönem seçili kalarak tur açın."
+            : turHazir && !selected.aktif
+              ? " · Dönem kapalı; yeni tur başlatabilirsiniz."
+              : " · Kesin liste ve imza tamamlanmadan yeni tur açılamaz."}
         </p>
         <div style={{ overflow: "auto", marginBottom: 16 }}>
           <table>
@@ -267,7 +273,7 @@ export function AdminPeriodsPage() {
             </tbody>
           </table>
         </div>
-        {aktifDalga.kesinOnaylandi && aktifDalga.imzaBildirimiGonderildi && (
+        {yeniTurAcilabilir && (
           <div className="row" style={{ alignItems: "end" }}>
             <label style={{ margin: 0 }}>
               Yeni tur başlangıç
