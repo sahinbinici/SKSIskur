@@ -67,13 +67,13 @@ class CetvelExcelExportServiceTest {
             Sheet puantaj = workbook.getSheet("Puantaj");
             assertEquals("EK-6: İŞKUR Gençlik Programı Katılımcı Gün Çizelgesi",
                     ekuant.getRow(0).getCell(0).getStringCellValue());
-            assertEquals("1. HAFTA", ekuant.getRow(4).getCell(3).getStringCellValue());
-            assertEquals("AYŞE YILMAZ", ekuant.getRow(6).getCell(2).getStringCellValue());
-            assertTrue(ekuant.getRow(5).getCell(3).getStringCellValue().contains("Pazartesi"));
+            assertEquals("1. HAFTA", ekuant.getRow(3).getCell(3).getStringCellValue());
+            assertEquals("AYŞE YILMAZ", ekuant.getRow(5).getCell(2).getStringCellValue());
+            assertTrue(ekuant.getRow(4).getCell(3).getStringCellValue().contains("Pazartesi"));
 
             boolean hasX = false;
             for (int col = 3; col < 40; col++) {
-                var cell = ekuant.getRow(6).getCell(col);
+                var cell = ekuant.getRow(5).getCell(col);
                 if (cell != null && "X".equals(cell.getStringCellValue())) {
                     hasX = true;
                     break;

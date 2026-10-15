@@ -1275,7 +1275,7 @@ tr.row-wait td { background: #fffaf3; }
   background: rgba(16, 42, 99, .45);
   display: grid;
   place-items: center;
-  z-index: 100;
+  z-index: 1000;
   padding: 16px;
 }
 .confirm-dialog { width: min(480px, 100%); padding: 22px; }

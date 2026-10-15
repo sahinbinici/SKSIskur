@@ -192,16 +192,17 @@ export function ApplicationPage() {
         gsm: gsm.trim()
       };
       const data = submit ? await api.submit(payload) : await api.saveDraft(payload);
-      setBasvuru(data);
       if (submit) {
-        setMessage("Başvurunuz inceleme için gönderildi.");
         await confirm({
           mode: "info",
           title: "Başvurunuz gönderildi",
           message: "Başvurunuz SKS incelemesine iletildi. Sonuç, bu sayfadaki başvuru durumunda görünecektir. Eksik belge veya düzeltme istenirse size iade edilecektir.",
           confirmLabel: "Tamam"
         });
+        setBasvuru(data);
+        setMessage("Başvurunuz inceleme için gönderildi.");
       } else {
+        setBasvuru(data);
         setMessage("Taslak kaydedildi.");
       }
     } catch (err) {

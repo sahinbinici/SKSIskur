@@ -64,10 +64,6 @@ public class CetvelExcelExportService {
         mergeTitle(sheet, row++, lastCol, "EK-6: İŞKUR Gençlik Programı Katılımcı Gün Çizelgesi", styles.title);
         mergeTitle(sheet, row++, lastCol, "T.C. GAZİANTEP ÜNİVERSİTESİ", styles.title);
         mergeTitle(sheet, row++, lastCol, ekuantBirimBasligi(rapor.birimAdi()), styles.subtitle);
-        mergeTitle(sheet, row++, lastCol,
-                "KATILIMCILAR İÇİN HAFTADA EN FAZLA 3 DEVAM GÜNÜ SEÇİNİZ  ·  "
-                        + MONTHS[month.getMonthValue() - 1] + " (" + month.getYear() + ")",
-                styles.note);
 
         Row weekRow = sheet.createRow(row++);
         Row dayRow = sheet.createRow(row++);
@@ -119,12 +115,11 @@ public class CetvelExcelExportService {
                 }
             }
         }
-        writeSignatures(sheet, row + 1, lastCol, styles);
-        layout(sheet, lastCol, 3, 3.2);
+        layout(sheet, lastCol, 3, 3.2, 5);
         sheet.setColumnWidth(0, 1800);
         sheet.setColumnWidth(1, 3800);
         sheet.setColumnWidth(2, 7200);
-        sheet.createFreezePane(3, 6);
+        sheet.createFreezePane(3, 5);
     }
 
     private void writePuantaj(Sheet sheet, BirimAylikRaporResponse rapor, YearMonth month, Styles styles) {
@@ -192,8 +187,7 @@ public class CetvelExcelExportService {
             setStyled(data, dayEnd + 1, ogrenci.toplamGun() > 0 ? ogrenci.toplamSaat() : "", styles.hours);
             setStyled(data, dayEnd + 2, ogrenci.toplamGun() > 0 ? ogrenci.toplamGun() : "", styles.center);
         }
-        writeSignatures(sheet, row + 1, lastCol, styles);
-        layout(sheet, lastCol, 5, 2.6);
+        layout(sheet, lastCol, 5, 2.6, 4);
         sheet.setColumnWidth(0, 1800);
         sheet.setColumnWidth(1, 4200);
         sheet.setColumnWidth(2, 4200);
@@ -204,23 +198,14 @@ public class CetvelExcelExportService {
         sheet.createFreezePane(5, 5);
     }
 
-    private void writeSignatures(Sheet sheet, int row, int lastCol, Styles styles) {
-        Row sig = sheet.createRow(Math.max(row, 0));
-        setStyled(sig, 0, "HAZIRLAYAN", styles.note);
-        if (lastCol >= 8) {
-            sheet.addMergedRegion(new CellRangeAddress(sig.getRowNum(), sig.getRowNum(), 0, 3));
-            setStyled(sig, Math.max(8, lastCol - 6), "ONAYLAYAN", styles.note);
-        }
-    }
-
-    private void layout(Sheet sheet, int lastCol, int identityCols, double dayWidth) {
+    private void layout(Sheet sheet, int lastCol, int identityCols, double dayWidth, int repeatLastRow) {
         sheet.setFitToPage(true);
         PrintSetup print = sheet.getPrintSetup();
         print.setLandscape(true);
         print.setFitWidth((short) 1);
         print.setFitHeight((short) 0);
         print.setPaperSize(PrintSetup.A4_PAPERSIZE);
-        sheet.setRepeatingRows(new CellRangeAddress(0, 5, 0, lastCol));
+        sheet.setRepeatingRows(new CellRangeAddress(0, repeatLastRow, 0, lastCol));
         for (int c = identityCols; c <= lastCol; c++) {
             sheet.setColumnWidth(c, (int) (dayWidth * 256));
         }

@@ -312,68 +312,9 @@ export function AdminPeriodsPage() {
           )}
         </div>
         {selected.iskurListeYuklemeTarihi && (
-          <p style={{ color: "var(--muted)", margin: "0 0 12px" }}>
+          <p style={{ color: "var(--muted)", marginBottom: 0 }}>
             Son yükleme: {formatDate(selected.iskurListeYuklemeTarihi)}
           </p>
-        )}
-        <div className="filter-panel" style={{ marginBottom: 14 }}>
-          <div className="filter-panel-section">
-            <h4 className="filter-panel-title">Listede ara</h4>
-            <div className="filter-panel-row">
-              <label className="filter-label filter-label-grow">
-                Öğrenci
-                <input
-                  placeholder="Ad, soyad, T.C. veya öğrenci no"
-                  value={iskurQuery}
-                  onChange={(event) => setIskurQuery(event.target.value)}
-                />
-              </label>
-              {iskurQuery && (
-                <button type="button" className="btn btn-secondary" onClick={() => setIskurQuery("")}>
-                  Temizle
-                </button>
-              )}
-            </div>
-            <p className="filter-panel-note" style={{ marginTop: 8 }}>
-              {iskurList
-                ? iskurQuery.trim()
-                  ? `${iskurList.eslesenSayisi ?? iskurList.onizleme.length} kayıt bulundu (toplam ${iskurList.kayitSayisi}).`
-                  : `Toplam ${iskurList.kayitSayisi} kayıt.`
-                : "Listede ad, soyad, T.C. veya öğrenci numarası ile arayın."}
-            </p>
-          </div>
-        </div>
-        {iskurList && iskurQuery.trim() && iskurList.onizleme.length === 0 && (
-          <p style={{ color: "var(--muted)", marginBottom: 0 }}>Eşleşen kayıt yok.</p>
-        )}
-        {iskurList && iskurList.onizleme.length > 0 && (
-          <div style={{ overflow: "auto" }}>
-            <table>
-              <thead>
-                <tr><th>Ad</th><th>Soyad</th><th>T.C.</th><th>Öğrenci No</th></tr>
-              </thead>
-              <tbody>
-                {iskurList.onizleme.map((row, index) => (
-                  <tr key={`${row.ad}-${row.soyad}-${index}`}>
-                    <td>{row.ad}</td>
-                    <td>{row.soyad}</td>
-                    <td>{row.tcKimlikNo ?? "—"}</td>
-                    <td>{row.ogrenciNo ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {iskurList.eslesenSayisi > iskurList.onizleme.length && (
-              <p style={{ color: "var(--muted)", marginBottom: 0 }}>
-                İlk {iskurList.onizleme.length} kayıt gösteriliyor (eşleşen {iskurList.eslesenSayisi}, toplam {iskurList.kayitSayisi}).
-              </p>
-            )}
-            {!iskurQuery.trim() && iskurList.kayitSayisi > iskurList.onizleme.length && iskurList.eslesenSayisi === iskurList.kayitSayisi && (
-              <p style={{ color: "var(--muted)", marginBottom: 0 }}>
-                İlk {iskurList.onizleme.length} kayıt gösteriliyor (toplam {iskurList.kayitSayisi}). Arayarak diğer kayıtları bulun.
-              </p>
-            )}
-          </div>
         )}
       </section>}
       {selected && <section className="card" style={{ padding: 18, marginBottom: 18 }}>
@@ -396,33 +337,34 @@ export function AdminPeriodsPage() {
           <button className="btn btn-primary" disabled={busy || !editName.trim() || !editStart || !editEnd || !editLimit} onClick={() => void saveSelected()}>Kaydet</button>
         </div>
       </section>}
-      <section className="card" style={{ padding: 18, marginBottom: 18 }}>
-        <h4 style={{ marginTop: 0 }}>Yeni dönem aç</h4>
-        <div className="row" style={{ alignItems: "end" }}>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Örn. 2026–2027 Güz Dönemi"
-            maxLength={120}
-            disabled={busy || Boolean(active)}
-            style={{ margin: 0, maxWidth: 360 }}
-          />
-          <label style={{ margin: 0 }}>
-            Başvuru Başlangıç
-            <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} disabled={busy || Boolean(active)} style={{ margin: "4px 0 0" }} />
-          </label>
-          <label style={{ margin: 0 }}>
-            Başvuru Bitiş
-            <input type="date" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} disabled={busy || Boolean(active)} style={{ margin: "4px 0 0" }} />
-          </label>
-          <label style={{ margin: 0 }}>
-            Aylık gelir limiti (TL)
-            <input type="number" min="0" step="0.01" value={incomeLimit} onChange={(event) => setIncomeLimit(event.target.value)} disabled={busy || Boolean(active)} style={{ margin: "4px 0 0" }} />
-          </label>
-          <button className="btn btn-gold" disabled={busy || Boolean(active) || !name.trim() || !startDate || !endDate} onClick={create}>Dönemi aç</button>
-        </div>
-        {active && <p style={{ color: "var(--muted)", marginBottom: 0 }}>Önce açık olan “{active.ad}” dönemini kapatın.</p>}
-      </section>
+      {!active && (
+        <section className="card" style={{ padding: 18, marginBottom: 18 }}>
+          <h4 style={{ marginTop: 0 }}>Yeni dönem aç</h4>
+          <div className="row" style={{ alignItems: "end" }}>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Örn. 2026–2027 Güz Dönemi"
+              maxLength={120}
+              disabled={busy}
+              style={{ margin: 0, maxWidth: 360 }}
+            />
+            <label style={{ margin: 0 }}>
+              Başvuru Başlangıç
+              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} disabled={busy} style={{ margin: "4px 0 0" }} />
+            </label>
+            <label style={{ margin: 0 }}>
+              Başvuru Bitiş
+              <input type="date" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} disabled={busy} style={{ margin: "4px 0 0" }} />
+            </label>
+            <label style={{ margin: 0 }}>
+              Aylık gelir limiti (TL)
+              <input type="number" min="0" step="0.01" value={incomeLimit} onChange={(event) => setIncomeLimit(event.target.value)} disabled={busy} style={{ margin: "4px 0 0" }} />
+            </label>
+            <button className="btn btn-gold" disabled={busy || !name.trim() || !startDate || !endDate} onClick={create}>Dönemi aç</button>
+          </div>
+        </section>
+      )}
       <div className="card" style={{ overflow: "auto" }}>
         <table>
           <thead><tr><th>Dönem</th><th>İŞKUR listesi</th><th>Öğrenci giriş aralığı</th><th>Gelir limiti</th><th>Durum</th><th>Açılış</th><th>Kapanış</th><th /></tr></thead>
@@ -439,7 +381,9 @@ export function AdminPeriodsPage() {
                 <td>{formatDate(period.olusturmaTarihi)}</td>
                 <td>{formatDate(period.kapanisTarihi)}</td>
                 <td style={{ whiteSpace: "nowrap" }}>
-                  <button className="btn btn-secondary btn-compact" disabled={busy} onClick={() => void load(period.id)}>Düzenle</button>
+                  {!period.aktif && (
+                    <button className="btn btn-secondary btn-compact" disabled={busy} onClick={() => void load(period.id)}>Düzenle</button>
+                  )}
                   {period.aktif
                     ? <button className="btn btn-danger btn-compact" disabled={busy} onClick={() => void close(period)}>Kapat</button>
                     : <button className="btn btn-danger btn-compact" disabled={busy} onClick={() => void remove(period)}>Sil</button>}
@@ -450,6 +394,73 @@ export function AdminPeriodsPage() {
           </tbody>
         </table>
       </div>
+      {selected?.iskurListeYuklendi && (
+        <section className="card" style={{ padding: 18, marginTop: 18 }}>
+          <h4 style={{ marginTop: 0 }}>Başvuru listesi — {aktifDalga ? aktifDalga.ad : selected.ad}</h4>
+          <p style={{ color: "var(--muted)", marginTop: 0 }}>
+            İŞKUR listesinde yer alan öğrenciler. Başvuru yapabilecek öğrenciler bu kayıtlarla eşleşir.
+          </p>
+          <div className="filter-panel" style={{ marginBottom: 14 }}>
+            <div className="filter-panel-section">
+              <h4 className="filter-panel-title">Listede ara</h4>
+              <div className="filter-panel-row">
+                <label className="filter-label filter-label-grow">
+                  Öğrenci
+                  <input
+                    placeholder="Ad, soyad, T.C. veya öğrenci no"
+                    value={iskurQuery}
+                    onChange={(event) => setIskurQuery(event.target.value)}
+                  />
+                </label>
+                {iskurQuery && (
+                  <button type="button" className="btn btn-secondary" onClick={() => setIskurQuery("")}>
+                    Temizle
+                  </button>
+                )}
+              </div>
+              <p className="filter-panel-note" style={{ marginTop: 8 }}>
+                {iskurList
+                  ? iskurQuery.trim()
+                    ? `${iskurList.eslesenSayisi ?? iskurList.onizleme.length} kayıt bulundu (toplam ${iskurList.kayitSayisi}).`
+                    : `Toplam ${iskurList.kayitSayisi} kayıt.`
+                  : "Listede ad, soyad, T.C. veya öğrenci numarası ile arayın."}
+              </p>
+            </div>
+          </div>
+          {iskurList && iskurQuery.trim() && iskurList.onizleme.length === 0 && (
+            <p style={{ color: "var(--muted)", marginBottom: 0 }}>Eşleşen kayıt yok.</p>
+          )}
+          {iskurList && iskurList.onizleme.length > 0 && (
+            <div style={{ overflow: "auto" }}>
+              <table>
+                <thead>
+                  <tr><th>Ad</th><th>Soyad</th><th>T.C.</th><th>Öğrenci No</th></tr>
+                </thead>
+                <tbody>
+                  {iskurList.onizleme.map((row, index) => (
+                    <tr key={`${row.ad}-${row.soyad}-${index}`}>
+                      <td>{row.ad}</td>
+                      <td>{row.soyad}</td>
+                      <td>{row.tcKimlikNo ?? "—"}</td>
+                      <td>{row.ogrenciNo ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {iskurList.eslesenSayisi > iskurList.onizleme.length && (
+                <p style={{ color: "var(--muted)", marginBottom: 0 }}>
+                  İlk {iskurList.onizleme.length} kayıt gösteriliyor (eşleşen {iskurList.eslesenSayisi}, toplam {iskurList.kayitSayisi}).
+                </p>
+              )}
+              {!iskurQuery.trim() && iskurList.kayitSayisi > iskurList.onizleme.length && iskurList.eslesenSayisi === iskurList.kayitSayisi && (
+                <p style={{ color: "var(--muted)", marginBottom: 0 }}>
+                  İlk {iskurList.onizleme.length} kayıt gösteriliyor (toplam {iskurList.kayitSayisi}). Arayarak diğer kayıtları bulun.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
     </Shell>
   );
 }
