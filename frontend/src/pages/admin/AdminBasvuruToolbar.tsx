@@ -166,7 +166,7 @@ export function AdminBasvuruToolbar(props: Props) {
             <button type="button" className="btn btn-primary" onClick={() => void runLoad()}>Ara</button>
           </div>
           <p className="filter-panel-note" style={{ marginTop: 8 }}>
-            Arama ad, soyad, T.C. ve öğrenci numarasında çalışır. İnceleme sekmesi varsayılan olarak yalnızca incelemedeki kayıtları gösterir; tüm öğrenciler için Durum = Tümü seçin.
+            Arama ad, soyad, T.C. ve öğrenci numarasında çalışır. İnceleme sekmesi varsayılan olarak yalnızca incelemedeki kayıtları gösterir. Durum = Tümü, gönderilmiş başvuruları (incelemede, iade, onay, red) listeler; yalnızca giriş yapmış öğrenciler Taslak filtresindedir.
           </p>
         </div>
 

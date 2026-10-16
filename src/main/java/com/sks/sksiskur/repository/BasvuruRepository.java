@@ -40,6 +40,8 @@ public interface BasvuruRepository extends JpaRepository<Basvuru, Long> {
 
     long countByBasvuruDonemiId(Long basvuruDonemiId);
 
+    long countByBasvuruDonemiIdAndStatusNot(Long basvuruDonemiId, ApplicationStatus status);
+
     long countByAtananAdminIdAndStatus(Long adminId, ApplicationStatus status);
 
     @EntityGraph(attributePaths = {"student", "belgeler", "atananAdmin"})
@@ -99,7 +101,10 @@ public interface BasvuruRepository extends JpaRepository<Basvuru, Long> {
             SELECT b FROM Basvuru b
             JOIN FETCH b.student s
             WHERE b.basvuruDonemi.id = :donemId
-              AND (:status IS NULL OR b.status = :status)
+              AND (
+                    (:status IS NULL AND b.status <> com.sks.sksiskur.domain.ApplicationStatus.DRAFT)
+                    OR b.status = :status
+              )
               AND (:fakulte IS NULL OR :fakulte = '' OR s.fakulte = :fakulte)
               AND (
                     :q IS NULL OR :q = ''
@@ -128,7 +133,10 @@ public interface BasvuruRepository extends JpaRepository<Basvuru, Long> {
             JOIN FETCH b.student s
             WHERE b.basvuruDonemi.id = :donemId
               AND b.atananAdmin.username = :username
-              AND (:status IS NULL OR b.status = :status)
+              AND (
+                    (:status IS NULL AND b.status <> com.sks.sksiskur.domain.ApplicationStatus.DRAFT)
+                    OR b.status = :status
+              )
               AND (:fakulte IS NULL OR :fakulte = '' OR s.fakulte = :fakulte)
               AND (
                     :q IS NULL OR :q = ''

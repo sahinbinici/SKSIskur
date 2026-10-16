@@ -67,7 +67,7 @@ public class StudentController {
 
     @GetMapping("/basvuru")
     public BasvuruResponse getApplication(Authentication authentication) {
-        return studentApplicationService.getOrCreate(ogrenciNo(authentication));
+        return studentApplicationService.get(ogrenciNo(authentication));
     }
 
     @GetMapping("/calisma-ozeti")

@@ -90,11 +90,15 @@ public class StudentApplicationService {
         );
     }
 
-    @Transactional
-    public BasvuruResponse getOrCreate(String ogrenciNo) {
+    @Transactional(readOnly = true)
+    public BasvuruResponse get(String ogrenciNo) {
         basvuruDonemiService.assertStudentAccessOpen();
         sozlesmeService.tumSozlesmelerKabulEdildiMi(ogrenciNo);
-        return mapper.toBasvuru(getOrCreateEntity(ogrenciNo));
+        Student student = requireEligibleStudent(ogrenciNo);
+        BasvuruDonemi donem = basvuruDonemiService.requireActive();
+        return basvuruRepository.findByStudentAndBasvuruDonemiId(student, donem.getId())
+                .map(mapper::toBasvuru)
+                .orElseGet(() -> mapper.toBasvuru(unsavedDraft(student, donem)));
     }
 
     @Transactional
@@ -219,6 +223,17 @@ public class StudentApplicationService {
             created.setHesapSahibi(student.getAdSoyad());
             return basvuruRepository.save(created);
         });
+    }
+
+    private Basvuru unsavedDraft(Student student, BasvuruDonemi donem) {
+        BasvuruDalga dalga = basvuruDalgaService.requireOpenDalgaForStudent(donem);
+        Basvuru created = new Basvuru();
+        created.setStudent(student);
+        created.setBasvuruDonemi(donem);
+        created.setBasvuruDalga(dalga);
+        created.setStatus(ApplicationStatus.DRAFT);
+        created.setHesapSahibi(student.getAdSoyad());
+        return created;
     }
 
     private void assertEligibleForNewWave(Basvuru basvuru) {

@@ -80,7 +80,7 @@ public class AdminApplicationService {
         long kesinListedeDegil = approved.stream().filter(b -> Boolean.FALSE.equals(b.getKesinListede())).count();
         long kayitBekleyen = approved.stream().filter(b -> b.getKesinListede() == null).count();
         return new AdminOzetResponse(
-                basvuruRepository.countByBasvuruDonemiId(donem.getId()),
+                basvuruRepository.countByBasvuruDonemiIdAndStatusNot(donem.getId(), ApplicationStatus.DRAFT),
                 basvuruRepository.countByStatusAndBasvuruDonemiId(ApplicationStatus.DRAFT, donem.getId()),
                 basvuruRepository.countByStatusAndBasvuruDonemiId(ApplicationStatus.SUBMITTED, donem.getId()),
                 approved.size(),

@@ -129,7 +129,7 @@ export type Belge = {
 };
 
 export type Basvuru = {
-  id: number;
+  id: number | null;
   status: ApplicationStatus;
   iban: string | null;
   hesapSahibi: string | null;

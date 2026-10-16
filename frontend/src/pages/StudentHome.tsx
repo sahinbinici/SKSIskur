@@ -6,7 +6,7 @@ import { StudentWorkPanel } from "../components/StudentWorkPanel";
 import { canAccessApplication, type Basvuru, type OgrenciCalismaOzet, type StudentProfile } from "../types";
 
 function studentApplicationAction(basvuru: Basvuru | null) {
-  if (!basvuru) {
+  if (!basvuru?.id) {
     return { label: "Başvuruya başla", hint: "Evraklarınızı yükleyip başvurunuzu gönderebilirsiniz." };
   }
   switch (basvuru.status) {
@@ -38,7 +38,7 @@ export function StudentHome() {
         setProfile(data);
         if (canAccessApplication(data)) {
           const application = await api.application();
-          setBasvuru(application);
+          setBasvuru(application.id ? application : null);
         }
         setCalismaOzet(await api.studentCalismaOzet());
       })
