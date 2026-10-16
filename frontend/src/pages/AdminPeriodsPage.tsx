@@ -4,13 +4,12 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { AdminProcessNav } from "../components/AdminProcessNav";
 import { PageHeader } from "../components/PageHeader";
 import { Shell, formatDate } from "../components/ui";
-import type { BasvuruDalga, BasvuruDonemi, IskurListe } from "../types";
+import type { BasvuruDalga, BasvuruDonemi } from "../types";
 
 export function AdminPeriodsPage() {
   const confirm = useConfirm();
   const today = new Date().toISOString().slice(0, 10);
   const [periods, setPeriods] = useState<BasvuruDonemi[]>([]);
-  const [iskurList, setIskurList] = useState<IskurListe | null>(null);
   const [dalgalar, setDalgalar] = useState<BasvuruDalga[]>([]);
   const [waveStart, setWaveStart] = useState(today);
   const [waveEnd, setWaveEnd] = useState(today);
@@ -26,10 +25,7 @@ export function AdminPeriodsPage() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [selectedId, setSelectedId] = useState<number | undefined>();
-  const [iskurQuery, setIskurQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const iskurSearchTimer = useRef<number | undefined>(undefined);
-  const skipIskurSearch = useRef(true);
 
   async function load(preferredId?: number) {
     const nextPeriods = await api.basvuruDonemleri();
@@ -45,10 +41,8 @@ export function AdminPeriodsPage() {
       setEditStart(selected.ogrenciBaslangicTarihi ?? today);
       setEditEnd(selected.ogrenciBitisTarihi ?? today);
       setEditLimit(String(selected.aylikGelirLimiti ?? ""));
-      setIskurList(await api.iskurListesi(selected.id, iskurQuery.trim() || undefined));
       setDalgalar(await api.basvuruDalgalar(selected.id));
     } else {
-      setIskurList(null);
       setDalgalar([]);
     }
   }
@@ -56,21 +50,6 @@ export function AdminPeriodsPage() {
   useEffect(() => {
     load().catch((err) => setError(err instanceof ApiError ? err.message : "Dönemler yüklenemedi."));
   }, []);
-
-  useEffect(() => {
-    if (skipIskurSearch.current) {
-      skipIskurSearch.current = false;
-      return;
-    }
-    if (!selectedId) return;
-    window.clearTimeout(iskurSearchTimer.current);
-    iskurSearchTimer.current = window.setTimeout(() => {
-      api.iskurListesi(selectedId, iskurQuery.trim() || undefined)
-        .then(setIskurList)
-        .catch((err) => setError(err instanceof ApiError ? err.message : "Liste aranamadı."));
-    }, 300);
-    return () => window.clearTimeout(iskurSearchTimer.current);
-  }, [iskurQuery, selectedId]);
 
   async function create() {
     if (!name.trim() || !startDate || !endDate || !incomeLimit || Number(incomeLimit) < 0) return;
@@ -290,7 +269,7 @@ export function AdminPeriodsPage() {
       {selected && <section className="card" style={{ padding: 18, marginBottom: 18 }}>
         <h4 style={{ marginTop: 0 }}>İŞKUR başvuru listesi — {aktifDalga ? aktifDalga.ad : selected.ad}</h4>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          Excel dosyasında en az <b>Ad</b> ve <b>Soyad</b> sütunları olmalıdır. Varsa T.C. Kimlik No ve Öğrenci No eşleştirmeyi güçlendirir.
+          Bu liste başvuranlar değil; İŞKUR&apos;dan gelen uygunluk listesidir. Kimlerin başvuru yaptığını <b>Başvuru</b> sekmesinde görün. Excel dosyasında en az <b>Ad</b> ve <b>Soyad</b> sütunları olmalıdır.
         </p>
         <div className="row" style={{ alignItems: "center", marginBottom: 12 }}>
           <input
@@ -400,73 +379,6 @@ export function AdminPeriodsPage() {
           </tbody>
         </table>
       </div>
-      {selected?.iskurListeYuklendi && (
-        <section className="card" style={{ padding: 18, marginTop: 18 }}>
-          <h4 style={{ marginTop: 0 }}>Başvuru listesi — {aktifDalga ? aktifDalga.ad : selected.ad}</h4>
-          <p style={{ color: "var(--muted)", marginTop: 0 }}>
-            İŞKUR listesinde yer alan öğrenciler. Başvuru yapabilecek öğrenciler bu kayıtlarla eşleşir.
-          </p>
-          <div className="filter-panel" style={{ marginBottom: 14 }}>
-            <div className="filter-panel-section">
-              <h4 className="filter-panel-title">Listede ara</h4>
-              <div className="filter-panel-row">
-                <label className="filter-label filter-label-grow">
-                  Öğrenci
-                  <input
-                    placeholder="Ad, soyad, T.C. veya öğrenci no"
-                    value={iskurQuery}
-                    onChange={(event) => setIskurQuery(event.target.value)}
-                  />
-                </label>
-                {iskurQuery && (
-                  <button type="button" className="btn btn-secondary" onClick={() => setIskurQuery("")}>
-                    Temizle
-                  </button>
-                )}
-              </div>
-              <p className="filter-panel-note" style={{ marginTop: 8 }}>
-                {iskurList
-                  ? iskurQuery.trim()
-                    ? `${iskurList.eslesenSayisi ?? iskurList.onizleme.length} kayıt bulundu (toplam ${iskurList.kayitSayisi}).`
-                    : `Toplam ${iskurList.kayitSayisi} kayıt.`
-                  : "Listede ad, soyad, T.C. veya öğrenci numarası ile arayın."}
-              </p>
-            </div>
-          </div>
-          {iskurList && iskurQuery.trim() && iskurList.onizleme.length === 0 && (
-            <p style={{ color: "var(--muted)", marginBottom: 0 }}>Eşleşen kayıt yok.</p>
-          )}
-          {iskurList && iskurList.onizleme.length > 0 && (
-            <div style={{ overflow: "auto" }}>
-              <table>
-                <thead>
-                  <tr><th>Ad</th><th>Soyad</th><th>T.C.</th><th>Öğrenci No</th></tr>
-                </thead>
-                <tbody>
-                  {iskurList.onizleme.map((row, index) => (
-                    <tr key={`${row.ad}-${row.soyad}-${index}`}>
-                      <td>{row.ad}</td>
-                      <td>{row.soyad}</td>
-                      <td>{row.tcKimlikNo ?? "—"}</td>
-                      <td>{row.ogrenciNo ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {iskurList.eslesenSayisi > iskurList.onizleme.length && (
-                <p style={{ color: "var(--muted)", marginBottom: 0 }}>
-                  İlk {iskurList.onizleme.length} kayıt gösteriliyor (eşleşen {iskurList.eslesenSayisi}, toplam {iskurList.kayitSayisi}).
-                </p>
-              )}
-              {!iskurQuery.trim() && iskurList.kayitSayisi > iskurList.onizleme.length && iskurList.eslesenSayisi === iskurList.kayitSayisi && (
-                <p style={{ color: "var(--muted)", marginBottom: 0 }}>
-                  İlk {iskurList.onizleme.length} kayıt gösteriliyor (toplam {iskurList.kayitSayisi}). Arayarak diğer kayıtları bulun.
-                </p>
-              )}
-            </div>
-          )}
-        </section>
-      )}
     </Shell>
   );
 }
